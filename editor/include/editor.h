@@ -1,3 +1,4 @@
 #include <Cocoa/Cocoa.h>
 
-NSTextView* say_hello(void);
+const char *say_hello(void);
+unsigned long string_len(NSString *str);

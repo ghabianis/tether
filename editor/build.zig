@@ -14,9 +14,6 @@ pub fn build(b: *std.build.Builder) !void {
         .source_file = .{ .path = "lib/zig-objc/src/main.zig" },
     });
 
-
-
-
     // Make static libraries for aarch64 and x86_64
     var static_lib_aarch64 = b.addStaticLibrary(.{
         .name = "editor_aarch64",
@@ -28,6 +25,16 @@ pub fn build(b: *std.build.Builder) !void {
         },
         .optimize = optimize,
     });
+    // static_lib_aarch64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
+    // static_lib_aarch64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    // static_lib_aarch64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    // static_lib_aarch64.linkSystemLibraryName("objc");
+    // static_lib_aarch64.linkFramework("Foundation");
+    // static_lib_aarch64.linkFramework("CoreFoundation");
+    // static_lib_aarch64.linkFramework("CoreData");
+    // static_lib_aarch64.linkFramework("ApplicationServices");
+    // static_lib_aarch64.linkFramework("AppKit");
+
     static_lib_aarch64.bundle_compiler_rt = true;
     static_lib_aarch64.addModule("zig-objc", zigobjc);
     static_lib_aarch64.linkLibC();
@@ -43,10 +50,22 @@ pub fn build(b: *std.build.Builder) !void {
         },
         .optimize = optimize,
     });
+    // static_lib_x86_64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
+    // static_lib_x86_64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    // static_lib_x86_64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    // static_lib_x86_64.linkSystemLibraryName("objc");
+    // static_lib_x86_64.linkFramework("Foundation");
+    // static_lib_x86_64.linkFramework("CoreFoundation");
+    // static_lib_x86_64.linkFramework("CoreData");
+    // static_lib_x86_64.linkFramework("ApplicationServices");
+    // static_lib_x86_64.linkFramework("AppKit");
+
     static_lib_x86_64.bundle_compiler_rt = true;
     static_lib_x86_64.addModule("zig-objc", zigobjc);
     static_lib_x86_64.linkLibC();
     b.default_step.dependOn(&static_lib_x86_64.step);
+
+
 
     // // Merge all non-zig dependencies
     // var lib_list = std.ArrayList(std.build.FileSource).init(alloc);

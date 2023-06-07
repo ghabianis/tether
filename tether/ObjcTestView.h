@@ -6,6 +6,8 @@
 //
 
 #import <Cocoa/Cocoa.h>
+#import <Foundation/NSProcessInfo.h>
+#import <objc/objc.h>
 
 NS_ASSUME_NONNULL_BEGIN
 

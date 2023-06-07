@@ -1,20 +1,26 @@
 const std = @import("std");
 const objc = @import("zig-objc");
+// const ns = @import("ns.zig");
 
-pub fn macosVersionAtLeast(major: i64, minor: i64, patch: i64) bool {
-    /// Get the objc class from the runtime
-    const NSProcessInfo = objc.Class.getClass("NSProcessInfo").?;
+const NSString = struct {
+    obj: objc.Object,
 
-    /// Call a class method with no arguments that returns another objc object.
-    const info = NSProcessInfo.msgSend(objc.Object, objc.sel("processInfo"), .{});
+    fn fromId(id: anytype) NSString {
+        return .{
+            .obj = objc.Object.fromId(id)
+        };
+    }
 
-    /// Call an instance method that returns a boolean and takes a single
-    /// argument.
-    return info.msgSend(bool, objc.sel("isOperatingSystemAtLeastVersion:"), .{
-        NSOperatingSystemVersion{ .major = major, .minor = minor, .patch = patch },
-    });
-}
+    fn length(self: *const NSString) usize {
+        return self.obj.msgSend(usize, objc.sel("length"), .{});
+    }
+};
 
 export fn say_hello() ? [*:0]const u8 {
     return @ptrCast(?[*:0]const u8, "HELLO");
+}
+
+export fn string_len(nsstring: *void) usize {
+    const str = NSString.fromId(nsstring);
+    return str.length();
 }

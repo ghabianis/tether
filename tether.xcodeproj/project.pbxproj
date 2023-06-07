@@ -15,9 +15,9 @@
 		9EB504402A2FDDCF0062BAE7 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 9EB5043F2A2FDDCF0062BAE7 /* Shaders.metal */; };
 		9EB504422A2FDDDE0062BAE7 /* MathUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB504412A2FDDDE0062BAE7 /* MathUtilities.swift */; };
 		9EB504462A2FDE1B0062BAE7 /* teapot.obj in Resources */ = {isa = PBXBuildFile; fileRef = 9EB504452A2FDE1B0062BAE7 /* teapot.obj */; };
-		9EB504492A2FEB300062BAE7 /* EditorKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9EB504482A2FEB300062BAE7 /* EditorKit.xcframework */; };
 		9EB5044B2A2FF13F0062BAE7 /* ZigTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB5044A2A2FF13F0062BAE7 /* ZigTestView.swift */; };
 		9EB5044F2A2FF1A30062BAE7 /* ObjcTestView.m in Sources */ = {isa = PBXBuildFile; fileRef = 9EB5044E2A2FF1A30062BAE7 /* ObjcTestView.m */; };
+		9EB504532A301B850062BAE7 /* EditorKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9EB504522A301B850062BAE7 /* EditorKit.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,11 +31,11 @@
 		9EB5043F2A2FDDCF0062BAE7 /* Shaders.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; path = Shaders.metal; sourceTree = "<group>"; };
 		9EB504412A2FDDDE0062BAE7 /* MathUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathUtilities.swift; sourceTree = "<group>"; };
 		9EB504452A2FDE1B0062BAE7 /* teapot.obj */ = {isa = PBXFileReference; lastKnownFileType = text; path = teapot.obj; sourceTree = "<group>"; };
-		9EB504482A2FEB300062BAE7 /* EditorKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EditorKit.xcframework; path = editor/macos/EditorKit.xcframework; sourceTree = "<group>"; };
 		9EB5044A2A2FF13F0062BAE7 /* ZigTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZigTestView.swift; sourceTree = "<group>"; };
 		9EB5044C2A2FF1A30062BAE7 /* tether-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "tether-Bridging-Header.h"; sourceTree = "<group>"; };
 		9EB5044D2A2FF1A30062BAE7 /* ObjcTestView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjcTestView.h; sourceTree = "<group>"; };
 		9EB5044E2A2FF1A30062BAE7 /* ObjcTestView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjcTestView.m; sourceTree = "<group>"; };
+		9EB504522A301B850062BAE7 /* EditorKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EditorKit.xcframework; path = editor/macos/EditorKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,7 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9EB504492A2FEB300062BAE7 /* EditorKit.xcframework in Frameworks */,
+				9EB504532A301B850062BAE7 /* EditorKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,7 +98,7 @@
 		9EB504472A2FEB300062BAE7 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				9EB504482A2FEB300062BAE7 /* EditorKit.xcframework */,
+				9EB504522A301B850062BAE7 /* EditorKit.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

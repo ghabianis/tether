@@ -16,11 +16,12 @@ struct ContentView: View {
                 .foregroundColor(.accentColor)
             Button("Hello, world!") {
                 let cstr = say_hello()
+                let len = string_len("HI")
                 let str = String(cString: cstr!)
-                print("STRING \(str)")
+                print("STRING \(str) \(len)")
             }
-//            EditorViewRepresentable()
-            ZigTestViewRepresentable()
+            EditorViewRepresentable()
+//            ZigTestViewRepresentable()
         }
         .padding()
     }
