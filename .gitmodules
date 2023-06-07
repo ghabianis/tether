@@ -1,0 +1,3 @@
+[submodule "editor/lib/zig-objc"]
+	path = editor/lib/zig-objc
+	url = https://github.com/mitchellh/zig-objc.git

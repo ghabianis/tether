@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "name": "Mac",
+      "includePath": ["${workspaceFolder}/**", "/System/Library/Frameworks"],
+      "defines": [],
+      "macFrameworkPath": [
+        "/nix/store/xl9nycczxwjw2p1m016dxrfi1blkcidl-apple-framework-CoreFoundation-11.0.0/Library/Frameworks",
+        "/System/Volumes/Data/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Cocoa.framework/Headers",
+        "/System/Volumes/Data/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/",
+        "/System/Library/Frameworks"
+      ],
+      "compilerPath": "/nix/store/zbxs6zlz46pb7kqlqpfscj7zylkw230r-clang-wrapper-11.1.0/bin/clang",
+      "cStandard": "c17",
+      "cppStandard": "c++14",
+      "intelliSenseMode": "macos-clang-arm64",
+      "configurationProvider": "ms-vscode.makefile-tools"
+    }
+  ],
+  "version": 4
+}

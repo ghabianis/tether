@@ -1,0 +1,7 @@
+editor/src/zig-cache/
+editor/src/zig-out/
+editor/zig-out/
+editor/zig-cache/
+editor/src/macos/
+.DS_Store
+editor/lib/*
