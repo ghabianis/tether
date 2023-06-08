@@ -1,5 +1,6 @@
 const std = @import("std");
 const objc = @import("zig-objc");
+const CoreText = @import("coretext/coretext.zig");
 // const ns = @import("ns.zig");
 
 const NSString = struct {
@@ -21,6 +22,8 @@ export fn say_hello() ? [*:0]const u8 {
 }
 
 export fn string_len(nsstring: *void) usize {
+    // std.debug.print("nice: {any}\n", CoreText.c);
+    ns
     const str = NSString.fromId(nsstring);
     return str.length();
 }

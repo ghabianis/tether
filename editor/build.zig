@@ -25,9 +25,10 @@ pub fn build(b: *std.build.Builder) !void {
         },
         .optimize = optimize,
     });
-    // static_lib_aarch64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
-    // static_lib_aarch64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
-    // static_lib_aarch64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    static_lib_aarch64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
+    static_lib_aarch64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    static_lib_aarch64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    static_lib_aarch64.linkFramework("CoreText");
     // static_lib_aarch64.linkSystemLibraryName("objc");
     // static_lib_aarch64.linkFramework("Foundation");
     // static_lib_aarch64.linkFramework("CoreFoundation");
@@ -50,9 +51,10 @@ pub fn build(b: *std.build.Builder) !void {
         },
         .optimize = optimize,
     });
-    // static_lib_x86_64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
-    // static_lib_x86_64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
-    // static_lib_x86_64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    static_lib_x86_64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
+    static_lib_x86_64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    static_lib_x86_64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    static_lib_x86_64.linkFramework("CoreText");
     // static_lib_x86_64.linkSystemLibraryName("objc");
     // static_lib_x86_64.linkFramework("Foundation");
     // static_lib_x86_64.linkFramework("CoreFoundation");

@@ -7,20 +7,19 @@
 
 import SwiftUI
 import EditorKit
+import CoreText
 
 struct ContentView: View {
+    
     var body: some View {
         VStack {
             Image(systemName: "globe")
                 .imageScale(.large)
                 .foregroundColor(.accentColor)
+            Text("HEY")
             Button("Hello, world!") {
-                let cstr = say_hello()
-                let len = string_len("HI")
-                let str = String(cString: cstr!)
-                print("STRING \(str) \(len)")
             }
-            EditorViewRepresentable()
+//            EditorViewRepresentable()
 //            ZigTestViewRepresentable()
         }
         .padding()

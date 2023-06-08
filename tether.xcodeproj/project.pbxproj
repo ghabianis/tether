@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9E88B8BD2A307630007CF767 /* TetherFont.m in Sources */ = {isa = PBXBuildFile; fileRef = 9E88B8BC2A307630007CF767 /* TetherFont.m */; };
+		9E88B8BF2A3098BA007CF767 /* FontAtlas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */; };
+		9EB40ACC2A31AE5200DA45F7 /* TetherState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40ACB2A31AE5200DA45F7 /* TetherState.swift */; };
+		9EB40AD12A31AE9100DA45F7 /* AX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40ACE2A31AE9000DA45F7 /* AX.swift */; };
+		9EB40AD22A31AE9100DA45F7 /* AXError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40ACF2A31AE9100DA45F7 /* AXError.swift */; };
+		9EB40AD32A31AE9100DA45F7 /* AXAttribute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40AD02A31AE9100DA45F7 /* AXAttribute.swift */; };
 		9EB5042F2A2FDD1E0062BAE7 /* tetherApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB5042E2A2FDD1E0062BAE7 /* tetherApp.swift */; };
 		9EB504312A2FDD1E0062BAE7 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB504302A2FDD1E0062BAE7 /* ContentView.swift */; };
 		9EB504332A2FDD1F0062BAE7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9EB504322A2FDD1F0062BAE7 /* Assets.xcassets */; };
@@ -21,6 +27,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		9E88B8BB2A307630007CF767 /* TetherFont.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TetherFont.h; sourceTree = "<group>"; };
+		9E88B8BC2A307630007CF767 /* TetherFont.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TetherFont.m; sourceTree = "<group>"; };
+		9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontAtlas.swift; sourceTree = "<group>"; };
+		9EB40ACB2A31AE5200DA45F7 /* TetherState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TetherState.swift; sourceTree = "<group>"; };
+		9EB40ACE2A31AE9000DA45F7 /* AX.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AX.swift; sourceTree = "<group>"; };
+		9EB40ACF2A31AE9100DA45F7 /* AXError.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AXError.swift; sourceTree = "<group>"; };
+		9EB40AD02A31AE9100DA45F7 /* AXAttribute.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AXAttribute.swift; sourceTree = "<group>"; };
 		9EB5042B2A2FDD1E0062BAE7 /* tether.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = tether.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9EB5042E2A2FDD1E0062BAE7 /* tetherApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = tetherApp.swift; sourceTree = "<group>"; };
 		9EB504302A2FDD1E0062BAE7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -50,6 +63,16 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		9EB40ACD2A31AE5800DA45F7 /* NonFuckedAX */ = {
+			isa = PBXGroup;
+			children = (
+				9EB40ACE2A31AE9000DA45F7 /* AX.swift */,
+				9EB40AD02A31AE9100DA45F7 /* AXAttribute.swift */,
+				9EB40ACF2A31AE9100DA45F7 /* AXError.swift */,
+			);
+			path = NonFuckedAX;
+			sourceTree = "<group>";
+		};
 		9EB504222A2FDD1E0062BAE7 = {
 			isa = PBXGroup;
 			children = (
@@ -70,6 +93,7 @@
 		9EB5042D2A2FDD1E0062BAE7 /* tether */ = {
 			isa = PBXGroup;
 			children = (
+				9EB40ACD2A31AE5800DA45F7 /* NonFuckedAX */,
 				9EB5043D2A2FDD9E0062BAE7 /* EditorView.swift */,
 				9EB5042E2A2FDD1E0062BAE7 /* tetherApp.swift */,
 				9EB504302A2FDD1E0062BAE7 /* ContentView.swift */,
@@ -83,6 +107,10 @@
 				9EB5044D2A2FF1A30062BAE7 /* ObjcTestView.h */,
 				9EB5044E2A2FF1A30062BAE7 /* ObjcTestView.m */,
 				9EB5044C2A2FF1A30062BAE7 /* tether-Bridging-Header.h */,
+				9E88B8BB2A307630007CF767 /* TetherFont.h */,
+				9E88B8BC2A307630007CF767 /* TetherFont.m */,
+				9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */,
+				9EB40ACB2A31AE5200DA45F7 /* TetherState.swift */,
 			);
 			path = tether;
 			sourceTree = "<group>";
@@ -175,13 +203,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9E88B8BF2A3098BA007CF767 /* FontAtlas.swift in Sources */,
 				9EB504402A2FDDCF0062BAE7 /* Shaders.metal in Sources */,
 				9EB5043E2A2FDD9E0062BAE7 /* EditorView.swift in Sources */,
+				9E88B8BD2A307630007CF767 /* TetherFont.m in Sources */,
 				9EB504312A2FDD1E0062BAE7 /* ContentView.swift in Sources */,
 				9EB5042F2A2FDD1E0062BAE7 /* tetherApp.swift in Sources */,
 				9EB5044F2A2FF1A30062BAE7 /* ObjcTestView.m in Sources */,
+				9EB40AD32A31AE9100DA45F7 /* AXAttribute.swift in Sources */,
+				9EB40AD22A31AE9100DA45F7 /* AXError.swift in Sources */,
 				9EB504422A2FDDDE0062BAE7 /* MathUtilities.swift in Sources */,
 				9EB5044B2A2FF13F0062BAE7 /* ZigTestView.swift in Sources */,
+				9EB40ACC2A31AE5200DA45F7 /* TetherState.swift in Sources */,
+				9EB40AD12A31AE9100DA45F7 /* AX.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -316,6 +350,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -346,6 +381,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_LSUIElement = NO;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

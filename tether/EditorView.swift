@@ -10,6 +10,11 @@ import AppKit
 import MetalKit
 import simd
 import SwiftUI
+import CoreText
+
+//func test_some_shit(str: NSString) {
+//    str.getCharacters(<#T##buffer: UnsafeMutablePointer<unichar>##UnsafeMutablePointer<unichar>#>)
+//}
 
 struct Uniforms {
     var modelViewMatrix: float4x4
