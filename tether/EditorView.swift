@@ -12,10 +12,6 @@ import simd
 import SwiftUI
 import CoreText
 
-//func test_some_shit(str: NSString) {
-//    str.getCharacters(<#T##buffer: UnsafeMutablePointer<unichar>##UnsafeMutablePointer<unichar>#>)
-//}
-
 struct Uniforms {
     var modelViewMatrix: float4x4
     var projectionMatrix: float4x4
@@ -65,6 +61,11 @@ class Renderer: NSObject, MTKViewDelegate {
     var meshes: [MTKMesh] = []
     var renderPipeline: MTLRenderPipelineState!
     let commandQueue: MTLCommandQueue
+    
+    var fontAtlas = FontAtlas()
+    var texture: MTLTexture!
+    var sampler: MTLSamplerState!
+    
     var time: Float = 0
     
     init(view: MTKView, device: MTLDevice) {
@@ -76,7 +77,26 @@ class Renderer: NSObject, MTKViewDelegate {
         
         loadResources()
         buildPipeline()
+        buildFontAtlas()
     }
+    
+    func buildFontAtlas() {
+        self.fontAtlas.makeAtlas()
+        let textureLoader = MTKTextureLoader(device: self.device)
+        self.texture = try! textureLoader.newTexture(cgImage: self.fontAtlas.atlas, options: nil)
+        
+        let samplerDescriptor = MTLSamplerDescriptor()
+        samplerDescriptor.minFilter = .linear
+        samplerDescriptor.magFilter = .linear
+        samplerDescriptor.sAddressMode = .repeat
+        samplerDescriptor.tAddressMode = .repeat
+
+        guard let sampler = device.makeSamplerState(descriptor: samplerDescriptor) else {
+            fatalError("Failed to create sampler")
+        }
+        
+        self.sampler = sampler
+     }
     
     func loadResources() {
         let modelURL = Bundle.main.url(forResource: "teapot", withExtension: "obj")!
@@ -152,6 +172,8 @@ class Renderer: NSObject, MTKViewDelegate {
             for mesh in meshes {
                 let vertexBuffer = mesh.vertexBuffers.first!
                 commandEncoder.setVertexBuffer(vertexBuffer.buffer, offset: vertexBuffer.offset, index: 0)
+                commandEncoder.setFragmentTexture(self.texture, index: 0)
+                commandEncoder.setFragmentSamplerState(self.sampler, index: 0)
                 
                 for submesh in mesh.submeshes {
                     let indexBuffer = submesh.indexBuffer
@@ -162,6 +184,7 @@ class Renderer: NSObject, MTKViewDelegate {
                                                          indexBufferOffset: indexBuffer.offset)
                 }
             }
+            
             
             commandEncoder.endEncoding()
             commandBuffer.present(drawable)

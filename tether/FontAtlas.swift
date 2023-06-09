@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppKit
 
 struct GlyphInfo {
     let glyph: CGGlyph
@@ -22,8 +23,6 @@ class FontAtlas {
     var atlas: CGImage!
     
     func makeAtlas() {
-        var glyph_advances: [CGFloat] = []
-        
         var atlas_height: Int
         let atlas_width: Int = Int(MAX_WIDTH);
         
@@ -61,8 +60,10 @@ class FontAtlas {
         context.setFillColor(CGColor.white)
         context.fill(CGRect(x: 0, y: 0, width: atlas_width, height: atlas_height))
         
-        context.setFont(font as! CGFont)
+        context.setFont(CTFontCopyGraphicsFont(font, nil))
         context.setFontSize(24)
+        
+        context.setFillColor(CGColor.black)
         
         /// Draw all the glyphs line by line
         var glyph_pos = glyph_rects.map { rect in
@@ -86,11 +87,11 @@ class FontAtlas {
         }
         
         // Now you can use the context to create a CGImage
-        let cgImage = context.makeImage()!
+        atlas = context.makeImage()!
         
         self.glyphs = [GlyphInfo](repeating: GlyphInfo(glyph: CGGlyph(), rect: CGRect()), count: glyphs.count)
         for (i, glyph) in glyphs.enumerated() {
-            let rect = glyph_rects[i]
+        let rect = glyph_rects[i]
             self.glyphs[i] = GlyphInfo(glyph: glyph, rect: rect)
         }
     }

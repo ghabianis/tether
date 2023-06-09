@@ -10,13 +10,13 @@ import Cocoa
 import AppKit
 import SwiftUI
 
-struct ZigTestViewRepresentable: NSViewControllerRepresentable {
-    typealias NSViewControllerType = ObjcTestView
-    
-    func makeNSViewController(context: Context) -> ObjcTestView {
-        return ObjcTestView()
-    }
-    
-    func updateNSViewController(_ nsViewController: ObjcTestView, context: Context) {
-    }
-}
+//struct ZigTestViewRepresentable: NSViewControllerRepresentable {
+//    typealias NSViewControllerType = ObjcTestView
+//
+//    func makeNSViewController(context: Context) -> ObjcTestView {
+//        return ObjcTestView()
+//    }
+//
+//    func updateNSViewController(_ nsViewController: ObjcTestView, context: Context) {
+//    }
+//}

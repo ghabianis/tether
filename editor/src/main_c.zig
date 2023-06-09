@@ -21,9 +21,9 @@ export fn say_hello() ? [*:0]const u8 {
     return @ptrCast(?[*:0]const u8, "HELLO");
 }
 
-export fn string_len(nsstring: *void) usize {
-    // std.debug.print("nice: {any}\n", CoreText.c);
-    ns
-    const str = NSString.fromId(nsstring);
-    return str.length();
-}
+// export fn string_len(nsstring: *void) usize {
+//     // std.debug.print("nice: {any}\n", CoreText.c);
+//     ns
+//     const str = NSString.fromId(nsstring);
+//     return str.length();
+// }

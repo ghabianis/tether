@@ -92,9 +92,10 @@ struct OverlayWindowView: NSViewRepresentable {
 
 struct ContentView2: View {
     var body: some View {
-        Text("Overlay Window")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.red.opacity(0.5))
+//        Text("Overlay Window")
+//            .frame(maxWidth: .infinity, maxHeight: .infinity)
+//            .background(Color.red.opacity(0.5))
+        EditorViewRepresentable()
     }
 }
 
