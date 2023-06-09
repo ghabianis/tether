@@ -52,7 +52,6 @@ class FontAtlas {
         }
         atlas_height = Int(ceil(y));
         
-        
         /// Create a context for drawing
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let context = CGContext(data: nil, width: Int(atlas_width), height: Int(atlas_height), bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!

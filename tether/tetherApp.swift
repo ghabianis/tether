@@ -13,7 +13,7 @@ class OverlayWindow: NSWindow {
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect, styleMask: .borderless, backing: .buffered, defer: false)
         self.backgroundColor = NSColor.clear
-//        self.level = .floating
+        //        self.level = .floating
         self.level = .popUpMenu
         self.isOpaque = false
         self.hasShadow = false
@@ -48,7 +48,7 @@ struct OverlayWindowView: NSViewRepresentable {
             
             if let overlayWindow = OverlayWindow.shared {
                 overlayWindow.setFrame(rect, display: isOverlayVisible)
-                overlayWindow.contentView = NSHostingView(rootView: ContentView())
+                overlayWindow.contentView = NSHostingView(rootView: ContentView2(pos: $pos, size: $size))
                 if isOverlayVisible {
                     overlayWindow.makeKeyAndOrderFront(nil)
                 } else {
@@ -56,8 +56,7 @@ struct OverlayWindowView: NSViewRepresentable {
                 }
             } else {
                 let overlayWindow = OverlayWindow(contentRect: rect)
-                
-                overlayWindow.contentView = NSHostingView(rootView: ContentView2())
+                overlayWindow.contentView = NSHostingView(rootView: ContentView2(pos: $pos, size: $size))
                 if isOverlayVisible {
                     overlayWindow.makeKeyAndOrderFront(nil)
                 } else {
@@ -91,11 +90,14 @@ struct OverlayWindowView: NSViewRepresentable {
 }
 
 struct ContentView2: View {
+    @Binding var pos: CGPoint?
+    @Binding var size: CGSize?
+    
     var body: some View {
-//        Text("Overlay Window")
-//            .frame(maxWidth: .infinity, maxHeight: .infinity)
-//            .background(Color.red.opacity(0.5))
-        EditorViewRepresentable()
+        //        Text("Overlay Window")
+        //            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        //            .background(Color.red.opacity(0.5))
+        EditorViewRepresentable(pos: $pos, size: $size)
     }
 }
 
@@ -111,7 +113,9 @@ struct tetherApp: App {
         WindowGroup {
             VStack {
                 Text("Main Window")
-                OverlayWindowView(isOverlayVisible: $tetherState.isOverlayVisible, pos: $tetherState.position, size: $tetherState.size)
+                if tetherState.isOverlayVisible {
+                    OverlayWindowView(isOverlayVisible: $tetherState.isOverlayVisible, pos: $tetherState.position, size: $tetherState.size)
+                }
             }
         }
     }

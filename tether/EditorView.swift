@@ -18,11 +18,20 @@ struct Uniforms {
 }
 
 struct EditorViewRepresentable: NSViewControllerRepresentable {
+    @Binding var pos: CGPoint?
+    @Binding var size: CGSize?
+    
     func makeNSViewController(context: Context) -> EditorViewController {
-        return EditorViewController()
+        //        return EditorViewController(pos: pos, size: size)
+        var editorViewController = EditorViewController()
+        editorViewController.pos = self.pos
+        editorViewController.size = self.size
+        return editorViewController
     }
     
     func updateNSViewController(_ nsViewController: EditorViewController, context: Context) {
+        nsViewController.pos = self.pos
+        nsViewController.size = self.size
     }
     
     typealias NSViewControllerType = EditorViewController
@@ -30,11 +39,19 @@ struct EditorViewRepresentable: NSViewControllerRepresentable {
 }
 
 class EditorViewController: NSViewController {
+    var pos: CGPoint?
+    var size: CGSize?
+    
     var mtkView: MTKView!
     var renderer: Renderer!
     
     override func loadView() {
-        view = NSView(frame: NSMakeRect(0.0, 0.0, 400.0, 270.0))
+        view = NSView()
+        //        view = NSView(frame: NSMakeRect(0.0, 0.0, 400.0, 270.0))
+        if var renderer = self.renderer {
+            renderer.pos = pos
+            renderer.size = size
+        }
     }
     
     override func viewDidLoad() {
@@ -49,12 +66,15 @@ class EditorViewController: NSViewController {
         mtkView.device = device
         mtkView.colorPixelFormat = .bgra8Unorm
         
-        renderer = Renderer(view: mtkView, device: device!)
+        renderer = Renderer(view: mtkView, device: device!, pos: pos, size: size)
         mtkView.delegate = renderer
     }
 }
 
 class Renderer: NSObject, MTKViewDelegate {
+    var pos: CGPoint?
+    var size: CGSize?
+    
     let device: MTLDevice
     let mtkView: MTKView
     var vertexDescriptor: MTLVertexDescriptor!
@@ -68,7 +88,10 @@ class Renderer: NSObject, MTKViewDelegate {
     
     var time: Float = 0
     
-    init(view: MTKView, device: MTLDevice) {
+    init(view: MTKView, device: MTLDevice, pos: CGPoint?, size: CGSize?) {
+        self.pos = pos
+        self.size = size
+        
         self.mtkView = view
         self.device = device
         self.commandQueue = device.makeCommandQueue()!
@@ -90,13 +113,13 @@ class Renderer: NSObject, MTKViewDelegate {
         samplerDescriptor.magFilter = .linear
         samplerDescriptor.sAddressMode = .repeat
         samplerDescriptor.tAddressMode = .repeat
-
+        
         guard let sampler = device.makeSamplerState(descriptor: samplerDescriptor) else {
             fatalError("Failed to create sampler")
         }
         
         self.sampler = sampler
-     }
+    }
     
     func loadResources() {
         let modelURL = Bundle.main.url(forResource: "teapot", withExtension: "obj")!
@@ -145,6 +168,10 @@ class Renderer: NSObject, MTKViewDelegate {
     }
     
     func draw(in view: MTKView) {
+        print("NICE \(self.size) \(self.pos)")
+        if self.size == nil || self.pos == nil {
+            return
+        }
         let commandBuffer = commandQueue.makeCommandBuffer()!
         
         if  let renderPassDescriptor = view.currentRenderPassDescriptor,
@@ -155,14 +182,13 @@ class Renderer: NSObject, MTKViewDelegate {
             
             time += 1 / Float(mtkView.preferredFramesPerSecond)
             let angle = -time
-            let modelMatrix = float4x4(rotationAbout: float3(0, 1, 0), by: angle) *  float4x4(scaleBy: 2)
-            
-            let viewMatrix = float4x4(translationBy: float3(0, 0, -2))
+            let modelMatrix = float4x4(rotationAbout: float3(0, 1, 0), by: angle)  *  float4x4(scaleBy: 1)
+            let viewMatrix = float4x4(translationBy: float3(0, 0.0, -1.0))
             
             let modelViewMatrix = viewMatrix * modelMatrix
             
             let aspectRatio = Float(view.drawableSize.width / view.drawableSize.height)
-            let projectionMatrix = float4x4(perspectiveProjectionFov: Float.pi / 3, aspectRatio: aspectRatio, nearZ: 0.1, farZ: 100)
+            let projectionMatrix = float4x4(orthographicProjectionLeft: -aspectRatio, right: aspectRatio, bottom: -1.0, top: 1.0, near: 0.1, far: 100.0)
             
             var uniforms = Uniforms(modelViewMatrix: modelViewMatrix, projectionMatrix: projectionMatrix)
             
