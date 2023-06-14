@@ -17,6 +17,12 @@ struct Uniforms {
     var projectionMatrix: float4x4
 }
 
+struct Vertex {
+    var pos: float2
+    var texCoords: float2
+    var color: float4
+}
+
 struct EditorViewRepresentable: NSViewControllerRepresentable {
     @Binding var pos: CGPoint?
     @Binding var size: CGSize?
@@ -78,13 +84,14 @@ class Renderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
     let mtkView: MTKView
     var vertexDescriptor: MTLVertexDescriptor!
-    var meshes: [MTKMesh] = []
     var renderPipeline: MTLRenderPipelineState!
     let commandQueue: MTLCommandQueue
     
     var fontAtlas = FontAtlas()
     var texture: MTLTexture!
     var sampler: MTLSamplerState!
+    var vertexBuffer: MTLBuffer!
+    var verticesLen: Int!
     
     var time: Float = 0
     
@@ -98,49 +105,138 @@ class Renderer: NSObject, MTKViewDelegate {
         
         super.init()
         
-        loadResources()
         buildPipeline()
         buildFontAtlas()
     }
     
+    func textToVertices(text: [UInt8]) -> [Vertex] {
+        var vertices = [Vertex]()
+        
+        var x: Float = -1.0
+        var y: Float = 1.0
+        for c in text {
+            if c == UInt8("\n") {
+                x = -1
+//                y -= self.fontAtlas.max_glyph_height_normalized // + 2.0
+                y -= self.fontAtlas.max_glyph_height / Float(self.size!.height)
+            }
+            
+            let glyph = self.fontAtlas.lookupChar(char: c)
+            let wgl = Float(glyph.rect.width);
+            print("WIDTH \(wgl)")
+            let hgl = Float(glyph.rect.height);
+            let left = x;
+            let right = x + wgl;
+            let top = y;
+            let bot = y - hgl;
+            let color = float4(1.0, 0.0, 0.0, 1.0)
+            let texCoords = glyph.texCoords()
+            
+            vertices.append(Vertex(
+                pos: float2(left, bot),
+                texCoords: texCoords[0],
+                color: color
+            ))
+            vertices.append(Vertex(
+                pos: float2(left, top),
+                texCoords: texCoords[1],
+                color: color
+            ))
+            vertices.append(Vertex(
+                pos: float2(right, top),
+                texCoords: texCoords[2],
+                color: color
+            ))
+            
+            vertices.append(Vertex(
+                pos: float2(right, top),
+                texCoords: texCoords[3],
+                color: color
+            ))
+            vertices.append(Vertex(
+                pos: float2(right, bot),
+                texCoords: texCoords[4],
+                color: color
+            ))
+            vertices.append(Vertex(
+                pos: float2(left, bot),
+                texCoords: texCoords[5],
+                color: color
+            ))
+            
+            
+            
+            x += Float(glyph.rect.width)
+        }
+        
+        let screenDimensions = float2(Float(self.size!.width), Float(self.size!.height))
+        //        print("VERTICES \(vertices.map { v in v.pos })\n\n\n\n\n")
+        //        for i in 0..<vertices.count {
+        //            vertices[i].pos = vertices[i].pos.screenToClipSpace(screenDimensions)
+        //        }
+        print("VERTICES \(vertices.map { v in v.pos })")
+        return vertices;
+    }
+    
     func buildFontAtlas() {
         self.fontAtlas.makeAtlas()
+        print("ATLAS \(self.fontAtlas.atlas.width) \(self.fontAtlas.atlas.height)")
+        
         let textureLoader = MTKTextureLoader(device: self.device)
-        self.texture = try! textureLoader.newTexture(cgImage: self.fontAtlas.atlas, options: nil)
+        let options: [MTKTextureLoader.Option : Any] = [
+            .textureUsage : MTLTextureUsage.shaderRead.rawValue,
+            .textureStorageMode : MTLStorageMode.private.rawValue,
+            .SRGB: true
+        ]
+        
+        self.texture = try! textureLoader.newTexture(cgImage: self.fontAtlas.atlas, options: options)
+        
+//        let modelURL = Bundle.main.url(forResource: "atlas", withExtension: "png")!
+//        self.texture = try! textureLoader.newTexture(URL: modelURL, options: options)
+        
+        //        let modelURL = Bundle.main.url(forResource: "shrek", withExtension: "png")!
+        //        self.texture = try! textureLoader.newTexture(URL: modelURL)
         
         let samplerDescriptor = MTLSamplerDescriptor()
-        samplerDescriptor.minFilter = .linear
+        samplerDescriptor.minFilter = .nearest
         samplerDescriptor.magFilter = .linear
-        samplerDescriptor.sAddressMode = .repeat
-        samplerDescriptor.tAddressMode = .repeat
+        //                samplerDescriptor.magFilter = .nearest
+        samplerDescriptor.sAddressMode = .clampToZero
+        samplerDescriptor.tAddressMode = .clampToZero
         
         guard let sampler = device.makeSamplerState(descriptor: samplerDescriptor) else {
             fatalError("Failed to create sampler")
         }
         
         self.sampler = sampler
-    }
-    
-    func loadResources() {
-        let modelURL = Bundle.main.url(forResource: "teapot", withExtension: "obj")!
         
-        let vertexDescriptor = MDLVertexDescriptor()
-        vertexDescriptor.attributes[0] = MDLVertexAttribute(name: MDLVertexAttributePosition, format: .float3, offset: 0, bufferIndex: 0)
-        vertexDescriptor.attributes[1] = MDLVertexAttribute(name: MDLVertexAttributeNormal, format: .float3, offset: MemoryLayout<Float>.size * 3, bufferIndex: 0)
-        vertexDescriptor.attributes[2] = MDLVertexAttribute(name: MDLVertexAttributeTextureCoordinate, format: .float2, offset: MemoryLayout<Float>.size * 6, bufferIndex: 0)
+//        let vertices = self.textToVertices(text: Array("!Hello world".utf8))
+        let vertices = self.textToVertices(text: Array("PooP".utf8))
         
-        vertexDescriptor.layouts[0] = MDLVertexBufferLayout(stride: MemoryLayout<Float>.size * 8)
+//                let texCoords = self.fontAtlas.lookupChar(char: UInt8(70)).texCoords()
+//                let y: Float = 0.6035088
+//                let y: Float = 1
+//                let x: Float = 1.0
+//                let color = float4(1, 0, 0, 1)
+//                let blue = float4(0, 0, 1, 1)
+//                let vertices = [
+//                    Vertex(pos: float2(-x, -y), texCoords: texCoords[0], color: color),
+//                    Vertex(pos: float2(-x, y), texCoords: texCoords[1], color: color),
+//                    Vertex(pos: float2(x, y), texCoords: texCoords[2], color: color),
+//
+//                    Vertex(pos: float2(x, y), texCoords: texCoords[3], color: blue),
+//                    Vertex(pos: float2(x, -y), texCoords: texCoords[4], color: blue),
+//                    Vertex(pos: float2(-x, -y), texCoords: texCoords[5], color: blue),
+//                ]
         
-        self.vertexDescriptor = MTKMetalVertexDescriptorFromModelIO(vertexDescriptor)
+//        let vertices = [
+//            Vertex(pos: SIMD2<Float>(-0.9972763, 0.70581895), texCoords: float2(0, 0), color: color),
+//            Vertex(pos: SIMD2<Float>(-1.0, 0.70581895), texCoords: float2(0, 0), color: color),
+//            Vertex(pos: SIMD2<Float>(-1.0, 1.0), texCoords: float2(0, 0), color: color),
+//        ]
         
-        let bufferAllocator = MTKMeshBufferAllocator(device: device)
-        let asset = MDLAsset(url: modelURL, vertexDescriptor: vertexDescriptor, bufferAllocator: bufferAllocator)
-        
-        do {
-            (_, meshes) = try MTKMesh.newMeshes(asset: asset, device: device)
-        } catch {
-            fatalError("Could not extract meshes from Model I/O asset")
-        }
+        self.vertexBuffer = device.makeBuffer(bytes: vertices, length: MemoryLayout<Vertex>.size * vertices.count)!
+        self.verticesLen = vertices.count
     }
     
     func buildPipeline() {
@@ -151,12 +247,26 @@ class Renderer: NSObject, MTKViewDelegate {
         let vertexFunction = library.makeFunction(name: "vertex_main")
         let fragmentFunction = library.makeFunction(name: "fragment_main")
         
+        let vertexDescriptor = MDLVertexDescriptor()
+        vertexDescriptor.attributes[0] = MDLVertexAttribute(name: MDLVertexAttributePosition, format: .float2, offset: 0, bufferIndex: 0)
+        vertexDescriptor.attributes[1] = MDLVertexAttribute(name: MDLVertexAttributeTextureCoordinate, format: .float2, offset: MemoryLayout<float2>.size, bufferIndex: 0)
+        vertexDescriptor.attributes[2] = MDLVertexAttribute(name: MDLVertexAttributeColor, format: .float4, offset: MemoryLayout<float2>.size * 2, bufferIndex: 0)
+        vertexDescriptor.layouts[0] = MDLVertexBufferLayout(stride: MemoryLayout<float2>.size * 2 + MemoryLayout<float4>.size)
+        self.vertexDescriptor = MTKMetalVertexDescriptorFromModelIO(vertexDescriptor)
+        
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
         pipelineDescriptor.colorAttachments[0].pixelFormat = mtkView.colorPixelFormat
-        pipelineDescriptor.vertexDescriptor = vertexDescriptor
+        pipelineDescriptor.vertexDescriptor = self.vertexDescriptor
         
+        pipelineDescriptor.colorAttachments[0].isBlendingEnabled = true
+        pipelineDescriptor.colorAttachments[0].rgbBlendOperation = .add
+        pipelineDescriptor.colorAttachments[0].alphaBlendOperation = .add
+        pipelineDescriptor.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        pipelineDescriptor.colorAttachments[0].sourceAlphaBlendFactor = .sourceAlpha
+        pipelineDescriptor.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        pipelineDescriptor.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         do {
             renderPipeline = try device.makeRenderPipelineState(descriptor: pipelineDescriptor)
         } catch {
@@ -168,49 +278,49 @@ class Renderer: NSObject, MTKViewDelegate {
     }
     
     func draw(in view: MTKView) {
-        print("NICE \(self.size) \(self.pos)")
-        if self.size == nil || self.pos == nil {
-            return
-        }
         let commandBuffer = commandQueue.makeCommandBuffer()!
         
         if  let renderPassDescriptor = view.currentRenderPassDescriptor,
             let drawable = view.currentDrawable {
             
+            let colorAttachmentDesc = renderPassDescriptor.colorAttachments[0]!
+            //            colorAttachmentDesc.texture = // your render target texture here
+            colorAttachmentDesc.loadAction = MTLLoadAction.clear
+            colorAttachmentDesc.clearColor = MTLClearColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0) // black color value
             
             let commandEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor)!
+            commandEncoder.setViewport(MTLViewport(originX: 0.0, originY: 0.0, width: view.drawableSize.width, height: view.drawableSize.height, znear: 0.1, zfar: 100.0))
             
             time += 1 / Float(mtkView.preferredFramesPerSecond)
             let angle = -time
-            let modelMatrix = float4x4(rotationAbout: float3(0, 1, 0), by: angle)  *  float4x4(scaleBy: 1)
-            let viewMatrix = float4x4(translationBy: float3(0, 0.0, -1.0))
+            //            let aspectRatio = Float(view.drawableSize.width / view.drawableSize.height)
+            let aspectRatio = Float(view.drawableSize.height / view.drawableSize.width)
+            
+            //            print("DAMN \(aspectRatio)")
+            //            let modelMatrix = float4x4(rotationAbout: float3(0, 1, 0), by: angle)  *  float4x4(scaleBy: 1)
+            let modelMatrix = float4x4(scaleBy: 1) * float4x4(scaleBy: 1)
+            //            let viewMatrix = float4x4(translationBy: float3(0, 0, -1.5))
+//            let viewMatrix = float4x4(translationBy: float3(0.25, -0.5, -1.5))
+            let viewMatrix = float4x4(translationBy: float3(0.0, -0.5, -1.5))
+//            let viewMatrix = float4x4(translationBy: float3(0.0, -time * 0.5, -1.5))
             
             let modelViewMatrix = viewMatrix * modelMatrix
             
-            let aspectRatio = Float(view.drawableSize.width / view.drawableSize.height)
-            let projectionMatrix = float4x4(orthographicProjectionLeft: -aspectRatio, right: aspectRatio, bottom: -1.0, top: 1.0, near: 0.1, far: 100.0)
+            //            print("WTF \(aspectRatio)")
+            //            let projectionMatrix = float4x4(perspectiveProjectionFov: Float.pi / 3, aspectRatio: aspectRatio, near: 0.1, far: 100.0)
+//            let projectionMatrix = float4x4(orthographicProjectionLeft: -1, right: 1, bottom: -aspectRatio, top: aspectRatio, near: 0.1, far: 100.0)
+            let projectionMatrix = float4x4(orthographicProjectionLeft: -1, right: 1, bottom: -1, top: 1, near: 0.1, far: 100.0)
+//                        let projectionMatrix = float4x4(orthographicProjectionLeft: -aspectRatio, right: aspectRatio, bottom: -1, top: 1, near: 0.1, far: 100.0)
             
             var uniforms = Uniforms(modelViewMatrix: modelViewMatrix, projectionMatrix: projectionMatrix)
             
             commandEncoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.size, index: 1)
             commandEncoder.setRenderPipelineState(renderPipeline)
             
-            for mesh in meshes {
-                let vertexBuffer = mesh.vertexBuffers.first!
-                commandEncoder.setVertexBuffer(vertexBuffer.buffer, offset: vertexBuffer.offset, index: 0)
-                commandEncoder.setFragmentTexture(self.texture, index: 0)
-                commandEncoder.setFragmentSamplerState(self.sampler, index: 0)
-                
-                for submesh in mesh.submeshes {
-                    let indexBuffer = submesh.indexBuffer
-                    commandEncoder.drawIndexedPrimitives(type: submesh.primitiveType,
-                                                         indexCount: submesh.indexCount,
-                                                         indexType: submesh.indexType,
-                                                         indexBuffer: indexBuffer.buffer,
-                                                         indexBufferOffset: indexBuffer.offset)
-                }
-            }
-            
+            commandEncoder.setVertexBuffer(self.vertexBuffer, offset: 0, index: 0)
+            commandEncoder.setFragmentTexture(self.texture, index: 0)
+            commandEncoder.setFragmentSamplerState(self.sampler, index: 0)
+            commandEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: verticesLen)
             
             commandEncoder.endEncoding()
             commandBuffer.present(drawable)

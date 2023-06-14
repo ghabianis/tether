@@ -10,6 +10,4 @@ pub const MTLRenderCommandEncoder = struct {
             .obj = Object.fromId(id),
         };
     }
-
-    
 };

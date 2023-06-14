@@ -27,8 +27,10 @@ pub fn build(b: *std.build.Builder) !void {
     });
     static_lib_aarch64.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
     static_lib_aarch64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
-    static_lib_aarch64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    static_lib_aarch64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Devseloper/SDKs/MacOSX.sdk/usr/lib");
     static_lib_aarch64.linkFramework("CoreText");
+    // static_lib_aarch64.addIncludePath("/nix/store/iji6cl923xcyfws4rm5xq9g0k87388b4-freetype-2.13.0-dev/include/freetype2");
+    static_lib_aarch64.linkSystemLibraryNeeded("freetype");
     // static_lib_aarch64.linkSystemLibraryName("objc");
     // static_lib_aarch64.linkFramework("Foundation");
     // static_lib_aarch64.linkFramework("CoreFoundation");
@@ -55,6 +57,8 @@ pub fn build(b: *std.build.Builder) !void {
     static_lib_x86_64.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     static_lib_x86_64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
     static_lib_x86_64.linkFramework("CoreText");
+    static_lib_x86_64.addIncludePath("/nix/store/iji6cl923xcyfws4rm5xq9g0k87388b4-freetype-2.13.0-dev/include/freetype2");
+    static_lib_x86_64.linkSystemLibraryNeeded("freetype");
     // static_lib_x86_64.linkSystemLibraryName("objc");
     // static_lib_x86_64.linkFramework("Foundation");
     // static_lib_x86_64.linkFramework("CoreFoundation");

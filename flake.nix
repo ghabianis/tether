@@ -38,9 +38,12 @@
           nativeBuildInputs = with pkgs; [
             zigpkgs.master
             zls
+            pkg-config
           ];
           buildInputs = with pkgs; [
             zls
+            freetype
+            pkg-config
           ];
         };
 

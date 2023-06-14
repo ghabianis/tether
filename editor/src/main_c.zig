@@ -1,6 +1,7 @@
 const std = @import("std");
 const objc = @import("zig-objc");
 const CoreText = @import("coretext/coretext.zig");
+const Atlas = @import("./font.zig").Atlas;
 // const ns = @import("ns.zig");
 
 const NSString = struct {
@@ -18,6 +19,7 @@ const NSString = struct {
 };
 
 export fn say_hello() ? [*:0]const u8 {
+    Atlas.new();
     return @ptrCast(?[*:0]const u8, "HELLO");
 }
 

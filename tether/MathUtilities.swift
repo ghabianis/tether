@@ -6,6 +6,14 @@
 //
 
 import simd
+
+extension float2 {
+    func screenToClipSpace(_ screenDimensions: float2) -> Self {
+        var new = ((self / screenDimensions) - 0.5) * 2
+        new.y *= -1
+        return new
+    }
+}
  
 extension float4x4 {
     init(scaleBy s: Float) {
