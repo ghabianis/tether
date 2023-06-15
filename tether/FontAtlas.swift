@@ -185,7 +185,6 @@ class FontAtlas {
         
         let max_h = rowh;
         self.max_glyph_height = max_h;
-        print("MAX HEIGHT BITCH \(max_h)")
         w = max(w, roww);
         h += rowh;
         
@@ -212,8 +211,8 @@ class FontAtlas {
         var ox: Int = 0
         var oy: Int = 0
         
-        var transform = CGAffineTransform(scaleX: 1, y: -1)
-        transform = CGAffineTransformTranslate(transform, 0, CGFloat(-tex_h))
+//        var transform = CGAffineTransform(scaleX: 1, y: -1)
+//        transform = CGAffineTransformTranslate(transform, 0, CGFloat(-tex_h))
         
         //        var transform = CGAffineTransform(translationX: 0, y: CGFloat(-tex_h))
         //        transform = CGAffineTransformScale(transform, 0, -1)
@@ -230,9 +229,9 @@ class FontAtlas {
             
             let advance = self.getAdvance(ctfont: ctfont, glyph: glyph)
             
-            if i == 65 {
-                print("adv \(advance) OX \(ox) Oy2 \(tex_h - oy - rect.height.intCeil()) H \(rect.height) RECT W \(rect.width) \(rect.width.intCeil())");
-            }
+//            if i == 65 {
+//                print("adv \(advance) OX \(ox) Oy2 \(tex_h - oy - rect.height.intCeil()) H \(rect.height) RECT W \(rect.width) \(rect.width.intCeil())");
+//            }
             if (ox + rectw + advance + 1) >= MAX_WIDTH.intCeil() {
                 ox = 0;
                 oy += max_h;
@@ -240,14 +239,22 @@ class FontAtlas {
             }
             
             let tx = Float(ox) / Float(tex_w)
-            let ty = (Float(tex_h) - Float(oy) - Float(rect.height.intCeil())) / Float(tex_h)
+//            let ty = (Float(tex_h) - Float(oy) - Float(rect.height.intCeil())) / Float(tex_h)
+//            let ty = (Float(tex_h) - Float(oy)) / Float(tex_h)
+            let ty = (Float(tex_h) - (Float(oy) + Float(rect.origin.y))) / Float(tex_h)
+//            let ty = (Float(oy)) / Float(tex_h)
             var the_glyph: [CGGlyph] = [glyph]
             //            context.showGlyphs([glyph], at: [CGPoint(x: Double(ox), y: Double(oy))])
             ShowGlyphsAtPoint(context, &the_glyph, CGFloat(ox), CGFloat(oy))
             
+            if i == 121 {
+                print("\n\nY origin \(rect.origin.y)\n");
+            } else if i == 97 {
+                print("a origin \(rect.origin.y)");
+            }
             var new_rect = rect
 //            new_rect.origin = CGPoint(x: ox, y: tex_h - oy - rect.height.intCeil())
-            new_rect = CGRectApplyAffineTransform(rect, transform)
+//            new_rect = CGRectApplyAffineTransform(rect, transform)
             new_rect = CGRect(x: new_rect.origin.x, y: new_rect.origin.y, width: CGFloat(Float(advance)), height: new_rect.height)
             //            print("PREVIOUS RECT \(new_rect.width) \(new_rect.height)");
             //            new_rect = CGRect(x: new_rect.origin.x, y: new_rect.origin.y, width: new_rect.width * 48, height: new_rect.height * 48)
