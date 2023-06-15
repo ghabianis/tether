@@ -30,6 +30,8 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]],
 {
     VertexOut vertexOut;
     vertexOut.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(vertexIn.position.xy, 0, 1);
+//    vertexOut.position = float4(vertexIn.position.xy, 0, 1);
+    
     // note that this will be fucked up if we do non-uniform scaling because of the nuances of normals
     vertexOut.texCoords = vertexIn.texCoords.xy;
     vertexOut.color = vertexIn.color;
@@ -42,14 +44,16 @@ fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]],
 //        float alpha = tex.sample(smp, fragmentIn.texCoords.xy).r;
 //        return float4(fragmentIn.color.xyz, alpha);
     
-//    return tex.sample(smp, fragmentIn.texCoords.xy);
+//    return float4(1, 1, 1, tex.sample(smp, fragmentIn.texCoords.xy).a);
     
 //    return float4(1, 1, 1, tex.sample(smp, fragmentIn.texCoords.xy).a) * fragmentIn.color;
     
+    return tex.sample(smp, fragmentIn.texCoords.xy);
+    
     
 
-    float4 color = float4(1, 1, 1, tex.sample(smp, fragmentIn.texCoords.xy).a) * fragmentIn.color;
-    return color;
+//    float4 color = float4(1, 1, 1, tex.sample(smp, fragmentIn.texCoords.xy).a) * fragmentIn.color;
+//    return color;
     
 //        return fragmentIn.color;
 }
