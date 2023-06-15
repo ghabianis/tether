@@ -19,3 +19,11 @@ void ShowGlyphsAtPositions(
 {
     return CGContextShowGlyphsAtPositions(ctx, &glyphs[offset], &glyph_pos[offset], count);
 }
+
+void ShowGlyphsAtPoint(CGContextRef ctx, const CGGlyph *glyphs, CGFloat x, CGFloat y) {
+    return CGContextShowGlyphsAtPoint(ctx, x, y, glyphs, 1);
+}
+
+void SetTextMatrix(CGContextRef ctx, CGAffineTransform t) {
+    CGContextSetTextMatrix(ctx, t);
+}

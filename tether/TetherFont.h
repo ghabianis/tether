@@ -20,5 +20,8 @@ void ShowGlyphsAtPositions(
                            const CGPoint *glyph_pos,
 size_t offset, size_t count);
 
+void ShowGlyphsAtPoint(CGContextRef ctx, const CGGlyph *glyphs, CGFloat x, CGFloat y);
+
+void SetTextMatrix(CGContextRef ctx, CGAffineTransform t);
 
 NS_ASSUME_NONNULL_END

@@ -115,8 +115,8 @@ class Renderer: NSObject, MTKViewDelegate {
         var y: Float = 1.0
         
         for char in text {
-            let c = Int(char)
-            let glyph = self.fontAtlas.glyph_info[c]
+            let c = UInt8(char)
+            let glyph = self.fontAtlas.lookupChar(char: c)
             let l = Float(glyph.rect.origin.x)
             let r = Float(glyph.rect.origin.x + glyph.rect.width);
             let t = Float(glyph.rect.maxY)
@@ -129,7 +129,7 @@ class Renderer: NSObject, MTKViewDelegate {
             let width = bitmap_w * sx
             let height = bitmap_h * sy
             
-            x += glyph.advance
+            x += glyph.advance * sx
             
             let color = float4(1.0, 0.0, 0.0, 1.0)
             let atlas_w = Float(self.fontAtlas.atlas.width)
@@ -139,42 +139,48 @@ class Renderer: NSObject, MTKViewDelegate {
             // tl
             vertices.append(
                 Vertex(
-                    pos: float2(x2, -y2),
+//                    pos: float2(x2, -y2),
+                    pos: float2(-1.0, 1.0),
                     texCoords: float2(glyph.tx, glyph.ty),
                     color: color))
             
             // tr
             vertices.append(
                 Vertex(
-                    pos: float2(x2 + width, -y2),
+//                    pos: float2(x2 + width, -y2),
+                    pos: float2(1.0, 1.0),
                     texCoords: float2(glyph.tx + bitmap_w / atlas_w, glyph.ty),
                     color: color))
             
             // bl
             vertices.append(
                 Vertex(
-                    pos: float2(x2, -y2 - height),
+//                    pos: float2(x2, -y2 - height),
+                    pos: float2(-1.0, -1.0),
                     texCoords: float2(glyph.tx, glyph.ty + bitmap_h / atlas_h),
                     color: color))
             
             // tr
             vertices.append(
                 Vertex(
-                    pos: float2(x2 + width, -y2),
+//                    pos: float2(x2 + width, -y2),
+                    pos: float2(1.0, 1.0),
                     texCoords: float2(glyph.tx + bitmap_w / atlas_w, glyph.ty),
                     color: color))
             
             // br
             vertices.append(
                 Vertex(
-                    pos: float2(x2 + width, -y2 - height),
+//                    pos: float2(x2 + width, -y2 - height),
+                    pos: float2(1.0, -1.0),
                     texCoords: float2(glyph.tx + bitmap_w / atlas_w, glyph.ty + bitmap_h / atlas_h),
                     color: color))
             
             // bl
             vertices.append(
                 Vertex(
-                    pos: float2(x2, -y2 - height),
+//                    pos: float2(x2, -y2 - height),
+                    pos: float2(-1.0, -1.0),
                     texCoords: float2(glyph.tx, glyph.ty + bitmap_h / atlas_h),
                     color: color))
         }
@@ -308,7 +314,7 @@ class Renderer: NSObject, MTKViewDelegate {
             let modelMatrix = float4x4(scaleBy: 1) * float4x4(scaleBy: 1)
             //            let viewMatrix = float4x4(translationBy: float3(0, 0, -1.5))
             //            let viewMatrix = float4x4(translationBy: float3(0.25, -0.5, -1.5))
-            let viewMatrix = float4x4(translationBy: float3(0.0, -0.5, -1.5))
+            let viewMatrix = float4x4(translationBy: float3(0.0, 0.0, -1.5))
             //            let viewMatrix = float4x4(translationBy: float3(0.0, -time * 0.5, -1.5))
             
             let modelViewMatrix = viewMatrix * modelMatrix

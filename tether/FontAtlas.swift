@@ -93,11 +93,29 @@ struct GlyphInfo {
     
 }
 
+extension Double {
+    func intCeil() -> Int {
+        Int(ceil(self))
+    }
+}
+
+extension Float {
+    func intCeil() -> Int {
+        Int(ceil(self))
+    }
+}
+
+extension CGFloat {
+    func intCeil() -> Int {
+        Int(ceil(self))
+    }
+}
+
 /// Only supports monospaced fonts right now
 class FontAtlas {
     //    var characters = String("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-//    var font = NSFont.systemFont(ofSize: 48) // Or any other font you want
-        var font: NSFont = NSFont(name: "Iosevka SS04", size: 48)!
+    //    var font = NSFont.systemFont(ofSize: 48) // Or any other font you want
+    var font: NSFont = NSFont(name: "Iosevka SS04", size: 48)!
     let margin: CGFloat = 4
     let MAX_WIDTH = 1024.0
     var max_glyph_height: Float = 0.0
@@ -107,7 +125,16 @@ class FontAtlas {
     
     func lookupChar(char: UInt8) -> GlyphInfo {
         assert(char < glyph_info.count)
-        return self.glyph_info[Int(char)]
+        return self.glyph_info[Int(char) - 32]
+    }
+    
+    func getAdvance(ctfont: CGFont, glyph: CGGlyph) -> Int {
+        var the_glyph: [CGGlyph] = [glyph]
+        var advances: [Int32] = [0]
+        if !ctfont.getGlyphAdvances(glyphs: &the_glyph, count: 1, advances: &advances) {
+            fatalError("WTF!")
+        }
+        return Int(ceil((Float(advances[0]) / Float(1000)) * 48));
     }
     
     func makeAtlas() {
@@ -130,85 +157,110 @@ class FontAtlas {
         
         var glyph_rects = [CGRect](repeating: CGRect(), count: glyphs.count);
         let total_bounding_rect = CTFontGetBoundingRectsForGlyphs(font, .horizontal, &glyphs, &glyph_rects, glyphs.count)
+        let ctfont = CTFontCopyGraphicsFont(font, nil)
         
-        var roww = 0.0
-        var rowh = 0.0
-        var w = 0.0
-        var h = 0.0
-        var max_w = 0.0
+        var roww = 0
+        var rowh = 0
+        var w = 0
+        var h = 0
+        var max_w = 0
         for i in 32..<CHAR_END {
             let j = Int(i - 32);
             let glyph = glyphs[j];
             let glyph_rect = glyph_rects[j];
+            let advance = self.getAdvance(ctfont: ctfont, glyph: glyph);
             
-            if roww + glyph_rect.width + 1.0 >= MAX_WIDTH {
+            if roww + glyph_rect.width.intCeil() + advance + 1 >= MAX_WIDTH.intCeil() {
                 w = max(w, roww);
                 h += rowh
                 roww = 0
-                rowh = 0
+                //                rowh = 0
             }
+            print("WTF MAN \(glyph_rect.height.intCeil())")
             
-            max_w = max(max_w, glyph_rect.width)
+            max_w = max(max_w, glyph_rect.width.intCeil())
             
-            roww += glyph_rect.width + 1
-            rowh = max(rowh, glyph_rect.height)
+            roww += glyph_rect.width.intCeil() + advance + 1
+            rowh = max(rowh, glyph_rect.height.intCeil())
         }
         
         let max_h = rowh;
+        print("MAX HEIGHT BITCH \(max_h)")
         w = max(w, roww);
         h += rowh;
         
-        let tex_w = Int(ceil(w))
-        let tex_h = Int(ceil(h))
+        let tex_w = w
+        let tex_h = h
         
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
         let context = CGContext(data: nil, width: tex_w, height: tex_h, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         context.setFillColor(CGColor(red: 0.0, green: 0, blue: 0, alpha: 0.0))
         context.fill(CGRect(x: 0, y: 0, width: tex_w, height: tex_h))
-        let ctfont = CTFontCopyGraphicsFont(font, nil)
         context.setFont(ctfont)
+        //        context.translateBy(x: 0.0, y: CGFloat(tex_h))
+        //        context.scaleBy(x: 0.0, y: -1.0)
+        
+        //        context.scaleBy(x: 0.0, y: -1.0)
+        //        context.translateBy(x: 0.0, y: CGFloat(-tex_h))
+        
+        //                context.scaleBy(x: 0.0, y: -1.0)
+        //        context.translateBy(x: 0.0, y: CGFloat(tex_h))
         context.setFontSize(48)
         
-
+        
         context.setFillColor(CGColor(red: 0.0, green: 1, blue: 0, alpha: 1.0))
         var ox: Int = 0
         var oy: Int = 0
-        var rowhh: Int = 0
+        
+        var transform = CGAffineTransform(scaleX: 1, y: -1)
+        transform = CGAffineTransformTranslate(transform, 0, CGFloat(-tex_h))
+        
+        //        var transform = CGAffineTransform(translationX: 0, y: CGFloat(-tex_h))
+        //        transform = CGAffineTransformScale(transform, 0, -1)
+        
+        //        SetTextMatrix(context, transform);
         
         for i in 32..<CHAR_END {
             let j = Int(i - 32);
             let glyph = glyphs[j];
             let rect = glyph_rects[j];
             
-            let rectw = Int(ceil(rect.width))
-            let recth = Int(ceil(rect.height))
+            let rectw = rect.width.intCeil()
+            let recth = rect.height.intCeil()
             
-            if ox + rectw + 1 >= Int(MAX_WIDTH) {
+            let advance = self.getAdvance(ctfont: ctfont, glyph: glyph)
+            
+            if i == 65 {
+                print("OX \(ox) Oy2 \(tex_h - oy - rect.height.intCeil()) H \(rect.height) RECT W \(rect.width) \(rect.width.intCeil())");
+            }
+            if (ox + rectw + advance + 1) >= MAX_WIDTH.intCeil() {
                 ox = 0;
-                oy += rowhh;
+                oy += max_h;
                 rowh = 0
             }
             
-            
             let tx = Float(ox) / Float(tex_w)
-            let ty = Float(oy) / Float(tex_h)
-            let oy_cg = Float(tex_h - oy)
+            let ty = (Float(tex_h) - Float(oy) - Float(rect.height.intCeil())) / Float(tex_h)
             var the_glyph: [CGGlyph] = [glyph]
-            context.showGlyphs([glyph], at: [CGPoint(x: Double(ox), y: Double(oy_cg))])
+            //            context.showGlyphs([glyph], at: [CGPoint(x: Double(ox), y: Double(oy))])
+            ShowGlyphsAtPoint(context, &the_glyph, CGFloat(ox), CGFloat(oy))
             
-            var advances: [Int32] = [0]
-            ctfont.getGlyphAdvances(glyphs: &the_glyph, count: 1, advances: &advances)
+            var new_rect = rect
+//            new_rect.origin = CGPoint(x: ox, y: tex_h - oy - rect.height.intCeil())
+//            new_rect = CGRectApplyAffineTransform(rect, transform)
+            //            print("PREVIOUS RECT \(new_rect.width) \(new_rect.height)");
+            //            new_rect = CGRect(x: new_rect.origin.x, y: new_rect.origin.y, width: new_rect.width * 48, height: new_rect.height * 48)
+            //            print("NEXT RECT \(new_rect.width) \(new_rect.height)");
             
             self.glyph_info[j] = GlyphInfo(
                 glyph: glyph,
-                rect: rect,
+                rect: new_rect,
                 tx: tx,
                 ty: ty,
-                advance: Float(advances[0])
+                advance: Float(advance)
             )
             
-            rowhh = max(rowhh, recth)
-            ox += rectw + 1
+            ox += rectw + advance + 1
         }
         
         atlas = context.makeImage()!
