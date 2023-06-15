@@ -176,7 +176,6 @@ class FontAtlas {
                 roww = 0
                 //                rowh = 0
             }
-            print("WTF MAN \(glyph_rect.height.intCeil())")
             
             max_w = max(max_w, glyph_rect.width.intCeil())
             
@@ -231,7 +230,7 @@ class FontAtlas {
             let advance = self.getAdvance(ctfont: ctfont, glyph: glyph)
             
             if i == 65 {
-                print("OX \(ox) Oy2 \(tex_h - oy - rect.height.intCeil()) H \(rect.height) RECT W \(rect.width) \(rect.width.intCeil())");
+                print("adv \(advance) OX \(ox) Oy2 \(tex_h - oy - rect.height.intCeil()) H \(rect.height) RECT W \(rect.width) \(rect.width.intCeil())");
             }
             if (ox + rectw + advance + 1) >= MAX_WIDTH.intCeil() {
                 ox = 0;
@@ -247,7 +246,8 @@ class FontAtlas {
             
             var new_rect = rect
 //            new_rect.origin = CGPoint(x: ox, y: tex_h - oy - rect.height.intCeil())
-//            new_rect = CGRectApplyAffineTransform(rect, transform)
+            new_rect = CGRectApplyAffineTransform(rect, transform)
+            new_rect = CGRect(x: new_rect.origin.x, y: new_rect.origin.y, width: CGFloat(Float(advance)), height: new_rect.height)
             //            print("PREVIOUS RECT \(new_rect.width) \(new_rect.height)");
             //            new_rect = CGRect(x: new_rect.origin.x, y: new_rect.origin.y, width: new_rect.width * 48, height: new_rect.height * 48)
             //            print("NEXT RECT \(new_rect.width) \(new_rect.height)");

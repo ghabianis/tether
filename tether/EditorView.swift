@@ -119,13 +119,17 @@ class Renderer: NSObject, MTKViewDelegate {
             let glyph = self.fontAtlas.lookupChar(char: c)
             let l = Float(glyph.rect.origin.x)
             let r = Float(glyph.rect.origin.x + glyph.rect.width);
-            let t = Float(glyph.rect.maxY)
+            let t = Float(glyph.rect.origin.y)
             let b = Float(glyph.rect.minY)
-            let bitmap_w = Float(glyph.rect.width)
-            let bitmap_h = Float(glyph.rect.height)
+            let bitmap_w = Float(glyph.rect.width.intCeil())
+            let bitmap_h = Float(glyph.rect.height.intCeil()) 
+            
+//            let x2 = x + l * sx;
+//            let y2 = -y - t * sy
             
             let x2 = x + l * sx;
             let y2 = -y - t * sy
+            
             let width = bitmap_w * sx
             let height = bitmap_h * sy
             
@@ -311,7 +315,7 @@ class Renderer: NSObject, MTKViewDelegate {
             
             //            print("DAMN \(aspectRatio)")
             //            let modelMatrix = float4x4(rotationAbout: float3(0, 1, 0), by: angle)  *  float4x4(scaleBy: 1)
-            let modelMatrix = float4x4(scaleBy: 1) * float4x4(scaleBy: 1)
+            let modelMatrix = float4x4(scaleBy: 1) * float4x4(scaleBy: 1.0)
             //            let viewMatrix = float4x4(translationBy: float3(0, 0, -1.5))
             //            let viewMatrix = float4x4(translationBy: float3(0.25, -0.5, -1.5))
             let viewMatrix = float4x4(translationBy: float3(0.0, 0.0, -1.5))
