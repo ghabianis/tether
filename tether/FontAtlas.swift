@@ -118,7 +118,7 @@ class FontAtlas {
     var font: NSFont = NSFont(name: "Iosevka SS04", size: 48)!
     let margin: CGFloat = 4
     let MAX_WIDTH = 1024.0
-    var max_glyph_height: Float = 0.0
+    var max_glyph_height: Int = 0
     var max_glyph_height_normalized: Float = 0.0
     var glyph_info: [GlyphInfo] = []
     var atlas: CGImage!
@@ -184,6 +184,7 @@ class FontAtlas {
         }
         
         let max_h = rowh;
+        self.max_glyph_height = max_h;
         print("MAX HEIGHT BITCH \(max_h)")
         w = max(w, roww);
         h += rowh;
