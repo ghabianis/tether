@@ -6,9 +6,15 @@
 //
 
 #import "TetherFont.h"
+#import <MetalKit/MetalKit.h>
+#import <Metal/Metal.h>
+#import <Metal/MTLDevice.h>
 
 @implementation TetherFont
-
+- (void) dealloc {
+    [MTLVertexDescriptor init];
+    printf("HOLY FUCKING SHIT IT WORKS!\n");
+}
 @end
 
 void ShowGlyphsAtPositions(
