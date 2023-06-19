@@ -1,7 +1,3 @@
-const freetype = @cImport({
-    @cInclude("ft2build.h");
-    @cInclude("FT_FREETYPE_H");
-});
 
 pub const Glyph = struct {
     advance_x: f32,
@@ -17,8 +13,5 @@ pub const Glyph = struct {
 pub const Atlas = struct {
 
     pub fn new() void {
-        freetype.
-        const FT_Library = freetype.Library;
-        freetype.FT_Init_FreeType(&FT_Library);
     }
 };

@@ -87,7 +87,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var renderPipeline: MTLRenderPipelineState!
     let commandQueue: MTLCommandQueue
     
-    var fontAtlas = FontAtlas()
+    var fontAtlas = FontAtlas(fontSize: 64 * 2)
     var texture: MTLTexture!
     var sampler: MTLSamplerState!
     var vertexBuffer: MTLBuffer!
@@ -114,8 +114,11 @@ class Renderer: NSObject, MTKViewDelegate {
         var x: Float = 0.0
         var y: Float = screeny - Float(self.fontAtlas.max_glyph_height)
         
+        let starting_x = x;
+        
         for char in text {
             let c = UInt8(char)
+            
             let glyph = self.fontAtlas.lookupChar(char: c)
             let l = Float(glyph.rect.origin.x)
             let r = Float(glyph.rect.origin.x + glyph.rect.width);
@@ -127,20 +130,10 @@ class Renderer: NSObject, MTKViewDelegate {
             let width = bitmap_w
             let height = bitmap_h
             let ydif = Float(self.fontAtlas.max_glyph_height)  - height
-//            let ydif: Float = 0.0
             
             let x2 = x + l
-//            let y2 = (y + 0.0 * sy) - ydif
-//            let y2 = (y + 0.0) // - ydif
-//            let bot = (y2 + height) // - ydif
-//            let y2 = y + height;
-//            let bot = y + Float(glyph.rect.origin.y);
-            let y2 = y + Float(glyph.rect.maxY);
-            let bot = y + Float(glyph.rect.minY);
-            print("THE Y SHIT \(y2) :: \(y) \(glyph.rect.maxY) \(glyph.rect.minY)");
-            
-            
-            x += glyph.advance
+            let y2 = y + Float(glyph.rect.maxY.intCeil());
+            let bot = y + Float(glyph.rect.minY.intCeil());
             
             let color = float4(1.0, 0.0, 0.0, 1.0)
             let atlas_w = Float(self.fontAtlas.atlas.width)
@@ -149,11 +142,26 @@ class Renderer: NSObject, MTKViewDelegate {
             let tyt = glyph.ty - bitmap_h / atlas_h;
             let tyb = glyph.ty;
             
+            switch (c) {
+            // Tab
+            case 9:
+                x += self.fontAtlas.lookupCharFromStr(char: " ").advance * 4.0
+            // New line
+            case 10:
+                x = starting_x
+                y -= Float(self.fontAtlas.max_glyph_height)
+            default:
+                if glyph.rect.width == 0.0 && glyph.rect.height == 0.0 {
+                    continue
+                }
+                x += glyph.advance
+            }
+            
             // tl
             vertices.append(
                 Vertex(
                     pos: float2(x2, y2),
-//                    pos: float2(-1.0, 1.0),
+                    //                    pos: float2(-1.0, 1.0),
                     texCoords: float2(glyph.tx, tyt),
                     color: color))
             
@@ -161,7 +169,7 @@ class Renderer: NSObject, MTKViewDelegate {
             vertices.append(
                 Vertex(
                     pos: float2(x2 + width, y2),
-//                    pos: float2(1.0, 1.0),
+                    //                    pos: float2(1.0, 1.0),
                     texCoords: float2(glyph.tx + bitmap_w / atlas_w, tyt),
                     color: color))
             
@@ -169,7 +177,7 @@ class Renderer: NSObject, MTKViewDelegate {
             vertices.append(
                 Vertex(
                     pos: float2(x2, bot),
-//                    pos: float2(-1.0, -1.0),
+                    //                    pos: float2(-1.0, -1.0),
                     texCoords: float2(glyph.tx, tyb),
                     color: color))
             
@@ -177,7 +185,7 @@ class Renderer: NSObject, MTKViewDelegate {
             vertices.append(
                 Vertex(
                     pos: float2(x2 + width, y2),
-//                    pos: float2(1.0, 1.0),
+                    //                    pos: float2(1.0, 1.0),
                     texCoords: float2(glyph.tx + bitmap_w / atlas_w, tyt),
                     color: color))
             
@@ -185,7 +193,7 @@ class Renderer: NSObject, MTKViewDelegate {
             vertices.append(
                 Vertex(
                     pos: float2(x2 + width, bot),
-//                    pos: float2(1.0, -1.0),
+                    //                    pos: float2(1.0, -1.0),
                     texCoords: float2(glyph.tx + bitmap_w / atlas_w, tyb),
                     color: color))
             
@@ -193,7 +201,7 @@ class Renderer: NSObject, MTKViewDelegate {
             vertices.append(
                 Vertex(
                     pos: float2(x2, bot),
-//                    pos: float2(-1.0, -1.0),
+                    //                    pos: float2(-1.0, -1.0),
                     texCoords: float2(glyph.tx, tyb),
                     color: color))
         }
@@ -214,16 +222,9 @@ class Renderer: NSObject, MTKViewDelegate {
         
         self.texture = try! textureLoader.newTexture(cgImage: self.fontAtlas.atlas, options: options)
         
-        //        let modelURL = Bundle.main.url(forResource: "atlas", withExtension: "png")!
-        //        self.texture = try! textureLoader.newTexture(URL: modelURL, options: options)
-        
-        //        let modelURL = Bundle.main.url(forResource: "shrek", withExtension: "png")!
-        //        self.texture = try! textureLoader.newTexture(URL: modelURL)
-        
         let samplerDescriptor = MTLSamplerDescriptor()
-        samplerDescriptor.minFilter = .nearest
+        samplerDescriptor.minFilter = .linear
         samplerDescriptor.magFilter = .linear
-        //                samplerDescriptor.magFilter = .nearest
         samplerDescriptor.sAddressMode = .clampToZero
         samplerDescriptor.tAddressMode = .clampToZero
         
@@ -233,33 +234,8 @@ class Renderer: NSObject, MTKViewDelegate {
         
         self.sampler = sampler
         
-        //        let vertices = self.textToVertices(text: Array("!Hello world".utf8))
-        print("SIZE \(self.size!)")
-        let vertices = self.textToVertices(text: Array("PooPy qbgoi".utf8), screenx:  Float(self.size!.width), screeny: Float(self.size!.height ))
+        let vertices = self.textToVertices(text: Array("PooPy qbgoi\nnicebro\n\nwooo".utf8), screenx:  Float(self.size!.width * 2.0), screeny: Float(self.size!.height * 2.0))
         
-        //                let texCoords = self.fontAtlas.lookupChar(char: UInt8(70)).texCoords()
-        //                let y: Float = 0.6035088
-        //                let y: Float = 1
-        //                let x: Float = 1.0
-        //                let color = float4(1, 0, 0, 1)
-        //                let blue = float4(0, 0, 1, 1)
-        //                let vertices = [
-        //                    Vertex(pos: float2(-x, -y), texCoords: texCoords[0], color: color),
-        //                    Vertex(pos: float2(-x, y), texCoords: texCoords[1], color: color),
-        //                    Vertex(pos: float2(x, y), texCoords: texCoords[2], color: color),
-        //
-        //                    Vertex(pos: float2(x, y), texCoords: texCoords[3], color: blue),
-        //                    Vertex(pos: float2(x, -y), texCoords: texCoords[4], color: blue),
-        //                    Vertex(pos: float2(-x, -y), texCoords: texCoords[5], color: blue),
-        //                ]
-        
-        //        let vertices = [
-        //            Vertex(pos: SIMD2<Float>(-0.9972763, 0.70581895), texCoords: float2(0, 0), color: color),
-        //            Vertex(pos: SIMD2<Float>(-1.0, 0.70581895), texCoords: float2(0, 0), color: color),
-        //            Vertex(pos: SIMD2<Float>(-1.0, 1.0), texCoords: float2(0, 0), color: color),
-        //        ]
-        
-        print("VERTICES \(vertices)")
         self.vertexBuffer = device.makeBuffer(bytes: vertices, length: MemoryLayout<Vertex>.size * vertices.count)!
         self.verticesLen = vertices.count
     }
@@ -321,7 +297,7 @@ class Renderer: NSObject, MTKViewDelegate {
             //            let aspectRatio = Float(view.drawableSize.width / view.drawableSize.height)
             // this is with the dpi so it is * 2 of the actual size
             let aspectRatio = Float(view.drawableSize.height / view.drawableSize.width)
-//            print("VIEW SIZE \(view.drawableSize)")
+            //            print("VIEW SIZE \(view.drawableSize)")
             
             //            print("DAMN \(aspectRatio)")
             //            let modelMatrix = float4x4(rotationAbout: float3(0, 1, 0), by: angle)  *  float4x4(scaleBy: 1)
@@ -335,11 +311,11 @@ class Renderer: NSObject, MTKViewDelegate {
             
             //            print("WTF \(aspectRatio)")
             //            let projectionMatrix = float4x4(perspectiveProjectionFov: Float.pi / 3, aspectRatio: aspectRatio, near: 0.1, far: 100.0)
-//                        let projectionMatrix = float4x4(orthographicProjectionLeft: -1, right: 1, bottom: -aspectRatio, top: aspectRatio, near: 0.1, far: 100.0)
-//            let projectionMatrix = float4x4(orthographicProjectionLeft: -1, right: 1, bottom: -1, top: 1, near: 0.1, far: 100.0)
-            let projectionMatrix = float4x4(orthographicProjectionLeft: 0, right: Float(view.drawableSize.width / 2.0), bottom: 0, top: Float(view.drawableSize.height / 2.0), near: 0.1, far: 100.0)
-//            let projectionMatrix = float4x4(orthographicProjectionLeft: 0, right: Float(view.drawableSize.width), bottom: Float(view.drawableSize.height), top: 0, near: 0.1, far: 100.0)
-//            let projectionMatrix = float4x4(orthographicProjectionLeft: -aspectRatio, right: aspectRatio, bottom: -1, top: 1, near: 0.1, far: 100.0)
+            //                        let projectionMatrix = float4x4(orthographicProjectionLeft: -1, right: 1, bottom: -aspectRatio, top: aspectRatio, near: 0.1, far: 100.0)
+            //            let projectionMatrix = float4x4(orthographicProjectionLeft: -1, right: 1, bottom: -1, top: 1, near: 0.1, far: 100.0)
+            let projectionMatrix = float4x4(orthographicProjectionLeft: 0, right: Float(view.drawableSize.width ), bottom: 0, top: Float(view.drawableSize.height ), near: 0.1, far: 100.0)
+            //            let projectionMatrix = float4x4(orthographicProjectionLeft: 0, right: Float(view.drawableSize.width), bottom: Float(view.drawableSize.height), top: 0, near: 0.1, far: 100.0)
+            //            let projectionMatrix = float4x4(orthographicProjectionLeft: -aspectRatio, right: aspectRatio, bottom: -1, top: 1, near: 0.1, far: 100.0)
             
             var uniforms = Uniforms(modelViewMatrix: modelViewMatrix, projectionMatrix: projectionMatrix)
             

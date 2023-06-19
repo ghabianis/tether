@@ -8,9 +8,7 @@ const NSString = struct {
     obj: objc.Object,
 
     fn fromId(id: anytype) NSString {
-        return .{
-            .obj = objc.Object.fromId(id)
-        };
+        return .{ .obj = objc.Object.fromId(id) };
     }
 
     fn length(self: *const NSString) usize {
@@ -18,7 +16,7 @@ const NSString = struct {
     }
 };
 
-export fn say_hello() ? [*:0]const u8 {
+export fn say_hello() ?[*:0]const u8 {
     Atlas.new();
     return @ptrCast(?[*:0]const u8, "HELLO");
 }
