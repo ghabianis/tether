@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		9E10DE912A3292460014524F /* TetherFont.m in Sources */ = {isa = PBXBuildFile; fileRef = 9E10DE902A3292460014524F /* TetherFont.m */; };
 		9E3FB28C2A404E8E00B1C1C0 /* EditorKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E3FB28B2A404E8E00B1C1C0 /* EditorKit.xcframework */; };
-		9E88B8BF2A3098BA007CF767 /* FontAtlas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */; };
 		9E9D5AD32A473330007367FF /* src in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5AD22A473330007367FF /* src */; };
 		9E9D5B8E2A3408AD00A7E3BB /* shrek.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B8D2A3408AD00A7E3BB /* shrek.png */; };
 		9E9D5B902A340E3300A7E3BB /* atlas.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B8F2A340E3300A7E3BB /* atlas.png */; };
@@ -32,7 +31,6 @@
 		9E10DE8F2A3292460014524F /* TetherFont.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TetherFont.h; sourceTree = "<group>"; };
 		9E10DE902A3292460014524F /* TetherFont.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TetherFont.m; sourceTree = "<group>"; };
 		9E3FB28B2A404E8E00B1C1C0 /* EditorKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EditorKit.xcframework; path = editor/macos/EditorKit.xcframework; sourceTree = "<group>"; };
-		9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontAtlas.swift; sourceTree = "<group>"; };
 		9E9D5AD22A473330007367FF /* src */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = src; path = editor/src; sourceTree = SOURCE_ROOT; };
 		9E9D5B8D2A3408AD00A7E3BB /* shrek.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = shrek.png; sourceTree = "<group>"; };
 		9E9D5B8F2A340E3300A7E3BB /* atlas.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = atlas.png; path = tether/atlas.png; sourceTree = SOURCE_ROOT; };
@@ -111,7 +109,6 @@
 				9E9D5B8F2A340E3300A7E3BB /* atlas.png */,
 				9EB5044A2A2FF13F0062BAE7 /* ZigTestView.swift */,
 				9EB5044C2A2FF1A30062BAE7 /* tether-Bridging-Header.h */,
-				9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */,
 				9EB40ACB2A31AE5200DA45F7 /* TetherState.swift */,
 				9E10DE8F2A3292460014524F /* TetherFont.h */,
 				9E10DE902A3292460014524F /* TetherFont.m */,
@@ -210,7 +207,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9E88B8BF2A3098BA007CF767 /* FontAtlas.swift in Sources */,
 				9EB504402A2FDDCF0062BAE7 /* Shaders.metal in Sources */,
 				9EB5043E2A2FDD9E0062BAE7 /* EditorView.swift in Sources */,
 				9E10DE912A3292460014524F /* TetherFont.m in Sources */,
