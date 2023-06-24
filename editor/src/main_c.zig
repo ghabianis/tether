@@ -17,6 +17,10 @@ const Renderer = struct {
     device: metal.MTLDevice,
     queue: metal.MTLCommandQueue,
     pipeline: metal.MTLRenderPipelineState,
+    /// MTLTexture
+    texture: objc.Object, 
+    /// MTLSamplerState
+    sampler_state: objc.Object,
 
     vertices: [6]Vertex,
     vertex_buffer: metal.MTLBuffer,
@@ -37,26 +41,50 @@ const Renderer = struct {
             .vertices = undefined,
             .vertex_buffer = undefined,
             .atlas = atlas,
+            .texture = undefined,
+            .sampler_state = undefined,
         };
 
         const tl = math.float2(-1.0, 1.0);
         const tr = math.float2(1.0, 1.0);
         const bl = math.float2(-1.0, -1.0);
         const br = math.float2(1.0, -1.0);
-        const texCoords = math.float2(0.0, 0.0);
         const color = math.float4(1.0, 0.0, 0.0, 1.0);
 
         const dummy_vertices: [6]Vertex = .{
-            .{ .pos = tl, .tex_coords = texCoords, .color = color },
-            .{ .pos = tr, .tex_coords = texCoords, .color = color },
-            .{ .pos = bl, .tex_coords = texCoords, .color = color },
+            .{ .pos = tl, .tex_coords = tl, .color = color },
+            .{ .pos = tr, .tex_coords = tr, .color = color },
+            .{ .pos = bl, .tex_coords = bl, .color = color },
 
-            .{ .pos = tr, .tex_coords = texCoords, .color = color },
-            .{ .pos = br, .tex_coords = texCoords, .color = color },
-            .{ .pos = bl, .tex_coords = texCoords, .color = color },
+            .{ .pos = tr, .tex_coords = tr, .color = color },
+            .{ .pos = br, .tex_coords = br, .color = color },
+            .{ .pos = bl, .tex_coords = bl, .color = color },
         };
         renderer.vertices = dummy_vertices;
         renderer.vertex_buffer = device.new_buffer_with_bytes(@ptrCast([*]const u8, &dummy_vertices)[0..(@sizeOf(Vertex) * dummy_vertices.len)], metal.MTLResourceOptions.storage_mode_shared);
+
+        const tex_opts = metal.NSDictionary.new_mutable();
+        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{  metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
+        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
+        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(0), metal.MTKTextureLoaderOptionSRGB});
+
+        const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
+        var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
+        tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
+        
+        var err: ?*anyopaque = null;
+        const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithCGImage:options:error:"), .{atlas.atlas, tex_opts, });
+        metal.check_error(err) catch @panic("failed to make texture");
+        renderer.texture = tex;
+
+        const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
+        sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
+        sampler_descriptor.setProperty("magFilter", metal.MTLSamplerMinMagFilter.linear);
+        sampler_descriptor.setProperty("sAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
+        sampler_descriptor.setProperty("tAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
+
+        const sampler_state = device.new_sampler_state(sampler_descriptor);
+        renderer.sampler_state = sampler_state;
 
         var ptr = alloc.create(Renderer) catch @panic("oom!");
         ptr.* = renderer;
@@ -64,11 +92,11 @@ const Renderer = struct {
     }
 
     fn build_pipeline(device: metal.MTLDevice, view: metal.MTKView) metal.MTLRenderPipelineState {
+        var err: ?*anyopaque = null;
         const shader_str = @embedFile("./shaders.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
         defer shader_nsstring.release();
 
-        var err: ?*anyopaque = null;
         const library = device.obj.msgSend(objc.Object, objc.sel("newLibraryWithSource:options:error:"), .{ shader_nsstring, @as(?*anyopaque, null), &err });
         metal.check_error(err) catch @panic("failed to build library");
 
@@ -162,6 +190,8 @@ const Renderer = struct {
 
         command_encoder.set_render_pipeline_state(self.pipeline);
         command_encoder.set_vertex_buffer(self.vertex_buffer, 0, 0);
+        command_encoder.set_fragment_texture(self.texture, 0);
+        command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
         command_encoder.draw_primitives(.triangle, 0, self.vertices.len);
         command_encoder.end_encoding();
 

@@ -106,6 +106,62 @@ pub const NSString = struct {
     }
 };
 
+pub const NSNumber = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn from_int(value: i32) Self {
+        const obj = Self.get_class().msgSend(objc.Object, objc.sel("numberWithInt:"), .{value});
+        return Self.from_obj(obj);
+    }
+
+    pub fn from_enum(value: anytype) Self {
+        return Self.from_int(@intCast(i32, @enumToInt(value)));
+    }
+};
+
+pub const NSDictionary = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn new_mutable() objc.Object {
+        const Class = objc.Class.getClass("NSMutableDictionary").?;
+        var dict = Class.msgSend(objc.Object, objc.sel("alloc"), .{});
+        dict = dict.msgSend(objc.Object, objc.sel("init"), .{});
+        return dict;
+    }
+};
+
+pub const MTKTextureLoaderOption = objc.c.id;
+pub extern "C" const MTKTextureLoaderOptionTextureUsage: MTKTextureLoaderOption;
+pub extern "C" const MTKTextureLoaderOptionTextureStorageMode: MTKTextureLoaderOption;
+pub extern "C" const MTKTextureLoaderOptionSRGB: MTKTextureLoaderOption;
+
+pub const MTLTextureUsage = enum(NSUInteger) {
+    unknown         = 0x0000,
+    shader_read      = 0x0001,
+    shader_write     = 0x0002,
+    render_target    = 0x0004,
+    pixel_format_view = 0x0010,
+};
+
+pub const MTLSamplerMinMagFilter = enum(NSUInteger) {
+    nearest = 0,
+    linear = 1,
+};
+
+pub const MTLSamplerAddressMode = enum(NSUInteger) {
+    ClampToEdge = 0,
+    MirrorClampToEdge = 1,
+    Repeat = 2,
+    MirrorRepeat = 3,
+    ClampToZero = 4,
+    ClampToBorderColor = 5,
+};
+
+
 pub const MTLClearColor = struct {
     r: f64,
     g: f64,
@@ -186,6 +242,14 @@ pub const MTLRenderCommandEncoder = struct {
         self.obj.msgSend(void, objc.sel("setVertexBuffer:offset:atIndex:"), .{ buffer.obj, offset, atIndex });
     }
 
+    pub fn set_fragment_texture(self: Self, tex: objc.Object, index: usize) void {
+        self.obj.msgSend(void, objc.sel("setFragmentTexture:atIndex:"), .{tex, index});
+    }
+
+    pub fn set_fragment_sampler_state(self: Self, sampler_state: objc.Object, index: usize) void {
+        self.obj.msgSend(void, objc.sel("setFragmentSamplerState:atIndex:"), .{sampler_state, index});
+    }
+
     pub fn draw_primitives(self: Self, primitive_type: MTLPrimitiveType, vertex_start: NSUInteger, vertex_count: NSUInteger) void {
         self.obj.msgSend(void, objc.sel("drawPrimitives:vertexStart:vertexCount:"), .{ primitive_type, vertex_start, vertex_count });
     }
@@ -251,6 +315,10 @@ pub const MTLDevice = struct {
     pub fn new_buffer_with_bytes(self: Self, bytes: []const u8, opts: MTLResourceOptions) MTLBuffer {
         const buf = self.obj.msgSend(MTLBuffer, objc.sel("newBufferWithBytes:length:options:"), .{ bytes.ptr, bytes.len, opts });
         return buf;
+    }
+
+    pub fn new_sampler_state(self: Self, descriptor: objc.Object) objc.Object {
+        return self.obj.msgSend(objc.Object, objc.sel("newSamplerStateWithDescriptor:"), .{descriptor});
     }
 };
 
@@ -391,8 +459,13 @@ fn DefineObject(comptime T: type) type {
             };
         }
 
-        pub fn alloc() T {
+        pub fn get_class() objc.Class {
             const class = objc.Class.getClass(comptime classTypeName(T)).?;
+            return class;
+        }
+
+        pub fn alloc() T {
+            const class = get_class();
             const object = class.msgSend(objc.Object, objc.sel("alloc"), .{});
             return .{ .obj = object };
         }

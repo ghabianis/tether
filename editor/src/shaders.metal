@@ -29,6 +29,9 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]])
     return vertexOut;
 }
 
-fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]]) {
-    return fragmentIn.color;
+fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]],
+                              texture2d<float> tex [[texture(0)]],
+                              sampler smp [[sampler(0)]]) {
+    // return fragmentIn.color;
+    return tex.sample(smp, fragmentIn.texCoords.xy);
 }
