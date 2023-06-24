@@ -3,6 +3,69 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Object = objc.Object;
 
+pub const CGFloat = f64;
+
+pub const CGPoint = extern struct {
+    x: CGFloat,
+    y: CGFloat,
+
+    pub fn default() CGPoint {
+        return CGPoint { .x = 0.0, .y = 0.0 };
+    }
+};
+
+pub const CGSize = extern struct {
+    width: CGFloat,
+    height: CGFloat,
+
+    pub fn default() CGSize {
+        return CGSize { .width = 0.0, .height = 0.0 };
+    }
+};
+
+pub const CGRect = extern struct {
+    const Self = @This();
+
+    origin: CGPoint,
+    size: CGSize,
+
+    pub fn new(x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat) Self {
+        return Self{
+            .origin = .{ .x = x, .y = y },
+            .size = .{ .width = w, .height = h },
+        };
+    }
+
+    pub fn default() CGRect {
+        return CGRect { .origin = CGPoint.default(), .size = CGSize.default() };
+    }
+
+    pub fn width(self: *const Self) CGFloat {
+        return self.size.width;
+    }
+
+    pub fn widthCeil(self: *const Self) i32 {
+        return @floatToInt(i32, self.width());
+    }
+    pub fn heightCeil(self: *const Self) i32 {
+        return @floatToInt(i32, self.height());
+    }
+
+    pub fn height(self: *const Self) CGFloat {
+        return self.size.height;
+    }
+
+    pub fn miny(self: *const Self) CGFloat {
+        return self.origin.y;
+    }
+
+    pub fn maxy(self: *const Self) CGFloat {
+        return self.origin.y + self.size.height;
+    }
+};
+
+pub const CGGlyph = u16;
+
 // defined as unsigned long in NSObjCRuntime.h
 pub const NSUInteger = usize;
 pub const NSStringEncoding = enum(NSUInteger) {
@@ -36,6 +99,10 @@ pub const NSString = struct {
             @panic("oh no!");
         }
         return @ptrCast([*:0]u8, buf);
+    }
+
+    pub fn get_characters(self: NSString, buf: []u16) void {
+        self.obj.msgSend(void, objc.sel("getCharacters:"), .{buf.ptr});
     }
 };
 

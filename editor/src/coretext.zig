@@ -1,20 +1,69 @@
-// pub const c = @import("bindings.zig");
+const objc = @import("zig-objc");
+const metal = @import("./metal.zig");
 
-pub const CGFloat = f64;
+pub const CTFontRef = objc.c.id;
+pub const Unichar = u16;
+pub const CFIndex = i64;
 
-pub const CGPoint = extern struct {
-    x: CGFloat,
-    y: CGFloat,
+pub const CTFontOrientation = enum(u32) {
+    default = 0,
+    horizontal = 1,
+    vertical = 2,
 };
 
-pub const CGSize = extern struct {
-    width: CGFloat,
-    height: CGFloat,
-};
+pub extern "C" fn CTFontGetGlyphsForCharacters(font: CTFontRef, characters: [*]const Unichar, glyphs: [*]metal.CGGlyph, count: CFIndex) bool;
 
-pub const CGRect = extern struct {
-    origin: CGPoint,
-    size: CGSize,
-};
+pub extern "C" fn CTFontGetBoundingRectsForGlyphs(font: CTFontRef, orientation: CTFontOrientation, glyphs: [*]const metal.CGGlyph, bounding_rects: [*]metal.CGRect, count: CFIndex) metal.CGRect;
 
-pub const CGGlyph = u16;
+pub extern "C" fn CTFontCopyGraphicsFont(font: CTFontRef, attributes: ?[*]const objc.c.id) objc.c.id;
+
+pub extern "C" fn CTFontGetAdvancesForGlyphs(
+    font: CTFontRef,
+    orientation: CTFontOrientation,
+    glyphs: [*]const metal.CGGlyph,
+    advances: [*]metal.CGSize,
+    count: CFIndex
+) f64;
+
+pub const CGContextRef = objc.c.id;
+pub const CGColorSpaceRef = objc.c.id;
+pub const CGColorRef = objc.c.id;
+pub const CGFontRef = objc.c.id;
+pub const CGImageRef = objc.c.id;
+
+pub extern "C" const kCGColorSpaceSRGB: objc.c.id;
+// pub extern "C" const kCGImageAlphaPremultipliedLast: u32;
+pub const kCGImageAlphaPremultipliedLast: u32 = 1;
+pub extern "C" fn CGColorSpaceCreateWithName(name: objc.c.id) CGColorSpaceRef;
+pub extern "C" fn CGBitmapContextCreate(
+    data: ?[*]void,
+    width: usize,
+    height: usize,
+    bits_per_component: usize,
+    bytes_per_row: usize,
+    space: CGColorSpaceRef,
+    bitmap_info: usize,
+) CGContextRef;
+pub extern "C" fn CGColorCreateGenericRGB(r: metal.CGFloat, g: metal.CGFloat, b: metal.CGFloat, a: metal.CGFloat) CGColorRef;
+pub extern "C" fn CGContextSetFillColorWithColor(ctx: CGContextRef, color: CGColorRef) void;
+pub extern "C" fn CGContextFillRect(ctx: CGContextRef, rect: metal.CGRect) void;
+pub extern "C" fn CGContextSetFont(ctx: CGContextRef, font: CGFontRef) void;
+pub extern "C" fn CGContextSetFontSize(ctx: CGContextRef, size: metal.CGFloat) void;
+
+pub extern "C" fn CGContextSetShouldAntialias(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetAllowsAntialiasing(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetShouldSmoothFonts(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetAllowsFontSmoothing(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetShouldSubpixelPositionFonts(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetShouldSubpixelQuantizeFonts(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetAllowsFontSubpixelPositioning(ctx: CGContextRef, val: bool) void;
+pub extern "C" fn CGContextSetAllowsFontSubpixelQuantization(ctx: CGContextRef, val: bool) void;
+
+pub extern "C" fn CGContextShowGlyphsAtPoint(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat, glyphs: [*]const metal.CGGlyph, count: usize) void;
+pub extern "C" fn CGBitmapContextCreateImage(ctx: CGContextRef) CGImageRef;
+
+pub extern "C" fn CGColorRelease(color: CGColorRef) void;
+pub extern "C" fn CGColorSpaceRelease(space: CGColorSpaceRef) void;
+pub extern "C" fn CGContextRelease(ctx: CGContextRef) void;
+
+pub extern "C" fn CFRetain(val: objc.c.id) objc.c.id;

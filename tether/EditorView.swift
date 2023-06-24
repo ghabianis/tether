@@ -97,8 +97,13 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         self.mtkView = view
         self.device = device
         
-        renderer_str_test();
         self.zig = renderer_create(view, device);
+        let image: CGImage = renderer_get_atlas_image(self.zig) as! CGImage
+        
+        let url = URL(fileURLWithPath: "/Users/zackradisic/Code/tether/atlas.png")
+        let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)
+        CGImageDestinationAddImage(destination!, image, nil)
+        CGImageDestinationFinalize(destination!)
         let val = renderer_get_val(self.zig)
         print("VAL \(val)")
         

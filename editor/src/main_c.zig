@@ -4,7 +4,7 @@ const objc = @import("zig-objc");
 const Atlas = @import("./font.zig").Atlas;
 const metal = @import("./metal.zig");
 const math = @import("./math.zig");
-const coretext = @import("./coretext.zig");
+const font = @import("./font.zig");
 
 pub const Vertex = extern struct {
     pos: math.Float2,
@@ -22,7 +22,9 @@ const Renderer = struct {
     vertex_buffer: metal.MTLBuffer,
     some_val: u64,
 
-    pub fn init(alloc: Allocator, view_: objc.c.id, device_: objc.c.id) *Renderer {
+    atlas: font.Atlas,
+
+    pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
@@ -34,6 +36,7 @@ const Renderer = struct {
             .some_val = 69420,
             .vertices = undefined,
             .vertex_buffer = undefined,
+            .atlas = atlas,
         };
 
         const tl = math.float2(-1.0, 1.0);
@@ -154,7 +157,7 @@ const Renderer = struct {
         color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
-        const drawable_size = view.obj.getProperty(coretext.CGSize, "drawableSize");
+        const drawable_size = view.obj.getProperty(metal.CGSize, "drawableSize");
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
         command_encoder.set_render_pipeline_state(self.pipeline);
@@ -167,24 +170,23 @@ const Renderer = struct {
     }
 };
 
-export fn renderer_str_test() void {
-    std.debug.print("Value {s} {s}\n", .{comptime metal.classTypeName(metal.NSString), @typeName(metal.NSString)});
-    const str = metal.NSString.new_with_bytes("HEY", .ascii);
-    var buf: [128]u8 = undefined;
-    const cstr = str.to_c_string(&buf);
-    std.debug.print("C STR {s}\n", .{cstr});
-}
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
+    var atlas = font.Atlas.new(64.0);
+    atlas.make_atlas();
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
     defer obj.msgSend(void, objc.sel("release"), .{});
-    return Renderer.init(std.heap.c_allocator, view, device);
+    return Renderer.init(std.heap.c_allocator, atlas, view, device);
 }
 
 export fn renderer_draw(renderer: *Renderer, view_id: objc.c.id) void {
     const view = metal.MTKView.from_id(view_id);
     renderer.draw(view);
+}
+
+export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
+    return renderer.atlas.atlas;
 }
 
 export fn renderer_get_val(renderer: *Renderer) u64 {

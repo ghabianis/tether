@@ -12,13 +12,12 @@
 #import <Metal/MTLCommandQueue.h>
 #import <Metal/MTLCommandBuffer.h>
 #import <Metal/MTLRenderCommandEncoder.h>
+#import <CoreFoundation/CoreFoundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+#import <CoreGraphics/CGFont.h>
 
 @implementation TetherFont
 - (void) dealloc {
-//    [[NSString alloc] initWithBytes:<#(nonnull const void *)#> length:<#(NSUInteger)#> encoding:<#(NSStringEncoding)#>]
-//    NSString ns;
-//    [ns getCString:<#(nonnull char *)#> maxLength:<#(NSUInteger)#> encoding:<#(NSStringEncoding)#>]
-//    MTLRenderComm
     printf("HOLY FUCKING SHIT IT WORKS!\n");
 }
 @end
@@ -42,6 +41,7 @@ void ShowGlyphsAtPositions(
 }
 
 void ShowGlyphsAtPoint(CGContextRef ctx, const CGGlyph *glyphs, CGFloat x, CGFloat y) {
+    CGGlyph size;
     return CGContextShowGlyphsAtPoint(ctx, x, y, glyphs, 1);
 }
 

@@ -31,6 +31,7 @@ pub fn build(b: *std.build.Builder) !void {
     static_lib_aarch64.linkFramework("CoreText");
     static_lib_aarch64.linkFramework("MetalKit");
     static_lib_aarch64.linkFramework("Foundation");
+    static_lib_aarch64.linkFramework("CoreGraphics");
     // static_lib_aarch64.linkSystemLibraryName("objc");
     // static_lib_aarch64.linkFramework("CoreFoundation");
     // static_lib_aarch64.linkFramework("CoreData");
@@ -58,6 +59,7 @@ pub fn build(b: *std.build.Builder) !void {
     static_lib_x86_64.linkFramework("CoreText");
     static_lib_x86_64.linkFramework("MetalKit");
     static_lib_x86_64.linkFramework("Foundation");
+    static_lib_x86_64.linkFramework("CoreGraphics");
     // static_lib_x86_64.linkSystemLibraryName("objc");
     // static_lib_x86_64.linkFramework("CoreFoundation");
     // static_lib_x86_64.linkFramework("CoreData");
