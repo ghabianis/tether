@@ -95,10 +95,9 @@ pub const Atlas = struct {
             while (i < Self.CHAR_END) : (i += 1) {
                 const j: usize = i - 32;
                 const glyph = glyphs[j];
-                _ = glyph;
                 const glyph_rect: metal.CGRect = glyph_rects[j];
-                // const advance = self.get_advance(glyph);
-                const advance: i32 = 100;
+                const advance = self.get_advance(glyph);
+                // const advance: i32 = 100;
 
                 if (roww + glyph_rect.widthCeil() + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     w = @max(w, roww);
@@ -164,8 +163,8 @@ pub const Atlas = struct {
                 const recth = rect.heightCeil();
                 _ = recth;
 
-                // const advance = self.get_advance(glyph);
-                const advance: i32 = 100;
+                const advance = self.get_advance(glyph);
+                // const advance: i32 = 100;
 
                 if (ox + rectw + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     ox = 0;
