@@ -9,13 +9,28 @@
 #import <MetalKit/MetalKit.h>
 #import <Metal/Metal.h>
 #import <Metal/MTLDevice.h>
+#import <Metal/MTLCommandQueue.h>
+#import <Metal/MTLCommandBuffer.h>
+#import <Metal/MTLRenderCommandEncoder.h>
 
 @implementation TetherFont
 - (void) dealloc {
-    [MTLVertexDescriptor init];
+//    [[NSString alloc] initWithBytes:<#(nonnull const void *)#> length:<#(NSUInteger)#> encoding:<#(NSStringEncoding)#>]
+//    NSString ns;
+//    [ns getCString:<#(nonnull char *)#> maxLength:<#(NSUInteger)#> encoding:<#(NSStringEncoding)#>]
+//    MTLRenderComm
     printf("HOLY FUCKING SHIT IT WORKS!\n");
 }
 @end
+
+//void shit() {
+//    MTLResourceOptions opts;
+//    [[NSString alloc] initWithB]
+//    MTKView view;
+//    view.drawableSize
+//    MTLRenderComma vwp;
+//    MTLCommandBuffer buf;
+//}
 
 void ShowGlyphsAtPositions(
                            CGContextRef ctx,

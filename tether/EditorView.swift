@@ -53,6 +53,7 @@ class EditorViewController: NSViewController {
     var renderer: SwiftRenderer!
     
     override func loadView() {
+        print("NICEE \(MemoryLayout<float4x4>.size)");
         view = NSView()
         //        view = NSView(frame: NSMakeRect(0.0, 0.0, 400.0, 270.0))
         if var renderer = self.renderer {
@@ -87,7 +88,7 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
     
     let device: MTLDevice
     let mtkView: MTKView
-    let zig: Renderer
+    let zig: Renderer!
     
     init(view: MTKView, device: MTLDevice, pos: CGPoint?, size: CGSize?) {
         self.pos = pos
@@ -96,6 +97,7 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         self.mtkView = view
         self.device = device
         
+        renderer_str_test();
         self.zig = renderer_create(view, device);
         let val = renderer_get_val(self.zig)
         print("VAL \(val)")
@@ -107,6 +109,10 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
     }
     
     func draw(in view: MTKView) {
-        
+        renderer_draw(self.zig, view)
     }
+    
+//    func lmao(command: MTLRenderCommandEncoder) {
+//        command.setVertexBytes(<#T##bytes: UnsafeRawPointer##UnsafeRawPointer#>, length: <#T##Int#>, index: <#T##Int#>)
+//    }
 }

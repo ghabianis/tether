@@ -8,10 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		9E10DE912A3292460014524F /* TetherFont.m in Sources */ = {isa = PBXBuildFile; fileRef = 9E10DE902A3292460014524F /* TetherFont.m */; };
+		9E3FB28C2A404E8E00B1C1C0 /* EditorKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E3FB28B2A404E8E00B1C1C0 /* EditorKit.xcframework */; };
 		9E88B8BF2A3098BA007CF767 /* FontAtlas.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */; };
 		9E9D5B8E2A3408AD00A7E3BB /* shrek.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B8D2A3408AD00A7E3BB /* shrek.png */; };
 		9E9D5B902A340E3300A7E3BB /* atlas.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B8F2A340E3300A7E3BB /* atlas.png */; };
-		9E9D5B922A34111700A7E3BB /* atlas-test2.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B912A34111700A7E3BB /* atlas-test2.png */; };
 		9EB40ACC2A31AE5200DA45F7 /* TetherState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40ACB2A31AE5200DA45F7 /* TetherState.swift */; };
 		9EB40AD12A31AE9100DA45F7 /* AX.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40ACE2A31AE9000DA45F7 /* AX.swift */; };
 		9EB40AD22A31AE9100DA45F7 /* AXError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB40ACF2A31AE9100DA45F7 /* AXError.swift */; };
@@ -30,10 +30,10 @@
 /* Begin PBXFileReference section */
 		9E10DE8F2A3292460014524F /* TetherFont.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TetherFont.h; sourceTree = "<group>"; };
 		9E10DE902A3292460014524F /* TetherFont.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TetherFont.m; sourceTree = "<group>"; };
+		9E3FB28B2A404E8E00B1C1C0 /* EditorKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EditorKit.xcframework; path = editor/macos/EditorKit.xcframework; sourceTree = "<group>"; };
 		9E88B8BE2A3098BA007CF767 /* FontAtlas.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontAtlas.swift; sourceTree = "<group>"; };
 		9E9D5B8D2A3408AD00A7E3BB /* shrek.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = shrek.png; sourceTree = "<group>"; };
 		9E9D5B8F2A340E3300A7E3BB /* atlas.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = atlas.png; path = tether/atlas.png; sourceTree = SOURCE_ROOT; };
-		9E9D5B912A34111700A7E3BB /* atlas-test2.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "atlas-test2.png"; sourceTree = SOURCE_ROOT; };
 		9EB40ACB2A31AE5200DA45F7 /* TetherState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TetherState.swift; sourceTree = "<group>"; };
 		9EB40ACE2A31AE9000DA45F7 /* AX.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AX.swift; sourceTree = "<group>"; };
 		9EB40ACF2A31AE9100DA45F7 /* AXError.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AXError.swift; sourceTree = "<group>"; };
@@ -57,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9E3FB28C2A404E8E00B1C1C0 /* EditorKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,7 +105,6 @@
 				9EB504412A2FDDDE0062BAE7 /* MathUtilities.swift */,
 				9E9D5B8D2A3408AD00A7E3BB /* shrek.png */,
 				9EB504452A2FDE1B0062BAE7 /* teapot.obj */,
-				9E9D5B912A34111700A7E3BB /* atlas-test2.png */,
 				9E9D5B8F2A340E3300A7E3BB /* atlas.png */,
 				9EB5044A2A2FF13F0062BAE7 /* ZigTestView.swift */,
 				9EB5044C2A2FF1A30062BAE7 /* tether-Bridging-Header.h */,
@@ -127,6 +127,7 @@
 		9EB504472A2FEB300062BAE7 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				9E3FB28B2A404E8E00B1C1C0 /* EditorKit.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -192,7 +193,6 @@
 			files = (
 				9EB504362A2FDD1F0062BAE7 /* Preview Assets.xcassets in Resources */,
 				9E9D5B902A340E3300A7E3BB /* atlas.png in Resources */,
-				9E9D5B922A34111700A7E3BB /* atlas-test2.png in Resources */,
 				9E9D5B8E2A3408AD00A7E3BB /* shrek.png in Resources */,
 				9EB504332A2FDD1F0062BAE7 /* Assets.xcassets in Resources */,
 				9EB504462A2FDE1B0062BAE7 /* teapot.obj in Resources */,

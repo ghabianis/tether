@@ -30,8 +30,8 @@ pub fn build(b: *std.build.Builder) !void {
     static_lib_aarch64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Devseloper/SDKs/MacOSX.sdk/usr/lib");
     static_lib_aarch64.linkFramework("CoreText");
     static_lib_aarch64.linkFramework("MetalKit");
+    static_lib_aarch64.linkFramework("Foundation");
     // static_lib_aarch64.linkSystemLibraryName("objc");
-    // static_lib_aarch64.linkFramework("Foundation");
     // static_lib_aarch64.linkFramework("CoreFoundation");
     // static_lib_aarch64.linkFramework("CoreData");
     // static_lib_aarch64.linkFramework("ApplicationServices");
@@ -57,8 +57,8 @@ pub fn build(b: *std.build.Builder) !void {
     static_lib_x86_64.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
     static_lib_x86_64.linkFramework("CoreText");
     static_lib_x86_64.linkFramework("MetalKit");
+    static_lib_x86_64.linkFramework("Foundation");
     // static_lib_x86_64.linkSystemLibraryName("objc");
-    // static_lib_x86_64.linkFramework("Foundation");
     // static_lib_x86_64.linkFramework("CoreFoundation");
     // static_lib_x86_64.linkFramework("CoreData");
     // static_lib_x86_64.linkFramework("ApplicationServices");
