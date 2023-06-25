@@ -31,6 +31,7 @@ pub const CGColorRef = objc.c.id;
 pub const CGFontRef = objc.c.id;
 pub const CGImageRef = objc.c.id;
 
+pub extern "C" fn CGFontGetGlyphAdvances(font: CGFontRef, glyphs: [*]metal.CGGlyph, count: usize, advances: [*]i32) bool;
 pub extern "C" const kCGColorSpaceSRGB: objc.c.id;
 // pub extern "C" const kCGImageAlphaPremultipliedLast: u32;
 pub const kCGImageAlphaPremultipliedLast: u32 = 1;

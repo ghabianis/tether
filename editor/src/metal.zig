@@ -62,6 +62,14 @@ pub const CGRect = extern struct {
     pub fn maxy(self: *const Self) CGFloat {
         return self.origin.y + self.size.height;
     }
+
+    pub fn minyCeil(self: *const Self) i32 {
+        return @floatToInt(i32, self.miny());
+    }
+
+    pub fn maxyCeil(self: *const Self) i32 {
+        return @floatToInt(i32, self.maxy());
+    }
 };
 
 pub const CGGlyph = u16;
@@ -288,6 +296,10 @@ pub const MTKView = struct {
 
     pub fn color_pixel_format(self: @This()) MTLPixelFormat {
         return self.obj.getProperty(MTLPixelFormat, "colorPixelFormat");
+    }
+
+    pub fn drawable_size(self: @This()) CGSize {
+        return self.obj.getProperty(CGSize, "drawableSize");
     }
 };
 

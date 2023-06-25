@@ -20,10 +20,16 @@ struct VertexOut {
     float2 texCoords;
 };
 
-vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]])
+struct Uniforms {
+    float4x4 modelViewMatrix;
+    float4x4 projectionMatrix;
+};
+
+vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]],
+                             constant Uniforms &uniforms [[buffer(1)]])
 {
     VertexOut vertexOut;
-    vertexOut.position = float4(vertexIn.position.xy, 0, 1);
+    vertexOut.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(vertexIn.position.xy, 0, 1);
     vertexOut.texCoords = vertexIn.texCoords.xy;
     vertexOut.color = vertexIn.color;
     return vertexOut;

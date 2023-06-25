@@ -41,6 +41,8 @@ pub const Atlas = struct {
     max_glyph_height: i32,
 
     atlas: ct.CGImageRef,
+    width: i32,
+    height: i32,
 
     pub fn new(font_size: metal.CGFloat) Self {
         const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
@@ -53,14 +55,27 @@ pub const Atlas = struct {
             .glyph_info = [_]GlyphInfo{GlyphInfo.default()} ** CHAR_END, 
             .max_glyph_height = undefined,  
             .atlas = undefined,
+            .width = undefined,
+            .height = undefined,
         };
     }
 
-    fn get_advance(self: *Self, glyph: metal.CGGlyph) i32 {
+    pub fn lookup_char(self: *const Self, char: u8) GlyphInfo {
+        std.debug.assert(char < self.glyph_info.len);
+        return self.glyph_info[@intCast(usize, char)];
+    }
+
+    pub fn lookup_char_from_str(self: *const Self, str: []const u8) GlyphInfo {
+        return self.lookup_char(str[0]);
+    }
+
+    fn get_advance(self: *Self, cgfont: ct.CGFontRef, glyph: metal.CGGlyph) i32 {
         var glyphs = [_]metal.CGGlyph{glyph};
-        var advances = [_]metal.CGSize{metal.CGSize.default()};
-        _ = ct.CTFontGetAdvancesForGlyphs(self.font.value, .horizontal, @ptrCast([*]const u16, &glyphs), @ptrCast([*]metal.CGSize, &advances), 1);
-        return intCeil((advances[0].width / 1000.0) * self.font_size);
+        var advances = [_]i32{0};
+        if (!ct.CGFontGetGlyphAdvances(cgfont, &glyphs, 1, &advances)) {
+            @panic("WTF");
+        }
+        return intCeil((@intToFloat(f32, advances[0]) / 1000.0) * self.font_size);
     }
 
     pub fn make_atlas(self: *Self) void {
@@ -96,7 +111,7 @@ pub const Atlas = struct {
                 const j: usize = i - 32;
                 const glyph = glyphs[j];
                 const glyph_rect: metal.CGRect = glyph_rects[j];
-                const advance = self.get_advance(glyph);
+                const advance = self.get_advance(cgfont, glyph);
                 // const advance: i32 = 100;
 
                 if (roww + glyph_rect.widthCeil() + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
@@ -119,6 +134,8 @@ pub const Atlas = struct {
 
         const tex_w = w;
         const tex_h = h;
+        self.width = tex_w;
+        self.height = tex_h;
 
         const name = ct.kCGColorSpaceSRGB;
         const color_space = ct.CGColorSpaceCreateWithName(name);
@@ -163,7 +180,10 @@ pub const Atlas = struct {
                 const recth = rect.heightCeil();
                 _ = recth;
 
-                const advance = self.get_advance(glyph);
+                const advance = self.get_advance(cgfont, glyph);
+                if (i == 70) {
+                    std.debug.print("GLYPH INFO originx={d} advance={d}\n", .{rect.origin.x, advance});
+                }
                 // const advance: i32 = 100;
 
                 if (ox + rectw + advance + 1 >= intCeil(Self.MAX_WIDTH)) {

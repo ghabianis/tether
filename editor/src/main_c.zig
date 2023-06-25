@@ -6,13 +6,23 @@ const metal = @import("./metal.zig");
 const math = @import("./math.zig");
 const font = @import("./font.zig");
 
+const ArrayList = std.ArrayListUnmanaged;
+
 pub const Vertex = extern struct {
     pos: math.Float2,
     tex_coords: math.Float2,
     color: math.Float4,
 };
 
+pub const Uniforms = extern struct {
+    model_view_matrix: math.Float4x4,
+    projection_matrix: math.Float4x4
+};
+
+
 const Renderer = struct {
+    const Self = @This();
+
     view: metal.MTKView,
     device: metal.MTLDevice,
     queue: metal.MTLCommandQueue,
@@ -22,7 +32,7 @@ const Renderer = struct {
     /// MTLSamplerState
     sampler_state: objc.Object,
 
-    vertices: [6]Vertex,
+    vertices: ArrayList(Vertex),
     vertex_buffer: metal.MTLBuffer,
     some_val: u64,
 
@@ -38,30 +48,17 @@ const Renderer = struct {
             .queue = queue,
             .pipeline = Renderer.build_pipeline(device, view),
             .some_val = 69420,
-            .vertices = undefined,
+            .vertices = ArrayList(Vertex){},
             .vertex_buffer = undefined,
             .atlas = atlas,
             .texture = undefined,
             .sampler_state = undefined,
         };
 
-        const tl = math.float2(-1.0, 1.0);
-        const tr = math.float2(1.0, 1.0);
-        const bl = math.float2(-1.0, -1.0);
-        const br = math.float2(1.0, -1.0);
-        const color = math.float4(1.0, 0.0, 0.0, 1.0);
-
-        const dummy_vertices: [6]Vertex = .{
-            .{ .pos = tl, .tex_coords = tl, .color = color },
-            .{ .pos = tr, .tex_coords = tr, .color = color },
-            .{ .pos = bl, .tex_coords = bl, .color = color },
-
-            .{ .pos = tr, .tex_coords = tr, .color = color },
-            .{ .pos = br, .tex_coords = br, .color = color },
-            .{ .pos = bl, .tex_coords = bl, .color = color },
-        };
-        renderer.vertices = dummy_vertices;
-        renderer.vertex_buffer = device.new_buffer_with_bytes(@ptrCast([*]const u8, &dummy_vertices)[0..(@sizeOf(Vertex) * dummy_vertices.len)], metal.MTLResourceOptions.storage_mode_shared);
+        const screen_size = view.drawable_size();
+        std.debug.print("SIZE {d} {d}\n", .{screen_size.width, screen_size.height});
+        renderer.build_text_geometry(alloc, "FUCK", @floatCast(f32, screen_size.width), @floatCast(f32, screen_size.height)) catch @panic("FAILED TO MAKE VERTICES");
+        renderer.vertex_buffer = device.new_buffer_with_bytes(@ptrCast([*]const u8, renderer.vertices.items.ptr)[0..(@sizeOf(Vertex) * renderer.vertices.items.len)], metal.MTLResourceOptions.storage_mode_shared);
 
         const tex_opts = metal.NSDictionary.new_mutable();
         tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{  metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
@@ -89,6 +86,12 @@ const Renderer = struct {
         var ptr = alloc.create(Renderer) catch @panic("oom!");
         ptr.* = renderer;
         return ptr;
+    }
+
+    fn resize(self: *Self, alloc: Allocator, new_size: metal.CGSize) void {
+        self.build_text_geometry(alloc, "FUCK", @floatCast(f32, new_size.width), @floatCast(f32, new_size.height)) catch @panic("OOPS");
+        self.vertex_buffer.release();
+        self.vertex_buffer = self.device.new_buffer_with_bytes(@ptrCast([*]const u8, self.vertices.items.ptr)[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_shared);
     }
 
     fn build_pipeline(device: metal.MTLDevice, view: metal.MTKView) metal.MTLRenderPipelineState {
@@ -158,8 +161,8 @@ const Renderer = struct {
             attachment.setProperty("blendingEnabled", true);
             attachment.setProperty("rgbBlendOperation", @enumToInt(metal.MTLBlendOperation.add));
             attachment.setProperty("alphaBlendOperation", @enumToInt(metal.MTLBlendOperation.add));
-            attachment.setProperty("sourceRGBBlendFactor", @enumToInt(metal.MTLBlendFactor.one));
-            attachment.setProperty("sourceAlphaBlendFactor", @enumToInt(metal.MTLBlendFactor.one));
+            attachment.setProperty("sourceRGBBlendFactor", @enumToInt(metal.MTLBlendFactor.source_alpha));
+            attachment.setProperty("sourceAlphaBlendFactor", @enumToInt(metal.MTLBlendFactor.source_alpha));
             attachment.setProperty("destinationRGBBlendFactor", @enumToInt(metal.MTLBlendFactor.one_minus_source_alpha));
             attachment.setProperty("destinationAlphaBlendFactor", @enumToInt(metal.MTLBlendFactor.one_minus_source_alpha));
         }
@@ -169,7 +172,79 @@ const Renderer = struct {
         return pipeline;
     }
 
-    pub fn draw(self: @This(), view: metal.MTKView) void {
+    pub fn build_text_geometry(self: *Self, alloc: Allocator, text: []const u8, screenx: f32, screeny: f32) !void {
+        _ = screenx;
+        self.vertices.clearRetainingCapacity();
+        var vertices = &self.vertices;
+
+        var x: f32 = 0.0;
+        var y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
+
+        var starting_x = x;
+
+        for (text) |char| {
+            const glyph = self.atlas.lookup_char(char);
+            const l = @floatCast(f32, glyph.rect.origin.x);
+            const width = @intToFloat(f32, glyph.rect.widthCeil());
+            // const height = @intToFloat(f32, glyph.rect.heightCeil());
+
+            if (char == 70) {
+                std.debug.print("(rnender) GLYPH INFO originx={d} advance={d}\n", .{l, width});
+            }
+            const xx = x + l;
+            const yy = y + @intToFloat(f32, glyph.rect.maxyCeil());
+            const bot = y + @intToFloat(f32, glyph.rect.minyCeil());
+
+            const atlas_w = @intToFloat(f32, self.atlas.width);
+            const atlas_h = @intToFloat(f32, self.atlas.height);
+
+            const bitmap_w = @intToFloat(f32, glyph.rect.widthCeil());
+
+            const tyt = glyph.ty - @intToFloat(f32, glyph.rect.heightCeil()) / atlas_h;
+            const tyb = glyph.ty;
+
+            switch(char) {
+                // tab
+                9 => {
+                    x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                },
+                // newline
+                10 => {
+                    x = starting_x;
+                },
+                else => {
+                    // skip empty glyphs
+                    if (glyph.rect.width() == 0.0 and glyph.rect.height() == 0.0) {
+                        continue;
+                    }
+                    // x += glyph.advance;
+                    x += 100.0;
+                }
+            }
+
+            const color = math.float4(1.0, 0.0, 0.0, 1.0);
+
+            const tl = math.float2(xx, yy);
+            const tr = math.float2(xx + width, yy);
+            const br = math.float2(xx + width, bot);
+            const bl = math.float2(xx , bot);
+            const tx_tl = math.float2(glyph.tx, tyt);
+            const tx_tr = math.float2(glyph.tx + bitmap_w / atlas_w, tyt);
+            const tx_bl = math.float2(glyph.tx, tyb);
+            const tx_br = math.float2(glyph.tx + bitmap_w / atlas_w, tyb);
+
+            try vertices.append(alloc, .{ .pos = tl, .tex_coords = tx_tl, .color = color });
+            try vertices.append(alloc, .{ .pos = tr, .tex_coords = tx_tr, .color = color });
+            try vertices.append(alloc, .{ .pos = bl, .tex_coords = tx_bl, .color = color });
+
+            try vertices.append(alloc, .{ .pos = tr, .tex_coords = tx_tr, .color = color });
+            try vertices.append(alloc, .{ .pos = br, .tex_coords = tx_br, .color = color });
+            try vertices.append(alloc, .{ .pos = bl, .tex_coords = tx_bl, .color = color });
+        }
+
+    }
+
+    pub fn draw(self: *Self, view: metal.MTKView) void {
         const command_buffer = self.queue.command_buffer();
 
         const render_pass_descriptor_id = view.obj.getProperty(objc.c.id, "currentRenderPassDescriptor");
@@ -185,14 +260,26 @@ const Renderer = struct {
         color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
-        const drawable_size = view.obj.getProperty(metal.CGSize, "drawableSize");
+        const drawable_size = view.drawable_size();
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
+        var model_matrix = math.Float4x4.scale_by(1.0);
+        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = 0.0, .y = 0.0, .z = -1.5 });
+        const model_view_matrix = view_matrix.mul(&model_matrix);
+        const projection_matrix = math.Float4x4.ortho(0.0, @floatCast(f32, drawable_size.width), 0.0, @floatCast(f32, drawable_size.height), 0.1, 100.0);
+        const uniforms = Uniforms{
+            .model_view_matrix = model_view_matrix,
+            .projection_matrix = projection_matrix,
+        };
+
+        command_encoder.set_vertex_bytes(@ptrCast([*]const u8, &uniforms)[0..@sizeOf(Uniforms)], 1);
         command_encoder.set_render_pipeline_state(self.pipeline);
+
         command_encoder.set_vertex_buffer(self.vertex_buffer, 0, 0);
+
         command_encoder.set_fragment_texture(self.texture, 0);
         command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
-        command_encoder.draw_primitives(.triangle, 0, self.vertices.len);
+        command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
         command_encoder.end_encoding();
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
@@ -202,7 +289,7 @@ const Renderer = struct {
 
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
-    var atlas = font.Atlas.new(64.0);
+    var atlas = font.Atlas.new(64.0 * 2.0);
     atlas.make_atlas();
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
@@ -213,6 +300,10 @@ export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
 export fn renderer_draw(renderer: *Renderer, view_id: objc.c.id) void {
     const view = metal.MTKView.from_id(view_id);
     renderer.draw(view);
+}
+
+export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {
+    renderer.resize(std.heap.c_allocator, new_size);
 }
 
 export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {

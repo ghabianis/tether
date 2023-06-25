@@ -101,6 +101,7 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         let image: CGImage = renderer_get_atlas_image(self.zig) as! CGImage
         
         let url = URL(fileURLWithPath: "/Users/zackradisic/Code/tether/atlas.png")
+        view.drawableSize
         let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)
         CGImageDestinationAddImage(destination!, image, nil)
         CGImageDestinationFinalize(destination!)
@@ -111,6 +112,8 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
     }
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        renderer_resize(self.zig, size);
+        print("CHANGE \(view.drawableSize) \(size)");
     }
     
     func draw(in view: MTKView) {

@@ -18,7 +18,7 @@
 
 @implementation TetherFont
 - (void) dealloc {
-
+    
     //    sel_
 //    MTKTextureLoader* textureLoader = [[MTKTextureLoader alloc] initWithDevice:device];
 //
@@ -50,7 +50,6 @@ void ShowGlyphsAtPositions(
 }
 
 void ShowGlyphsAtPoint(CGContextRef ctx, const CGGlyph *glyphs, CGFloat x, CGFloat y) {
-    CGGlyph size;
     return CGContextShowGlyphsAtPoint(ctx, x, y, glyphs, 1);
 }
 
