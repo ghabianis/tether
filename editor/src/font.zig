@@ -49,11 +49,11 @@ pub const Atlas = struct {
         const Class = objc.Class.getClass("NSFont").?;
         const font = Class.msgSend(objc.Object, objc.sel("fontWithName:size:"), .{ iosevka, font_size });
 
-        return Self{ 
-            .font = font, 
-            .font_size = font_size, 
-            .glyph_info = [_]GlyphInfo{GlyphInfo.default()} ** CHAR_END, 
-            .max_glyph_height = undefined,  
+        return Self{
+            .font = font,
+            .font_size = font_size,
+            .glyph_info = [_]GlyphInfo{GlyphInfo.default()} ** CHAR_END,
+            .max_glyph_height = undefined,
             .atlas = undefined,
             .width = undefined,
             .height = undefined,
@@ -144,7 +144,7 @@ pub const Atlas = struct {
         defer ct.CGColorSpaceRelease(color_space);
         defer ct.CGContextRelease(ctx);
         defer ct.CGColorRelease(fill_color);
-        
+
         ct.CGContextSetFillColorWithColor(ctx, fill_color);
         ct.CGContextFillRect(ctx, metal.CGRect.new(0.0, 0.0, @intToFloat(f64, tex_w), @intToFloat(f64, tex_h)));
 
@@ -171,7 +171,7 @@ pub const Atlas = struct {
 
         {
             var i: usize = 32;
-            while (i < CHAR_END): (i += 1) {
+            while (i < CHAR_END) : (i += 1) {
                 const j: usize = i - 32;
                 const glyph = glyphs[j];
                 const rect = glyph_rects[j];
@@ -181,10 +181,6 @@ pub const Atlas = struct {
                 _ = recth;
 
                 const advance = self.get_advance(cgfont, glyph);
-                if (i == 70) {
-                    std.debug.print("GLYPH INFO originx={d} advance={d}\n", .{rect.origin.x, advance});
-                }
-                // const advance: i32 = 100;
 
                 if (ox + rectw + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     ox = 0;

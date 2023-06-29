@@ -46,6 +46,7 @@ void ShowGlyphsAtPositions(
                            const CGPoint *glyph_pos,
                            size_t offset, size_t count)
 {
+    
     return CGContextShowGlyphsAtPositions(ctx, &glyphs[offset], &glyph_pos[offset], count);
 }
 

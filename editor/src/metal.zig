@@ -3,6 +3,25 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Object = objc.Object;
 
+pub const NSEvent = struct {
+    const Self = @This();
+    obj: objc.Object,
+
+    pub usingnamespace DefineObject(@This());
+
+    pub fn keycode(self: Self) u16 {
+        return self.obj.getProperty(u16, "keyCode");
+    }
+
+    pub fn characters(self: Self) ?NSString {
+        const characters_id = self.obj.getProperty(objc.c.id, "characters");
+        if (characters_id == 0) {
+            return null;
+        }
+        return NSString.from_id(characters_id);
+    }
+};
+
 pub const CGFloat = f64;
 
 pub const CGPoint = extern struct {
@@ -10,7 +29,7 @@ pub const CGPoint = extern struct {
     y: CGFloat,
 
     pub fn default() CGPoint {
-        return CGPoint { .x = 0.0, .y = 0.0 };
+        return CGPoint{ .x = 0.0, .y = 0.0 };
     }
 };
 
@@ -19,7 +38,7 @@ pub const CGSize = extern struct {
     height: CGFloat,
 
     pub fn default() CGSize {
-        return CGSize { .width = 0.0, .height = 0.0 };
+        return CGSize{ .width = 0.0, .height = 0.0 };
     }
 };
 
@@ -37,7 +56,7 @@ pub const CGRect = extern struct {
     }
 
     pub fn default() CGRect {
-        return CGRect { .origin = CGPoint.default(), .size = CGSize.default() };
+        return CGRect{ .origin = CGPoint.default(), .size = CGSize.default() };
     }
 
     pub fn width(self: *const Self) CGFloat {
@@ -148,10 +167,10 @@ pub extern "C" const MTKTextureLoaderOptionTextureStorageMode: MTKTextureLoaderO
 pub extern "C" const MTKTextureLoaderOptionSRGB: MTKTextureLoaderOption;
 
 pub const MTLTextureUsage = enum(NSUInteger) {
-    unknown         = 0x0000,
-    shader_read      = 0x0001,
-    shader_write     = 0x0002,
-    render_target    = 0x0004,
+    unknown = 0x0000,
+    shader_read = 0x0001,
+    shader_write = 0x0002,
+    render_target = 0x0004,
     pixel_format_view = 0x0010,
 };
 
@@ -168,7 +187,6 @@ pub const MTLSamplerAddressMode = enum(NSUInteger) {
     ClampToZero = 4,
     ClampToBorderColor = 5,
 };
-
 
 pub const MTLClearColor = struct {
     r: f64,
@@ -251,11 +269,11 @@ pub const MTLRenderCommandEncoder = struct {
     }
 
     pub fn set_fragment_texture(self: Self, tex: objc.Object, index: usize) void {
-        self.obj.msgSend(void, objc.sel("setFragmentTexture:atIndex:"), .{tex, index});
+        self.obj.msgSend(void, objc.sel("setFragmentTexture:atIndex:"), .{ tex, index });
     }
 
     pub fn set_fragment_sampler_state(self: Self, sampler_state: objc.Object, index: usize) void {
-        self.obj.msgSend(void, objc.sel("setFragmentSamplerState:atIndex:"), .{sampler_state, index});
+        self.obj.msgSend(void, objc.sel("setFragmentSamplerState:atIndex:"), .{ sampler_state, index });
     }
 
     pub fn draw_primitives(self: Self, primitive_type: MTLPrimitiveType, vertex_start: NSUInteger, vertex_count: NSUInteger) void {
@@ -322,6 +340,14 @@ pub const MTLDevice = struct {
         const pipeline_state = self.obj.msgSend(objc.Object, objc.sel("newRenderPipelineStateWithDescriptor:error:"), .{ desc.obj, err });
         try check_error(err);
         return MTLRenderPipelineState.from_obj(pipeline_state);
+    }
+
+    pub fn new_buffer_with_length(self: Self, len: NSUInteger, opts: MTLResourceOptions) ?MTLBuffer {
+        const buf_id = self.obj.msgSend(objc.c.id, objc.sel("newBufferWithLength:options:"), .{ len, opts });
+        if (buf_id == 0) {
+            return null;
+        }
+        return MTLBuffer.from_id(buf_id);
     }
 
     pub fn new_buffer_with_bytes(self: Self, bytes: []const u8, opts: MTLResourceOptions) MTLBuffer {
@@ -493,9 +519,7 @@ fn DefineObject(comptime T: type) type {
     };
 }
 
-pub const MetalError = error{
-    Uhoh
-};
+pub const MetalError = error{Uhoh};
 
 /// Wrapper around @typeName(T) that strips the namespaces out of the string
 pub fn classTypeName(comptime T: type) [:0]const u8 {
@@ -508,15 +532,15 @@ pub fn classTypeName(comptime T: type) [:0]const u8 {
         }
         i += 1;
     }
-    if (last_dot_idx == -1) return str[0..i : 0];
-    
-    return str[last_dot_idx + 1..i : 0];
+    if (last_dot_idx == -1) return str[0..i :0];
+
+    return str[last_dot_idx + 1 .. i :0];
 }
 
 pub fn check_error(err_: ?*anyopaque) !void {
     if (err_) |err| {
         const nserr = objc.Object.fromId(err);
-        const str = 
+        const str =
             nserr.getProperty(?*NSString, "localizedDescription").?;
 
         var buf: [256]u8 = undefined;

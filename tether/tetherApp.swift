@@ -13,7 +13,6 @@ class OverlayWindow: NSWindow {
     init(contentRect: NSRect) {
         super.init(contentRect: contentRect, styleMask: .borderless, backing: .buffered, defer: false)
         self.backgroundColor = NSColor.clear
-        //        self.level = .floating
         self.level = .popUpMenu
         self.isOpaque = false
         self.hasShadow = false

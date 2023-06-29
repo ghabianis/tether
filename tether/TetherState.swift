@@ -87,6 +87,11 @@ class TetherState: ObservableObject {
             // on SHIFT + CMD + SPACE
             if event.modifierFlags.contains(keyModifierShiftCmdSpace) && event.keyCode == keySpace {
                 self.handleToggleTether(event: event)
+                return
+            }
+            
+            if self.isOverlayVisible {
+                print("Keycode \(event.keyCode)")
             }
         }
         

@@ -29,7 +29,6 @@ struct EditorViewRepresentable: NSViewControllerRepresentable {
     @Binding var size: CGSize?
     
     func makeNSViewController(context: Context) -> EditorViewController {
-        //        return EditorViewController(pos: pos, size: size)
         var editorViewController = EditorViewController()
         editorViewController.pos = self.pos
         editorViewController.size = self.size
@@ -49,7 +48,7 @@ class EditorViewController: NSViewController {
     var pos: CGPoint?
     var size: CGSize?
     
-    var mtkView: MTKView!
+    var mtkView: CustomMTKView!
     var renderer: SwiftRenderer!
     
     override func loadView() {
@@ -63,7 +62,9 @@ class EditorViewController: NSViewController {
     }
     
     override func viewDidLoad() {
-        mtkView = MTKView()
+        super.viewDidLoad()
+        
+        mtkView = CustomMTKView()
         mtkView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(mtkView)
         view.addConstraints(NSLayoutConstraint.constraints(withVisualFormat: "|[mtkView]|", options: [], metrics: nil, views: ["mtkView" : mtkView!]))
@@ -82,15 +83,19 @@ class EditorViewController: NSViewController {
     }
 }
 
+class CustomMTKView: MTKView {
+    var renderer: Renderer?
+}
+
 class SwiftRenderer: NSObject, MTKViewDelegate {
     var pos: CGPoint?
     var size: CGSize?
     
     let device: MTLDevice
-    let mtkView: MTKView
+    let mtkView: CustomMTKView
     let zig: Renderer!
     
-    init(view: MTKView, device: MTLDevice, pos: CGPoint?, size: CGSize?) {
+    init(view: CustomMTKView, device: MTLDevice, pos: CGPoint?, size: CGSize?) {
         self.pos = pos
         self.size = size
         
@@ -99,14 +104,14 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         
         self.zig = renderer_create(view, device);
         let image: CGImage = renderer_get_atlas_image(self.zig) as! CGImage
+        view.renderer = self.zig
         
-        let url = URL(fileURLWithPath: "/Users/zackradisic/Code/tether/atlas.png")
-        view.drawableSize
-        let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)
-        CGImageDestinationAddImage(destination!, image, nil)
-        CGImageDestinationFinalize(destination!)
-        let val = renderer_get_val(self.zig)
-        print("VAL \(val)")
+//        let url = URL(fileURLWithPath: "/Users/zackradisic/Code/tether/atlas.png")
+//        let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)
+//        CGImageDestinationAddImage(destination!, image, nil)
+//        CGImageDestinationFinalize(destination!)
+//        let val = renderer_get_val(self.zig)
+//        print("VAL \(val)")
         
         super.init()
     }
