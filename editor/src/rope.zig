@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const print = std.debug.print;
 
 fn remove_range(src: []u8, start: usize, end: usize) []u8 {
     const len = src.len - (end - start);
@@ -126,17 +127,22 @@ pub const Rope = struct {
     const NodeList = DoublyLinkedList(ArrayList(u8));
     const Node = NodeList.Node;
 
+    node_alloc: Allocator = std.heap.c_allocator,
+    text_alloc: Allocator = std.heap.c_allocator,
+
     len: usize = 0,
     /// each node represents a line of text
     /// TODO: this is inefficient for text with many small lines. easy
     /// optimization for now is to have a separate kind of node just for
     /// representing a span of empty lines.
     nodes: NodeList = NodeList{},
-    node_alloc: Allocator = std.heap.c_allocator,
-    text_alloc: Allocator = std.heap.c_allocator,
 
-    fn next_line(text_: ?[]const u8) struct { line: ?[]const u8, rest: ?[]const u8 } {
-        if (text_ == null or text_.?.len == 0) return .{ .line = null, .rest = null };
+    pub fn init(self: *Self) !void {
+        _ = try self.nodes.insert(self.node_alloc, ArrayList(u8){}, null);
+    }
+
+    fn next_line(text_: ?[]const u8) struct { line: ?[]const u8, rest: ?[]const u8, newline: bool } {
+        if (text_ == null or text_.?.len == 0) return .{ .line = null, .rest = null, .newline = false };
         const text = text_.?;
         var end: usize = 0;
         while (end < text.len) : (end += 1) {
@@ -150,11 +156,12 @@ pub const Rope = struct {
                 return .{
                     .line = text[0 .. end + 1],
                     .rest = rest,
+                    .newline = true,
                 };
             }
         }
 
-        return .{ .line = text[0..text.len], .rest = null };
+        return .{ .line = text[0..text.len], .rest = null, .newline = false };
     }
 
     pub fn insert_text(self: *Self, pos_: TextPos, text: []const u8) !void {
@@ -169,22 +176,31 @@ pub const Rope = struct {
             }
 
             const node: *Node = n: {
-                const node_find_prev: ?*Node = nfp: {
-                    if (prev_node) |pnode| {
-                        break :nfp pnode;
-                    }
-                    const node_find = self.nodes.at_index_impl(pos.line);
-                    break :nfp node_find.prev;
-                };
-                const new_node = try self.nodes.insert(self.node_alloc, ArrayList(u8){}, node_find_prev);
-                break :n new_node;
+                if (prev_node) |pnode| {
+                    break :n pnode;
+                }
+                const node_find = self.nodes.at_index_impl(pos.line);
+                if (node_find.cur) |nf| {
+                    break :n nf;
+                }
+                @panic("Failed to find node!");
             };
 
-            try node.data.insertSlice(self.text_alloc, pos.col, nlr_line);
+            if (pos.col >= node.data.items.len) {
+                try node.data.appendSlice(self.text_alloc, nlr_line);
+            } else {
+                try node.data.insertSlice(self.text_alloc, pos.col, nlr_line);
+            }
+
             self.len += nlr_line.len;
 
-            pos.line += 1;
-            pos.col = 0;
+            if (nlr.newline) {
+                pos.line += 1;
+                pos.col = 0;
+            } else {
+                pos.col += @intCast(u32, nlr_line.len);
+            }
+
             nlr = next_line(nlr.rest);
             prev_node = node;
         }
@@ -278,10 +294,12 @@ test "basic insertion" {
     var rope = Rope{};
 
     try rope.insert_text(.{ .line = 0, .col = 0 }, "pls work wtf");
-
-    const str = try rope.as_str(std.heap.c_allocator);
-
+    var str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings(str, "pls work wtf");
+    try rope.insert_text(.{ .line = 0, .col = 12 }, "!!!");
+    std.debug.print("NODE LEN: {d}\n", .{rope.nodes.len});
+    str = try rope.as_str(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(str, "pls work wtf!!!");
 }
 
 test "multi-line insertion" {

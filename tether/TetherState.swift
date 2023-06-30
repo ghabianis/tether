@@ -69,29 +69,33 @@ class TetherState: ObservableObject {
     var textState: TextState?
     
     func start() {
-        mouseEventHandler = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { event in
-            self.handleMouseMovement(event: event)
-        }
+        //        mouseEventHandler = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { event in
+        //            self.handleMouseMovement(event: event)
+        //        }
         
         let keyModifierShiftCmdSpace: NSEvent.ModifierFlags = [.shift, .command]
         let keySpace: UInt16 = 49 // spacebar keycode
         
         //        let eventMask = NSEvent.EventTypeMask.flagsChanged.rawValue | NSEvent.EventTypeMask.keyDown.rawValue
         let eventMask = NSEvent.EventTypeMask.keyDown.rawValue
-        keyDownEventHandler = NSEvent.addGlobalMonitorForEvents(matching: NSEvent.EventTypeMask(rawValue: eventMask)) {
-            (event: NSEvent?) in
-            guard let event = event else {
-                return
-            }
-            
-            // on SHIFT + CMD + SPACE
-            if event.modifierFlags.contains(keyModifierShiftCmdSpace) && event.keyCode == keySpace {
-                self.handleToggleTether(event: event)
-                return
-            }
-            
-            if self.isOverlayVisible {
-                print("Keycode \(event.keyCode)")
+        
+        
+        DispatchQueue.main.async {
+            self.keyDownEventHandler = NSEvent.addGlobalMonitorForEvents(matching: NSEvent.EventTypeMask(rawValue: eventMask)) {
+                (event: NSEvent?) in
+                guard let event = event else {
+                    return
+                }
+                
+                // on SHIFT + CMD + SPACE
+                if event.modifierFlags.contains(keyModifierShiftCmdSpace) && event.keyCode == keySpace {
+                    self.handleToggleTether(event: event)
+                    return
+                }
+                
+                if self.isOverlayVisible {
+                    print("Keycode \(event.keyCode)")
+                }
             }
         }
         
@@ -100,7 +104,7 @@ class TetherState: ObservableObject {
     func setTextState(_ textState: TextState?) {
         self.textState = textState
         self.isOverlayVisible = textState != nil
-//        self.isOverlayVisible.toggle()
+        //        self.isOverlayVisible.toggle()
     }
     
     func handleToggleTether(event: NSEvent) {

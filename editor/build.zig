@@ -89,7 +89,7 @@ fn build_tests(b: *std.build.Builder, target: std.zig.CrossTarget, optimize: std
         .root_source_file = .{ .path = "src/rope.zig" },
         .target = target,
         .optimize = optimize,
-        // .filter = "deletion multiline",
+        .filter = "basic insertion",
     });
     tests.linkLibC();
     b.default_step.dependOn(&tests.step);

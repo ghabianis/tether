@@ -27,8 +27,14 @@ const Editor = struct {
     cursor: TextPos = .{ .line = 0, .col = 0 },
     draw_text: bool = false,
 
+    pub fn init(self: *Self) !void {
+        try self.rope.init();
+        try self.rope.insert_text(self.cursor, "HEY\n");
+    }
+
     pub fn insert(self: *Self, cursor: TextPos, chars: []const u8) !void {
         try self.rope.insert_text(cursor, chars);
+        self.cursor.col += @intCast(u32, chars.len);
         self.draw_text = true;
     }
 };
@@ -74,6 +80,7 @@ const Renderer = struct {
             .frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .editor = Editor{},
         };
+        renderer.editor.init() catch @panic("oops");
 
         renderer.vertex_buffer = device.new_buffer_with_length(32, metal.MTLResourceOptions.storage_mode_shared) orelse @panic("Failed to make buffer");
 
@@ -347,6 +354,11 @@ export fn renderer_draw(renderer: *Renderer, view_id: objc.c.id) void {
 
 export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {
     renderer.resize(std.heap.c_allocator, new_size) catch @panic("oops");
+}
+
+export fn renderer_insert_text(renderer: *Renderer, text: [*:0]const u8, len: usize) void {
+    renderer.editor.insert(renderer.editor.cursor, text[0..len]) catch @panic("oops");
+    renderer.update_text(std.heap.c_allocator) catch @panic("oops");
 }
 
 export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void {
