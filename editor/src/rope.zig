@@ -31,6 +31,11 @@ fn DoublyLinkedList(comptime T: type) type {
             pub fn free(self: *Node, alloc: Allocator) !void {
                 alloc.destroy(self);
             }
+
+            /// Return the index where the newline is
+            pub fn end(self: *Node) usize {
+                return if (self.data.items.len == 0) 0 else self.data.items.len - 1;
+            }
         };
 
         fn at_index_impl(self: *Self, idx: usize) struct { prev: ?*Node, cur: ?*Node } {
@@ -164,12 +169,13 @@ pub const Rope = struct {
         return .{ .line = text[0..text.len], .rest = null, .newline = false };
     }
 
-    pub fn insert_text(self: *Self, pos_: TextPos, text: []const u8) !void {
+    pub fn insert_text(self: *Self, pos_: TextPos, text: []const u8) !TextPos {
         var pos = pos_;
         var nlr = next_line(text);
         var prev_node: ?*Node = null;
 
         while (nlr.line) |nlr_line| {
+            const has_newline = nlr.newline;
             if (pos.line > self.nodes.len) {
                 std.debug.print("(pos.line={}) > (self.nodes.len={})\n", .{ pos.line, self.nodes.len });
                 @panic("WTF");
@@ -186,26 +192,29 @@ pub const Rope = struct {
                 @panic("Failed to find node!");
             };
 
-            if (pos.col >= node.data.items.len) {
-                try node.data.appendSlice(self.text_alloc, nlr_line);
+            if (has_newline) {
+                prev_node = try self.split_node(node, pos.col);
             } else {
-                try node.data.insertSlice(self.text_alloc, pos.col, nlr_line);
+                prev_node = node;
             }
 
-            self.len += nlr_line.len;
+            try node.data.appendSlice(self.text_alloc, nlr_line);
 
-            if (nlr.newline) {
+            self.len += nlr_line.len;
+            nlr = next_line(nlr.rest);
+            if (has_newline) {
                 pos.line += 1;
                 pos.col = 0;
             } else {
                 pos.col += @intCast(u32, nlr_line.len);
+                std.debug.assert(nlr.line == null);
             }
-
-            nlr = next_line(nlr.rest);
-            prev_node = node;
         }
+
+        return pos;
     }
 
+    /// Finds the node at the given char index
     fn index_node(self: *Self, char_idx: usize, starting_node: ?*Node) ?*Node {
         if (char_idx >= self.nodes.len) return null;
 
@@ -213,7 +222,7 @@ pub const Rope = struct {
         var i: usize = 0;
 
         while (node != null) : (node = node.?.next) {
-            if (i + node.?.data.items.len > char_idx) {
+            if (char_idx >= i and char_idx < i + node.?.data.items.len) {
                 return node;
             }
             i += node.?.data.items.len;
@@ -222,21 +231,19 @@ pub const Rope = struct {
         return node;
     }
 
-    pub fn remove_text(self: *Self, start_: usize, end_: usize) !void {
-        var tstart = start_;
-        var tend = end_;
-        var node: *Node = self.index_node(tstart, null) orelse return;
-        var node_start: usize = 0;
+    pub fn remove_text(self: *Self, text_start_: usize, text_end: usize) !void {
+        var text_start = text_start_;
+        var node: *Node = self.index_node(text_start, null) orelse return;
+        var i: usize = 0;
 
-        while (true) {
-            if (node_start <= tstart) {
-                var cut_start = tstart - node_start;
-                var cut_end: usize = if (tend < node_start + node.data.items.len) tend - node_start else node.data.items.len;
+        while (i < text_end) {
+            if (i >= text_start) {
+                var node_cut_start = text_start - i;
+                var node_cut_end: usize = if (text_end < i + node.data.items.len) text_end - i else node.data.items.len;
 
-                self.len -= cut_end - cut_start;
-                node.data.items = remove_range(node.data.items, cut_start, cut_end);
-
-                tstart += cut_end;
+                self.len -= node_cut_end - node_cut_start;
+                node.data.items = remove_range(node.data.items, node_cut_start, node_cut_end);
+                text_start += node_cut_end;
             }
 
             const temp = node;
@@ -245,8 +252,20 @@ pub const Rope = struct {
             }
 
             node = node.next orelse return;
-            node_start += node.data.items.len;
+            i += node.data.items.len;
         }
+    }
+
+    fn split_node(self: *Self, node: *Node, loc: usize) !*Node {
+        // Split the text slice
+        var new_node_data = ArrayList(u8){};
+        try new_node_data.appendSlice(self.text_alloc, node.data.items[loc..node.data.items.len]);
+        // 0 1 2 3 5
+        // h e l l o
+        node.data.items.len = if (node.data.items.len == 0) 0 else loc;
+
+        var new_node = try self.nodes.insert(self.node_alloc, new_node_data, node);
+        return new_node;
     }
 
     fn remove_node(self: *Self, node: *Node) !void {
@@ -292,40 +311,52 @@ test "linked list impl" {
 
 test "basic insertion" {
     var rope = Rope{};
+    try rope.init();
 
-    try rope.insert_text(.{ .line = 0, .col = 0 }, "pls work wtf");
+    var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "pls work wtf");
+    var expected_pos: TextPos = .{ .line = 0, .col = 12 };
+    try std.testing.expectEqual(expected_pos, pos);
+
     var str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings(str, "pls work wtf");
-    try rope.insert_text(.{ .line = 0, .col = 12 }, "!!!");
-    std.debug.print("NODE LEN: {d}\n", .{rope.nodes.len});
+
+    pos = try rope.insert_text(.{ .line = 0, .col = 12 }, "!!!");
+    expected_pos.col += 3;
+    try std.testing.expectEqual(expected_pos, pos);
+
     str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings(str, "pls work wtf!!!");
 }
 
 test "multi-line insertion" {
     var rope = Rope{};
+    try rope.init();
 
-    try rope.insert_text(.{ .line = 0, .col = 0 }, "hello\nfriends\n");
+    var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "hello\nfriends\n");
+    var expected_pos: TextPos = .{ .line = 2, .col = 0 };
+    try std.testing.expectEqual(expected_pos, pos);
+
     var str = try rope.as_str(std.heap.c_allocator);
-    try std.testing.expectEqual(@as(usize, 2), rope.nodes.len);
+    try std.testing.expectEqual(@as(usize, 3), rope.nodes.len);
     try std.testing.expectEqualStrings("hello\nfriends\n", str);
 
-    try rope.insert_text(.{ .line = 0, .col = 0 }, "now in front\n");
-    str = try rope.as_str(std.heap.c_allocator);
-    try std.testing.expectEqual(@as(usize, 3), rope.nodes.len);
-    try std.testing.expectEqualStrings("now in front\nhello\nfriends\n", str);
-
-    try rope.insert_text(.{ .line = 2, .col = 0 }, "NOT!\n");
+    _ = try rope.insert_text(.{ .line = 0, .col = 0 }, "now in front\n");
     str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqual(@as(usize, 4), rope.nodes.len);
+    try std.testing.expectEqualStrings("now in front\nhello\nfriends\n", str);
+
+    _ = try rope.insert_text(.{ .line = 2, .col = 0 }, "NOT!\n");
+    str = try rope.as_str(std.heap.c_allocator);
+    try std.testing.expectEqual(@as(usize, 5), rope.nodes.len);
     try std.testing.expectEqualStrings("now in front\nhello\nNOT!\nfriends\n", str);
 }
 
 test "deletion simple" {
     var rope = Rope{};
+    try rope.init();
 
-    try rope.insert_text(.{ .line = 0, .col = 0 }, "line 1\n");
-    try rope.insert_text(.{ .line = 1, .col = 0 }, "line 2\n");
+    _ = try rope.insert_text(.{ .line = 0, .col = 0 }, "line 1\n");
+    _ = try rope.insert_text(.{ .line = 1, .col = 0 }, "line 2\n");
 
     var str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings("line 1\nline 2\n", str);
@@ -336,9 +367,10 @@ test "deletion simple" {
 
 test "deletion multiline" {
     var rope = Rope{};
+    try rope.init();
 
-    try rope.insert_text(.{ .line = 0, .col = 0 }, "line 1\n");
-    try rope.insert_text(.{ .line = 1, .col = 0 }, "line 2\n");
+    _ = try rope.insert_text(.{ .line = 0, .col = 0 }, "line 1\n");
+    _ = try rope.insert_text(.{ .line = 1, .col = 0 }, "line 2\n");
 
     var str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings("line 1\nline 2\n", str);
@@ -348,10 +380,11 @@ test "deletion multiline" {
 }
 
 test "remove range" {
-    var noobs = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    var input = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    var expected = [_]u8{9};
 
-    const noob = remove_range(&noobs, 0, 9);
-    for (noob) |i| {
-        std.debug.print("NICE: {}\n", .{i});
-    }
+    const result = remove_range(&input, 0, 9);
+    var known_at_runtime_zero: usize = 0;
+
+    try std.testing.expectEqualDeep(expected[known_at_runtime_zero..expected.len], result[known_at_runtime_zero..result.len]);
 }

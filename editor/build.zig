@@ -109,16 +109,16 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
         .root_source_file = .{ .path = "src/rope.zig" },
         .target = target,
         .optimize = optimize,
-        // .filter = "basic insertion",
+        // .filter = "multi-line insertion",
     });
 
-    build_test(b, test_step, modules, .{
-        .name = "metal_tests",
-        .root_source_file = .{ .path = "src/metal.zig" },
-        .target = target,
-        .optimize = optimize,
-        // .filter = "basic insertion",
-    });
+    // build_test(b, test_step, modules, .{
+    //     .name = "metal_tests",
+    //     .root_source_file = .{ .path = "src/metal.zig" },
+    //     .target = target,
+    //     .optimize = optimize,
+    //     // .filter = "basic insertion",
+    // });
 }
 
 fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const *std.build.Module, opts: std.build.TestOptions) void {

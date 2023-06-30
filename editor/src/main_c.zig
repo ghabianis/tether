@@ -6,6 +6,7 @@ const metal = @import("./metal.zig");
 const math = @import("./math.zig");
 const font = @import("./font.zig");
 const rope = @import("./rope.zig");
+const print = std.debug.print;
 
 const TextPos = rope.TextPos;
 const Rope = rope.Rope;
@@ -29,12 +30,11 @@ const Editor = struct {
 
     pub fn init(self: *Self) !void {
         try self.rope.init();
-        try self.rope.insert_text(self.cursor, "HEY\n");
+        self.cursor = try self.rope.insert_text(self.cursor, "HEY\n");
     }
 
     pub fn insert(self: *Self, cursor: TextPos, chars: []const u8) !void {
-        try self.rope.insert_text(cursor, chars);
-        self.cursor.col += @intCast(u32, chars.len);
+        self.cursor = try self.rope.insert_text(cursor, chars);
         self.draw_text = true;
     }
 };
@@ -250,9 +250,10 @@ const Renderer = struct {
                 9 => {
                     x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
                 },
-                // newline
-                10 => {
+                // newline, carriage return
+                10, 13 => {
                     x = starting_x;
+                    y += -@intToFloat(f32, self.atlas.max_glyph_height);
                 },
                 else => {
                     // skip empty glyphs
@@ -333,7 +334,8 @@ const Renderer = struct {
         var char_buf = [_]u8{0} ** 256;
         const nschars = event.characters() orelse return;
         const chars = nschars.to_c_string(&char_buf);
-        try self.editor.insert(self.editor.cursor, chars[0..256]);
+        const len = cstring_len(chars);
+        try self.editor.insert(self.editor.cursor, chars[0..len]);
         try self.update_text(alloc);
     }
 };
@@ -372,4 +374,10 @@ export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
 
 export fn renderer_get_val(renderer: *Renderer) u64 {
     return renderer.some_val;
+}
+
+fn cstring_len(cstr: [*:0]u8) usize {
+    var i: usize = 0;
+    while (cstr[i] != 0) : (i += 1) {}
+    return i;
 }
