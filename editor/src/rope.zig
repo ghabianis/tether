@@ -215,44 +215,64 @@ pub const Rope = struct {
     }
 
     /// Finds the node at the given char index
-    fn index_node(self: *Self, char_idx: usize, starting_node: ?*Node) ?*Node {
-        if (char_idx >= self.nodes.len) return null;
+    fn index_node(self: *Self, char_idx: usize, starting_node: ?*Node) ?struct { node: *Node, i: usize } {
+        if (char_idx >= self.len) return null;
 
         var node: ?*Node = starting_node orelse self.nodes.first;
         var i: usize = 0;
 
         while (node != null) : (node = node.?.next) {
             if (char_idx >= i and char_idx < i + node.?.data.items.len) {
-                return node;
+                return .{ .node = node.?, .i = i };
             }
             i += node.?.data.items.len;
         }
 
-        return node;
+        return null;
+    }
+
+    pub fn pos_to_idx(self: *Self, pos: TextPos) ?usize {
+        var line: usize = pos.line;
+        var iter_node: ?*Node = self.nodes.first;
+        var i: usize = 0;
+        while (iter_node != null and line > 0) {
+            line -= 1;
+            i += iter_node.?.data.items.len;
+            iter_node = iter_node.?.next;
+        }
+
+        const node = iter_node orelse return null;
+        _ = node;
+        return i + @intCast(usize, pos.col);
     }
 
     pub fn remove_text(self: *Self, text_start_: usize, text_end: usize) !void {
         var text_start = text_start_;
-        var node: *Node = self.index_node(text_start, null) orelse return;
-        var i: usize = 0;
+        var index_result = self.index_node(text_start, null) orelse return;
+        var node: *Node = index_result.node;
+        var i: usize = index_result.i;
 
         while (i < text_end) {
-            if (i >= text_start) {
-                var node_cut_start = text_start - i;
-                var node_cut_end: usize = if (text_end < i + node.data.items.len) text_end - i else node.data.items.len;
+            const len = node.data.items.len;
+            if (text_start >= i and text_start < i + len) {
+                var node_cut_start = (text_start - i);
+                var node_cut_end: usize = if (text_end < i + node.data.items.len) node_cut_start + (text_end - i) else node.data.items.len;
+                const cut_len = node_cut_end - node_cut_start;
 
-                self.len -= node_cut_end - node_cut_start;
+                self.len -= cut_len;
                 node.data.items = remove_range(node.data.items, node_cut_start, node_cut_end);
-                text_start += node_cut_end;
+                text_start += len;
             }
 
-            const temp = node;
-            if (temp.data.items.len == 0) {
-                try self.remove_node(temp);
+            if (node.data.items.len == 0 and node.next != null) {
+                try self.remove_node(node);
+            } else if (node.data.items.len > 0 and node.data.items[node.data.items.len - 1] != '\n') {
+                try self.collapse_nodes(node);
             }
+            const next = node.next;
 
-            node = node.next orelse return;
-            i += node.data.items.len;
+            node = next orelse return;
+            i += len;
         }
     }
 
@@ -266,6 +286,12 @@ pub const Rope = struct {
 
         var new_node = try self.nodes.insert(self.node_alloc, new_node_data, node);
         return new_node;
+    }
+
+    fn collapse_nodes(self: *Self, node: *Node) !void {
+        const next = node.next orelse return;
+        try node.data.appendSlice(self.text_alloc, next.data.items);
+        try self.remove_node(next);
     }
 
     fn remove_node(self: *Self, node: *Node) !void {

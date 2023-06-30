@@ -6,6 +6,8 @@ const metal = @import("./metal.zig");
 const math = @import("./math.zig");
 const font = @import("./font.zig");
 const rope = @import("./rope.zig");
+const Editor = @import("./editor.zig");
+
 const print = std.debug.print;
 
 const TextPos = rope.TextPos;
@@ -20,24 +22,6 @@ pub const Vertex = extern struct {
 };
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
-
-const Editor = struct {
-    const Self = @This();
-
-    rope: Rope = Rope{},
-    cursor: TextPos = .{ .line = 0, .col = 0 },
-    draw_text: bool = false,
-
-    pub fn init(self: *Self) !void {
-        try self.rope.init();
-        self.cursor = try self.rope.insert_text(self.cursor, "HEY\n");
-    }
-
-    pub fn insert(self: *Self, cursor: TextPos, chars: []const u8) !void {
-        self.cursor = try self.rope.insert_text(cursor, chars);
-        self.draw_text = true;
-    }
-};
 
 const Renderer = struct {
     const Self = @This();
@@ -331,11 +315,22 @@ const Renderer = struct {
     }
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
-        var char_buf = [_]u8{0} ** 256;
+        var in_char_buf = [_]u8{0} ** 128;
         const nschars = event.characters() orelse return;
-        const chars = nschars.to_c_string(&char_buf);
+        const chars = nschars.to_c_string(&in_char_buf);
         const len = cstring_len(chars);
-        try self.editor.insert(self.editor.cursor, chars[0..len]);
+        if (len > 1) @panic("TODO: handle multi-char input");
+        // var out_char_buf = [_]u8{0} ** 128;
+        // const filtered_chars = Editor.filter_chars(chars[0..len], out_char_buf[0..128]);
+        // try self.editor.insert(self.editor.cursor, filtered_chars);
+
+        const char = chars[0];
+        if (char == 127) {
+            try self.editor.backspace();
+        } else {
+            try self.editor.insert(chars[0..1]);
+        }
+
         try self.update_text(alloc);
     }
 };
@@ -359,7 +354,7 @@ export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {
 }
 
 export fn renderer_insert_text(renderer: *Renderer, text: [*:0]const u8, len: usize) void {
-    renderer.editor.insert(renderer.editor.cursor, text[0..len]) catch @panic("oops");
+    renderer.editor.insert(text[0..len]) catch @panic("oops");
     renderer.update_text(std.heap.c_allocator) catch @panic("oops");
 }
 

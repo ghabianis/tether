@@ -109,7 +109,7 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
         .root_source_file = .{ .path = "src/rope.zig" },
         .target = target,
         .optimize = optimize,
-        // .filter = "multi-line insertion",
+        // .filter = "backspace simple",
     });
 
     // build_test(b, test_step, modules, .{
@@ -119,6 +119,14 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
     //     .optimize = optimize,
     //     // .filter = "basic insertion",
     // });
+
+    build_test(b, test_step, modules, .{
+        .name = "editor_tests",
+        .root_source_file = .{ .path = "src/editor.zig" },
+        .target = target,
+        .optimize = optimize,
+        // .filter = "backspace line",
+    });
 }
 
 fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const *std.build.Module, opts: std.build.TestOptions) void {
