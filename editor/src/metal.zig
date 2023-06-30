@@ -3,6 +3,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Object = objc.Object;
 
+const TAG: usize = @bitCast(usize, 1) << 63;
+/// https://github.com/opensource-apple/objc4/blob/cd5e62a5597ea7a31dccef089317abb3a661c154/runtime/objc-internal.h#L203
+pub fn is_tagged_pointer(id: objc.c.id) bool {
+    return @bitCast(isize, @ptrToInt(id)) < 0;
+}
+
 pub const NSEvent = struct {
     const Self = @This();
     obj: objc.Object,
@@ -15,7 +21,7 @@ pub const NSEvent = struct {
 
     pub fn characters(self: Self) ?NSString {
         const characters_id = self.obj.getProperty(objc.c.id, "characters");
-        if (characters_id == 0) {
+        if (characters_id == null) {
             return null;
         }
         return NSString.from_id(characters_id);
@@ -484,8 +490,20 @@ pub const MTLRenderPipelineDescriptor = struct {
 };
 
 fn DefineObject(comptime T: type) type {
-    return struct {
+    const obj_impl = struct {
         pub fn from_id(id: anytype) T {
+            switch (T) {
+                // objc.Object.fromId checks that id is aligned to usize.
+                // Certain objects like NSString may use tagged pointers for small allocations,
+                // which are not guaranteed to be aligned.
+                NSNumber, NSString => {
+                    if (is_tagged_pointer(id)) {
+                        return .{ .obj = .{ .value = id } };
+                    }
+                },
+                else => {},
+            }
+
             return .{
                 .obj = Object.fromId(id),
             };
@@ -517,6 +535,8 @@ fn DefineObject(comptime T: type) type {
             self.obj.msgSend(void, objc.sel("release"), .{});
         }
     };
+
+    return obj_impl;
 }
 
 pub const MetalError = error{Uhoh};
@@ -550,3 +570,24 @@ pub fn check_error(err_: ?*anyopaque) !void {
         return MetalError.Uhoh;
     }
 }
+
+// test "tagged pointer" {
+//     // const raw: usize = 13251083606895578065;
+//     // const str = NSString.from_tagged_id(@as(objc.c.id, raw));
+//     // const raw_str = "HELLO";
+//     // _ = raw_str;
+//     const str = NSString.new_with_bytes("H", .ascii);
+//     var buf: [256]u8 = undefined;
+//     const c_str = str.to_c_string(&buf);
+//     std.debug.print("HELLO {s}\n", .{c_str});
+//     const str2 = NSString.from_id(str.obj.value);
+//     const c_str2 = str2.to_c_string(&buf);
+//     std.debug.print("HELLO {s}\n", .{c_str2});
+//     const Class = NSString.get_class();
+//     const str3 = Class.msgSend(NSString, objc.sel("stringWithUTF8String:"), .{"H"});
+//     var buf2: [256]u8 = undefined;
+//     const c_str3 = str3.to_c_string(&buf2);
+
+//     std.debug.print("NICE {s} {d} {}\n", .{ c_str3, @ptrToInt(str3.obj.value), str3.is_tagged_pointer() });
+//     // str.obj.msgSend(NSString, objc.sel("stringWithUTF8String:"), .{buf});
+// }

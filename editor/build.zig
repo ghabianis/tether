@@ -15,7 +15,7 @@ pub fn build(b: *std.build.Builder) !void {
     });
     const modules = [_]*std.build.Module{zigobjc};
 
-    build_tests(b, target, optimize);
+    build_tests(b, &modules, target, optimize);
 
     // Make static libraries for aarch64 and x86_64
     var static_lib_aarch64 = build_static_lib(b, target, optimize, "editor_aarch64", .aarch64, &modules);
@@ -65,37 +65,69 @@ fn build_static_lib(b: *std.build.Builder, target: std.zig.CrossTarget, optimize
         },
         .optimize = optimize,
     });
-    static_lib.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
-    static_lib.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
-    static_lib.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Devseloper/SDKs/MacOSX.sdk/usr/lib");
-    static_lib.linkFramework("CoreText");
-    static_lib.linkFramework("MetalKit");
-    static_lib.linkFramework("Foundation");
-    static_lib.linkFramework("AppKit");
-    static_lib.linkFramework("CoreGraphics");
+    // static_lib.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
+    // static_lib.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    // static_lib.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Devseloper/SDKs/MacOSX.sdk/usr/lib");
+    // static_lib.linkFramework("CoreText");
+    // static_lib.linkFramework("MetalKit");
+    // static_lib.linkFramework("Foundation");
+    // static_lib.linkFramework("AppKit");
+    // static_lib.linkFramework("CoreGraphics");
+    add_libs(static_lib, modules);
 
-    static_lib.bundle_compiler_rt = true;
-    for (modules) |module| {
-        static_lib.addModule("zig-objc", module);
-    }
-    static_lib.linkLibC();
+    // static_lib.bundle_compiler_rt = true;
+    // for (modules) |module| {
+    //     static_lib.addModule("zig-objc", module);
+    // }
+    // static_lib.linkLibC();
     b.default_step.dependOn(&static_lib.step);
     return static_lib;
 }
 
-fn build_tests(b: *std.build.Builder, target: std.zig.CrossTarget, optimize: std.builtin.Mode) void {
-    const tests = b.addTest(.{
+fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module) void {
+    compile.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
+    compile.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
+    compile.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
+    compile.linkFramework("CoreText");
+    compile.linkFramework("MetalKit");
+    compile.linkFramework("Foundation");
+    compile.linkFramework("AppKit");
+    compile.linkFramework("CoreGraphics");
+    compile.linkLibC();
+
+    compile.bundle_compiler_rt = true;
+    for (modules) |module| {
+        compile.addModule("zig-objc", module);
+    }
+}
+
+fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target: std.zig.CrossTarget, optimize: std.builtin.Mode) void {
+    const test_step = b.step("test", "Run tests");
+
+    build_test(b, test_step, modules, .{
         .name = "rope_tests",
         .root_source_file = .{ .path = "src/rope.zig" },
         .target = target,
         .optimize = optimize,
-        .filter = "basic insertion",
+        // .filter = "basic insertion",
     });
-    tests.linkLibC();
-    b.default_step.dependOn(&tests.step);
-    const run: *std.build.Step.Run = b.addRunArtifact(tests);
-    b.installArtifact(tests);
-    const test_step = b.step("test", "Run tests");
-    test_step.dependOn(&tests.step);
+
+    build_test(b, test_step, modules, .{
+        .name = "metal_tests",
+        .root_source_file = .{ .path = "src/metal.zig" },
+        .target = target,
+        .optimize = optimize,
+        // .filter = "basic insertion",
+    });
+}
+
+fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const *std.build.Module, opts: std.build.TestOptions) void {
+    const the_test = b.addTest(opts);
+    add_libs(the_test, modules);
+    the_test.linkLibC();
+    b.default_step.dependOn(&the_test.step);
+    const run: *std.build.Step.Run = b.addRunArtifact(the_test);
+    b.installArtifact(the_test);
+    test_step.dependOn(&the_test.step);
     test_step.dependOn(&run.step);
 }

@@ -55,7 +55,6 @@ class EditorViewController: NSViewController {
     var renderer: SwiftRenderer!
     
     override func loadView() {
-        print("NICEE \(MemoryLayout<float4x4>.size)");
         view = NSView()
         //        view = NSView(frame: NSMakeRect(0.0, 0.0, 400.0, 270.0))
         if var renderer = self.renderer {
@@ -90,7 +89,10 @@ class CustomMTKView: MTKView {
     var renderer: Renderer?
     
     override func keyDown(with event: NSEvent) {
-        print("(CustomMTKView) EVENT \(event)")
+        guard let renderer = self.renderer else {
+            return
+        }
+        renderer_handle_keydown(renderer, event)
     }
 }
 
@@ -111,21 +113,8 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         
         self.zig = renderer_create(view, device);
         
-        let chars = "HELLO BRO!"
-        var cchars: [CChar] = [CChar](repeating: 0, count: 256);
-        if !chars.getCString(&cchars, maxLength: 256, encoding: .ascii) {
-            fatalError("SHIT!")
-        }
-        renderer_insert_text(self.zig, &cchars, cchars.len())
-        
         let image: CGImage = renderer_get_atlas_image(self.zig) as! CGImage
         view.renderer = self.zig
-        
-        let keyModifierShiftCmdSpace: NSEvent.ModifierFlags = [.shift, .command]
-        let keySpace: UInt16 = 49 // spacebar keycode
-        
-        //        let eventMask = NSEvent.EventTypeMask.flagsChanged.rawValue | NSEvent.EventTypeMask.keyDown.rawValue
-        let eventMask = NSEvent.EventTypeMask.keyDown.rawValue
         
 //        let url = URL(fileURLWithPath: "/Users/zackradisic/Code/tether/atlas.png")
 //        let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)
@@ -135,40 +124,6 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
 //        print("VAL \(val)")
         
         super.init()
-        
-            /*NSEvent.addGlobalMonitorForEvents(matching: NSEvent.EventTypeMask(rawValue: eventMask)) {
-            (event: NSEvent?) in
-            guard let event = event else {
-                return
-            }
-            
-            // on SHIFT + CMD + SPACE
-            //            if event.modifierFlags.contains(keyModifierShiftCmdSpace) && event.keyCode == keySpace {
-            //                self.handleToggleTether(event: event)
-            //                return
-            //            }
-            //
-            //            if self.isOverlayVisible {
-            //                print("Keycode \(event.keyCode)")
-            //            }
-            
-            if let chars = event.characters {
-                guard let renderer = self.mtkView.renderer else {
-                    print("SHIT")
-                    return
-                }
-                
-                var cchars: [CChar] = [CChar](repeating: 0, count: 256);
-                if !chars.getCString(&cchars, maxLength: 256, encoding: .ascii) {
-                    fatalError("SHIT!")
-                }
-                
-                print("CHARS \(chars)")
-                let len = cchars.len()
-                renderer_insert_text(renderer, cchars, len);
-            }
-        }*/
-        
     }
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
