@@ -10,6 +10,8 @@ pub const GlyphInfo = struct {
     tx: f32,
     ty: f32,
     advance: f32,
+    ascent: metal.CGFloat,
+    descent: metal.CGFloat,
 
     fn default() Self {
         return Self{
@@ -18,6 +20,8 @@ pub const GlyphInfo = struct {
             .tx = 0.0,
             .ty = 0.0,
             .advance = 0.0,
+            .ascent = 0.0,
+            .descent = 0.0,
         };
     }
 };
@@ -190,6 +194,7 @@ pub const Atlas = struct {
 
                 const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
                 const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy) + rect.origin.y)) / @intToFloat(f32, tex_h);
+                // const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
                 var the_glyph = [_]metal.CGGlyph{glyph};
 
                 ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox), @intToFloat(f64, oy), @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
@@ -197,13 +202,29 @@ pub const Atlas = struct {
                 var new_rect = rect;
                 new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
 
+                // [0, W] -> [-1, 1]
+                new_rect.origin.x = 2.0 * (new_rect.origin.x / new_rect.size.width) - 1.0;
+                // [0, W] -> [-W/2, W/2]
+                // new_rect.origin.x = (new_rect.origin.x - new_rect.size.width / 2.0) / (new_rect.size.width / 2.0);
+
+                // new_rect.origin.y = 1.0 - (2.0 * (new_rect.origin.y / new_rect.size.height));
+                // new_rect.origin.y = @as(f64, (2.0 / @as(f64, new_rect.origin.y) / @as(f64, new_rect.size.height)) - 1.0);
+                // new_rect.origin.y = (2.0 * new_rect.origin.y - new_rect.size.height) / new_rect.size.height;
+                // new_rect.origin.y = (2.0 * new_rect.origin.y / new_rect.size.height) - 1.0;
+                // [0, H] -> [H/2, -H/2]
+                // new_rect.origin.y = (new_rect.origin.y - new_rect.size.height / 2.0) / (new_rect.size.height / 2.0);
+                // std.debug.print("{c} ox={} oy={} advance={} w={} h={}\n", .{ @intCast(u8, i), new_rect.origin.x, new_rect.origin.y, advance, new_rect.size.width, new_rect.size.height });
+
                 self.glyph_info[i] = .{
                     .glyph = glyph,
                     .rect = new_rect,
                     .tx = tx,
                     .ty = @floatCast(f32, ty),
                     .advance = @intToFloat(f32, advance),
+                    .ascent = ct.CTFontGetAscent(self.font.value),
+                    .descent = ct.CTFontGetDescent(self.font.value),
                 };
+                std.debug.print("{c} {any}\n", .{ @intCast(u8, i), self.glyph_info[i] });
 
                 ox += rectw + advance + 1;
             }

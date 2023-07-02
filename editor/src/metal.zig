@@ -70,10 +70,11 @@ pub const CGRect = extern struct {
     }
 
     pub fn widthCeil(self: *const Self) i32 {
-        return @floatToInt(i32, self.width());
+        return @floatToInt(i32, @ceil(self.width()));
     }
+
     pub fn heightCeil(self: *const Self) i32 {
-        return @floatToInt(i32, self.height());
+        return @floatToInt(i32, @ceil(self.height()));
     }
 
     pub fn height(self: *const Self) CGFloat {
@@ -89,11 +90,11 @@ pub const CGRect = extern struct {
     }
 
     pub fn minyCeil(self: *const Self) i32 {
-        return @floatToInt(i32, self.miny());
+        return @floatToInt(i32, @ceil(self.miny()));
     }
 
     pub fn maxyCeil(self: *const Self) i32 {
-        return @floatToInt(i32, self.maxy());
+        return @floatToInt(i32, @ceil(self.maxy()));
     }
 };
 

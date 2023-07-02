@@ -7,6 +7,7 @@ const math = @import("./math.zig");
 const font = @import("./font.zig");
 const rope = @import("./rope.zig");
 const Editor = @import("./editor.zig");
+const ct = @import("./coretext.zig");
 
 const print = std.debug.print;
 
@@ -213,13 +214,30 @@ const Renderer = struct {
 
         for (text) |char| {
             const glyph = self.atlas.lookup_char(char);
-            const l = @floatCast(f32, glyph.rect.origin.x);
-            const width = @intToFloat(f32, glyph.rect.widthCeil());
+            const l =
+                left: {
+                // if (char == 39) {
+                //     const xxx = @floatCast(f32, glyph.rect.origin.x);
+                //     const width = @intToFloat(f32, glyph.rect.widthCeil());
+                //     break :left (2 * xxx / width) - 1;
+                // }
+                break :left @floatCast(f32, glyph.rect.origin.x);
+            };
+            const width = w: {
+                break :w @intToFloat(f32, glyph.rect.widthCeil());
+            };
+            // const width = @intToFloat(f32, glyph.rect.widthCeil());
+
             // const height = @intToFloat(f32, glyph.rect.heightCeil());
 
             const xx = x + l;
             const yy = y + @intToFloat(f32, glyph.rect.maxyCeil());
             const bot = y + @intToFloat(f32, glyph.rect.minyCeil());
+            // const yy = y + @floatCast(f32, glyph.rect.origin.y + glyph.ascent);
+            // const bot = y + @floatCast(f32, glyph.rect.origin.y - glyph.descent);
+
+            // const yy = y - @floatCast(f32, glyph.rect.origin.y) ;
+            // const bot = y + @floatCast(f32, @ceil(glyph.rect.origin.y)) - @intToFloat(f32, glyph.rect.heightCeil());
 
             const atlas_w = @intToFloat(f32, self.atlas.width);
             const atlas_h = @intToFloat(f32, self.atlas.height);
@@ -336,7 +354,7 @@ const Renderer = struct {
 };
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
-    var atlas = font.Atlas.new(64.0 * 2.0);
+    var atlas = font.Atlas.new(64.0);
     atlas.make_atlas();
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

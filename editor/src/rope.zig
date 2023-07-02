@@ -3,134 +3,23 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const print = std.debug.print;
 
-fn remove_range(src: []u8, start: usize, end: usize) []u8 {
-    const len = src.len - (end - start);
-    if (start > 0) {
-        // [ ___ XXX ___ ]
-        std.mem.copyForwards(u8, src[start..src.len], src[end..src.len]);
-    } else {
-        // [ XXX ________ ]
-        std.mem.copyForwards(u8, src, src[end..src.len]);
-    }
-    return src[0..len];
-}
-
-fn DoublyLinkedList(comptime T: type) type {
-    return struct {
-        const Self = @This();
-
-        first: ?*Node = null,
-        last: ?*Node = null,
-        len: usize = 0,
-
-        const Node = struct {
-            data: T,
-            prev: ?*Node = null,
-            next: ?*Node = null,
-
-            pub fn free(self: *Node, alloc: Allocator) !void {
-                alloc.destroy(self);
-            }
-
-            /// Return the index where the newline is
-            pub fn end(self: *Node) usize {
-                return if (self.data.items.len == 0) 0 else self.data.items.len - 1;
-            }
-        };
-
-        fn at_index_impl(self: *Self, idx: usize) struct { prev: ?*Node, cur: ?*Node } {
-            var prev: ?*Node = null;
-            var next: ?*Node = self.first;
-            var i: usize = 0;
-            while (i < idx and next != null) : (i += 1) {
-                prev = next;
-                next = next.?.next;
-            }
-
-            return .{
-                .prev = prev,
-                .cur = next,
-            };
-        }
-
-        pub fn insert_at(self: *Self, alloc: Allocator, data: T, idx: usize) !*Node {
-            const find = self.at_index_impl(idx);
-
-            return self.insert(alloc, data, find.prev);
-        }
-
-        pub fn insert(self: *Self, alloc: Allocator, data: T, prev: ?*Node) !*Node {
-            const node = try alloc.create(Node);
-            node.* = Node{
-                .data = data,
-            };
-            self.len += 1;
-
-            if (prev == null) {
-                if (self.first) |f| {
-                    node.next = f;
-                } else {
-                    self.last = node;
-                }
-                self.first = node;
-                return node;
-            }
-
-            const next = prev.?.next;
-            node.prev = prev;
-            node.next = next;
-            prev.?.next = node;
-            if (next) |next_node| {
-                next_node.prev = node;
-            } else {
-                self.last = node;
-            }
-
-            return node;
-        }
-
-        pub fn remove_at(self: *Self, idx: usize) bool {
-            const find = self.at_index_impl(idx);
-            if (find.next != null) return self.remove(find.next);
-            return false;
-        }
-
-        pub fn remove(self: *Self, node: *Node) bool {
-            self.len -= 1;
-            if (node.prev == null) {
-                if (node.next) |next_node| {
-                    self.first = next_node;
-                    next_node.prev = null;
-                } else {
-                    self.first = null;
-                    self.last = null;
-                }
-                return true;
-            }
-
-            const next = node.next;
-            if (next) |next_node| {
-                next_node.prev = node.prev.?;
-                node.prev.?.next = next_node;
-            } else {
-                node.prev.?.next = null;
-                self.last = node.prev;
-            }
-
-            return true;
-        }
-    };
-}
 
 pub const TextPos = struct {
     col: u32,
     line: u32,
 };
 
+/// Data structure to make text editing operations more efficient for longer text.
+/// This implementation uses a doubly linked list where each node is a line.
 pub const Rope = struct {
     const Self = @This();
-    const NodeList = DoublyLinkedList(ArrayList(u8));
-    const Node = NodeList.Node;
+    /// TODO: accessing data requires additional indirection, an optimization
+    /// could be to have the node header (prev, next) and string data in the
+    /// same allocation. Note that growing the allocation would mean the pointer
+    /// is invalidated so we would have to update it (the nodes who point to the
+    /// node we grow)
+    const NodeList = DoublyLinkedList(ArrayList(u8)); const Node =
+    NodeList.Node;
 
     node_alloc: Allocator = std.heap.c_allocator,
     text_alloc: Allocator = std.heap.c_allocator,
@@ -312,6 +201,125 @@ pub const Rope = struct {
         return str;
     }
 };
+
+fn DoublyLinkedList(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        first: ?*Node = null,
+        last: ?*Node = null,
+        len: usize = 0,
+
+        const Node = struct {
+            data: T,
+            prev: ?*Node = null,
+            next: ?*Node = null,
+
+            pub fn free(self: *Node, alloc: Allocator) !void {
+                alloc.destroy(self);
+            }
+
+            /// Return the index where the newline is
+            pub fn end(self: *Node) usize {
+                return if (self.data.items.len == 0) 0 else self.data.items.len - 1;
+            }
+        };
+
+        fn at_index_impl(self: *Self, idx: usize) struct { prev: ?*Node, cur: ?*Node } {
+            var prev: ?*Node = null;
+            var next: ?*Node = self.first;
+            var i: usize = 0;
+            while (i < idx and next != null) : (i += 1) {
+                prev = next;
+                next = next.?.next;
+            }
+
+            return .{
+                .prev = prev,
+                .cur = next,
+            };
+        }
+
+        pub fn insert_at(self: *Self, alloc: Allocator, data: T, idx: usize) !*Node {
+            const find = self.at_index_impl(idx);
+
+            return self.insert(alloc, data, find.prev);
+        }
+
+        pub fn insert(self: *Self, alloc: Allocator, data: T, prev: ?*Node) !*Node {
+            const node = try alloc.create(Node);
+            node.* = Node{
+                .data = data,
+            };
+            self.len += 1;
+
+            if (prev == null) {
+                if (self.first) |f| {
+                    node.next = f;
+                } else {
+                    self.last = node;
+                }
+                self.first = node;
+                return node;
+            }
+
+            const next = prev.?.next;
+            node.prev = prev;
+            node.next = next;
+            prev.?.next = node;
+            if (next) |next_node| {
+                next_node.prev = node;
+            } else {
+                self.last = node;
+            }
+
+            return node;
+        }
+
+        pub fn remove_at(self: *Self, idx: usize) bool {
+            const find = self.at_index_impl(idx);
+            if (find.next != null) return self.remove(find.next);
+            return false;
+        }
+
+        pub fn remove(self: *Self, node: *Node) bool {
+            self.len -= 1;
+            if (node.prev == null) {
+                if (node.next) |next_node| {
+                    self.first = next_node;
+                    next_node.prev = null;
+                } else {
+                    self.first = null;
+                    self.last = null;
+                }
+                return true;
+            }
+
+            const next = node.next;
+            if (next) |next_node| {
+                next_node.prev = node.prev.?;
+                node.prev.?.next = next_node;
+            } else {
+                node.prev.?.next = null;
+                self.last = node.prev;
+            }
+
+            return true;
+        }
+    };
+}
+
+fn remove_range(src: []u8, start: usize, end: usize) []u8 {
+    const len = src.len - (end - start);
+    if (start > 0) {
+        // [ ___ XXX ___ ]
+        std.mem.copyForwards(u8, src[start..src.len], src[end..src.len]);
+    } else {
+        // [ XXX ________ ]
+        std.mem.copyForwards(u8, src, src[end..src.len]);
+    }
+    return src[0..len];
+}
 
 test "linked list impl" {
     const alloc = std.heap.c_allocator;
