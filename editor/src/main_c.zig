@@ -314,24 +314,46 @@ const Renderer = struct {
         _ = self.frame_arena.reset(.retain_capacity);
     }
 
+    // pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
+    //     const char = event.keycode();
+    //     // backspace
+    //     switch (char) {
+    //         127 => try self.editor.backspace(),
+    //         else => try self.editor.insert(&[_]u8{@intCast(u8, char)}),
+    //     }
+    //     try self.update_text(alloc);
+    // }
+
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
         var in_char_buf = [_]u8{0} ** 128;
         const nschars = event.characters() orelse return;
-        const chars = nschars.to_c_string(&in_char_buf);
-        const len = cstring_len(chars);
-        if (len > 1) @panic("TODO: handle multi-char input");
-        // var out_char_buf = [_]u8{0} ** 128;
-        // const filtered_chars = Editor.filter_chars(chars[0..len], out_char_buf[0..128]);
-        // try self.editor.insert(self.editor.cursor, filtered_chars);
+        if (nschars.to_c_string(&in_char_buf)) |chars| {
+            const len = cstring_len(chars);
+            if (len > 1) @panic("TODO: handle multi-char input");
+            // var out_char_buf = [_]u8{0} ** 128;
+            // const filtered_chars = Editor.filter_chars(chars[0..len], out_char_buf[0..128]);
+            // try self.editor.insert(self.editor.cursor, filtered_chars);
 
-        const char = chars[0];
-        if (char == 127) {
-            try self.editor.backspace();
-        } else {
-            try self.editor.insert(chars[0..1]);
+            const char = chars[0];
+            if (char == 127) {
+                try self.editor.backspace();
+            } else {
+                try self.editor.insert(chars[0..1]);
+            }
+
+            try self.update_text(alloc);
+            return;
         }
 
-        try self.update_text(alloc);
+        const keycode = event.keycode();
+        switch (keycode) {
+            // left arrow
+            123 => {
+                print("HEY!\n", .{});
+                self.editor.right();
+            },
+            else => print("Unknown keycode: {d}\n", .{keycode}),
+        }
     }
 };
 

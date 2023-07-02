@@ -127,10 +127,10 @@ pub const NSString = struct {
         return new;
     }
 
-    pub fn to_c_string(self: NSString, buf: []u8) [*:0]u8 {
+    pub fn to_c_string(self: NSString, buf: []u8) ?[*:0]u8 {
         const success = self.obj.msgSend(bool, objc.sel("getCString:maxLength:encoding:"), .{ buf.ptr, buf.len, NSStringEncoding.ascii });
         if (!success) {
-            @panic("oh no!");
+            return null;
         }
         return @ptrCast([*:0]u8, buf);
     }
@@ -566,7 +566,8 @@ pub fn check_error(err_: ?*anyopaque) !void {
 
         var buf: [256]u8 = undefined;
 
-        std.debug.print("meta error={s}\n", .{str.to_c_string(&buf)});
+        const err_str = str.to_c_string(&buf) orelse "unknown error";
+        std.debug.print("meta error={s}\n", .{err_str});
 
         return MetalError.Uhoh;
     }

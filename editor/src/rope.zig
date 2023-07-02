@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const print = std.debug.print;
 
-
 pub const TextPos = struct {
     col: u32,
     line: u32,
@@ -18,8 +17,9 @@ pub const Rope = struct {
     /// same allocation. Note that growing the allocation would mean the pointer
     /// is invalidated so we would have to update it (the nodes who point to the
     /// node we grow)
-    const NodeList = DoublyLinkedList(ArrayList(u8)); const Node =
-    NodeList.Node;
+    const NodeList = DoublyLinkedList(ArrayList(u8));
+    const Node =
+        NodeList.Node;
 
     node_alloc: Allocator = std.heap.c_allocator,
     text_alloc: Allocator = std.heap.c_allocator,
@@ -87,7 +87,11 @@ pub const Rope = struct {
                 prev_node = node;
             }
 
-            try node.data.appendSlice(self.text_alloc, nlr_line);
+            if (pos.col == node.data.items.len) {
+                try node.data.appendSlice(self.text_alloc, nlr_line);
+            } else {
+                try node.data.insertSlice(self.text_alloc, pos.col, nlr_line);
+            }
 
             self.len += nlr_line.len;
             nlr = next_line(nlr.rest);
@@ -103,8 +107,8 @@ pub const Rope = struct {
         return pos;
     }
 
-    /// Finds the node at the given char index
-    fn index_node(self: *Self, char_idx: usize, starting_node: ?*Node) ?struct { node: *Node, i: usize } {
+    /// Finds the node and its index in linked list at the given char index
+    fn char_index_node(self: *Self, char_idx: usize, starting_node: ?*Node) ?struct { node: *Node, i: usize } {
         if (char_idx >= self.len) return null;
 
         var node: ?*Node = starting_node orelse self.nodes.first;
@@ -118,6 +122,17 @@ pub const Rope = struct {
         }
 
         return null;
+    }
+
+    pub fn line_index_node(self: *Self, line: u32) ?struct { node: *Node, i: usize } {
+        var i: usize = 0;
+        var iter: ?*Node = self.nodes.first;
+        while (iter != null and i < line) {
+            iter = iter.?.next;
+            i += 1;
+        }
+        const node = iter orelse return null;
+        return .{ .node = node, .i = i };
     }
 
     pub fn pos_to_idx(self: *Self, pos: TextPos) ?usize {
@@ -137,7 +152,7 @@ pub const Rope = struct {
 
     pub fn remove_text(self: *Self, text_start_: usize, text_end: usize) !void {
         var text_start = text_start_;
-        var index_result = self.index_node(text_start, null) orelse return;
+        var index_result = self.char_index_node(text_start, null) orelse return;
         var node: *Node = index_result.node;
         var i: usize = index_result.i;
 
@@ -360,6 +375,17 @@ test "basic insertion" {
 
     str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings(str, "pls work wtf!!!");
+}
+
+test "basic insertion2" {
+    var rope = Rope{};
+    try rope.init();
+
+    var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "pls work wtf");
+    pos.col -= 5;
+    pos = try rope.insert_text(pos, "!!!");
+    var str = try rope.as_str(std.heap.c_allocator);
+    print("str: {s}\n", .{str});
 }
 
 test "multi-line insertion" {

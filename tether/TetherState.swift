@@ -94,7 +94,7 @@ class TetherState: ObservableObject {
                 }
                 
                 if self.isOverlayVisible {
-                    print("Keycode \(event.keyCode)")
+//                    print("Keycode \(event.keyCode)")
                 }
             }
         }
