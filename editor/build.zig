@@ -109,7 +109,7 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
         .root_source_file = .{ .path = "src/rope.zig" },
         .target = target,
         .optimize = optimize,
-        .filter = "basic insertion2",
+        // .filter = "basic insertion2",
     });
 
     // build_test(b, test_step, modules, .{

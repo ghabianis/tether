@@ -153,6 +153,10 @@ pub const NSNumber = struct {
     pub fn from_enum(value: anytype) Self {
         return Self.from_int(@intCast(i32, @enumToInt(value)));
     }
+
+    pub fn float_value(self: Self) CGFloat {
+        return self.obj.msgSend(CGFloat, objc.sel("floatValue"), .{});
+    }
 };
 
 pub const NSDictionary = struct {
@@ -427,7 +431,7 @@ pub const MTLVertexFormat = enum(NSUInteger) {
     float = 28,
     float2 = 29,
     float3 = 30,
-    float4 = 41,
+    float4 = 31,
 };
 
 pub const MTLVertexStepFunction = enum(NSUInteger) {

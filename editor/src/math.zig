@@ -24,6 +24,22 @@ pub const Float4 = extern struct {
         };
     }
 
+    pub fn hex(comptime str: []const u8) Float4 {
+        var hex_str = str;
+        if (hex_str[0] == '#') {
+            hex_str = hex_str[1..];
+        }
+        // if (hex_str.len < 6) {
+        //     @compileError("Invalid hex color string");
+        // }
+        return Float4.new(
+            (hex_to_decimal(hex_str[0]) * 16.0 + hex_to_decimal(hex_str[1])) / 255.0,
+            (hex_to_decimal(hex_str[2]) * 16.0 + hex_to_decimal(hex_str[3])) / 255.0,
+            (hex_to_decimal(hex_str[4]) * 16.0 + hex_to_decimal(hex_str[5])) / 255.0,
+            1.0,
+        );
+    }
+
     pub fn dot(a: Float4, b: Float4) f32 {
         return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     }
@@ -49,6 +65,9 @@ pub fn float3(x: f32, y: f32, z: f32) Float3 {
 
 pub fn float4(x: f32, y: f32, z: f32, w: f32) Float4 {
     return .{ .x = x, .y = y, .z = z, .w = w };
+}
+pub fn hex4(comptime hex: []const u8) Float4 {
+    return comptime Float4.hex(hex);
 }
 
 pub const Float4x4 = extern struct {
@@ -159,3 +178,25 @@ pub const Float4x4 = extern struct {
         );
     }
 };
+
+fn hex_to_decimal(hex: u8) f32 {
+    switch (hex) {
+        '0' => return 0.0,
+        '1' => return 1.0,
+        '2' => return 2.0,
+        '3' => return 3.0,
+        '4' => return 4.0,
+        '5' => return 5.0,
+        '6' => return 6.0,
+        '7' => return 7.0,
+        '8' => return 8.0,
+        '9' => return 9.0,
+        'a' => return 10.0,
+        'b' => return 11.0,
+        'c' => return 12.0,
+        'd' => return 13.0,
+        'e' => return 14.0,
+        'f' => return 15.0,
+        else => unreachable,
+    }
+}

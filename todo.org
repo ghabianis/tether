@@ -1,0 +1,17 @@
+#+title: Todo
+
+* TODO Now [2/2]
+** DONE Fix cursor [0/0]
+*** DONE not in front of text
+*** DONE newline fucks it up
+** DONE next line is not starting at the right Y
+we use =max_glyph_h= as the Y advance
+but this is not correct
+it needs to take into account glyphs that have their y origin lower
+for example in the glyph 'y'
+i think this might be the 'descent' font metric
+* TODO Later [/]
+** TODO don't render spaces/tabs/newlines (any empty height or width glyphs)
+** TODO Egui for debugging?
+** TODO create deinit function for renderer/editor
+* TODO Moonshot [/]

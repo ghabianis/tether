@@ -2,6 +2,7 @@ const std = @import("std");
 const objc = @import("zig-objc");
 const ct = @import("./coretext.zig");
 const metal = @import("./metal.zig");
+const print = std.debug.print;
 
 pub const GlyphInfo = struct {
     const Self = @This();
@@ -43,24 +44,44 @@ pub const Atlas = struct {
 
     glyph_info: [CHAR_END]GlyphInfo,
     max_glyph_height: i32,
+    max_glyph_width: i32,
 
     atlas: ct.CGImageRef,
     width: i32,
     height: i32,
+    baseline: f32,
+    descent: f32,
+
+    cursor_tx: f32,
+    cursor_ty: f32,
+    cursor_w: f32,
+    cursor_h: f32,
 
     pub fn new(font_size: metal.CGFloat) Self {
         const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
         const Class = objc.Class.getClass("NSFont").?;
         const font = Class.msgSend(objc.Object, objc.sel("fontWithName:size:"), .{ iosevka, font_size });
+        const baseline_nsnumber = metal.NSNumber.from_id(ct.CTFontCopyAttribute(font.value, ct.kCTFontBaselineAdjustAttribute));
+        defer baseline_nsnumber.release();
+        const baseline = baseline_nsnumber.float_value();
 
         return Self{
             .font = font,
             .font_size = font_size,
             .glyph_info = [_]GlyphInfo{GlyphInfo.default()} ** CHAR_END,
             .max_glyph_height = undefined,
+            .max_glyph_width = undefined,
+
             .atlas = undefined,
             .width = undefined,
             .height = undefined,
+            .baseline = @floatCast(f32, baseline),
+            .descent = undefined,
+
+            .cursor_tx = undefined,
+            .cursor_ty = undefined,
+            .cursor_w = undefined,
+            .cursor_h = undefined,
         };
     }
 
@@ -109,6 +130,7 @@ pub const Atlas = struct {
         var w: i32 = 0;
         var h: i32 = 0;
         var max_w: i32 = 0;
+        var max_advance: i32 = 0;
         {
             var i: usize = 32;
             while (i < Self.CHAR_END) : (i += 1) {
@@ -116,7 +138,7 @@ pub const Atlas = struct {
                 const glyph = glyphs[j];
                 const glyph_rect: metal.CGRect = glyph_rects[j];
                 const advance = self.get_advance(cgfont, glyph);
-                // const advance: i32 = 100;
+                max_advance = @max(max_advance, advance);
 
                 if (roww + glyph_rect.widthCeil() + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     w = @max(w, roww);
@@ -131,8 +153,17 @@ pub const Atlas = struct {
             }
         }
 
+        // Add the texture for cursor
+        if (roww + max_w + 1 >= intCeil(Self.MAX_WIDTH)) {
+            w = @max(w, roww);
+            h += rowh;
+            roww = 0;
+        }
+        roww += max_w + max_advance + 1;
+
         const max_h = rowh;
         self.max_glyph_height = max_h;
+        self.max_glyph_width = max_w;
         w = @max(w, roww);
         h += rowh;
 
@@ -154,6 +185,9 @@ pub const Atlas = struct {
 
         ct.CGContextSetFont(ctx, cgfont);
         ct.CGContextSetFontSize(ctx, self.font_size);
+
+        // self.descent = @intToFloat(f32, ct.CGFontGetDescent(cgfont));
+        self.descent = @floatCast(f32, ct.CTFontGetDescent(self.font.value));
 
         ct.CGContextSetShouldAntialias(ctx, true);
         ct.CGContextSetAllowsAntialiasing(ctx, true);
@@ -214,6 +248,26 @@ pub const Atlas = struct {
 
                 ox += rectw + advance + 1;
             }
+
+            if (ox + max_w + max_advance + 1 >= intCeil(Self.MAX_WIDTH)) {
+                ox = 0;
+                oy += max_h;
+                rowh = 0;
+            }
+            const cursor_rect = .{
+                .origin = .{ .x = @intToFloat(f32, ox), .y = @intToFloat(f32, oy) },
+                .size = .{ .width = @intToFloat(f32, max_w), .height = @intToFloat(f32, max_h) },
+            };
+            const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
+            const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
+
+            // print("CURSOR: tx={d} ty={d} ox={d} oy={d}\n", .{ tx, ty, ox, oy });
+
+            ct.CGContextFillRect(ctx, cursor_rect);
+            self.cursor_tx = tx;
+            self.cursor_ty = ty;
+            self.cursor_w = cursor_rect.size.width / @intToFloat(f32, tex_w);
+            self.cursor_h = cursor_rect.size.height / @intToFloat(f32, tex_h);
         }
 
         self.atlas = ct.CGBitmapContextCreateImage(ctx);

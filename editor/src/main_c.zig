@@ -1,10 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const objc = @import("zig-objc");
-const Atlas = @import("./font.zig").Atlas;
+const font = @import("./font.zig");
+const Atlas = font.Atlas;
+const Glyph = font.GlyphInfo;
 const metal = @import("./metal.zig");
 const math = @import("./math.zig");
-const font = @import("./font.zig");
 const rope = @import("./rope.zig");
 const Editor = @import("./editor.zig");
 const ct = @import("./coretext.zig");
@@ -20,6 +21,10 @@ pub const Vertex = extern struct {
     pos: math.Float2,
     tex_coords: math.Float2,
     color: math.Float4,
+
+    pub fn default() Vertex {
+        return .{ .pos = .{ .x = 0.0, .y = 0.0 }, .tex_coords = .{ .x = 0.0, .y = 0.0 }, .color = .{ .x = 0.0, .y = 0.0, .w = 0.0, .z = 0.0 } };
+    }
 };
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
@@ -102,12 +107,21 @@ const Renderer = struct {
 
     fn resize(self: *Self, alloc: Allocator, new_size: metal.CGSize) !void {
         self.screen_size = new_size;
+        try self.update(alloc);
+    }
+
+    fn update_if_needed(self: *Self, alloc: Allocator) !void {
+        if (self.editor.draw_text) {
+            try self.update(alloc);
+        }
+    }
+
+    fn update(self: *Self, alloc: Allocator) !void {
         try self.update_text(alloc);
     }
 
     fn update_text(self: *Self, alloc: Allocator) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
-        std.debug.print("STRR {d} {s}\n", .{ self.editor.rope.len, str });
         // TODO: should deallocate, but if string is length 0 than dont deallocate
         // because it will be null pointer
         // defer std.heap.c_allocator.destroy(str);
@@ -201,6 +215,38 @@ const Renderer = struct {
         return pipeline;
     }
 
+    pub fn build_cursor_geometry(self: *Self, y: f32, xx: f32, width: f32, glyph_origin_y: f32) [6]Vertex {
+        var ret: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
+
+        const yy2 = y + @floatCast(f32, glyph_origin_y) + @intToFloat(f32, self.atlas.max_glyph_height);
+        const bot2 = y + @floatCast(f32, glyph_origin_y) - @intToFloat(f32, self.atlas.max_glyph_height) / 2.0;
+        const tl = math.float2(xx, yy2);
+        const tr = math.float2(xx + width, yy2);
+        const br = math.float2(xx + width, bot2);
+        const bl = math.float2(xx, bot2);
+
+        const txt = self.atlas.cursor_ty;
+        const txbb = txt - self.atlas.cursor_h;
+        const txl = self.atlas.cursor_tx;
+        const txr = txl + self.atlas.cursor_w;
+
+        const tx_tl = math.float2(txl, txt);
+        const tx_tr = math.float2(txr, txt);
+        const tx_bl = math.float2(txl, txbb);
+        const tx_br = math.float2(txr, txbb);
+
+        const bg = math.hex4("#b4f9f8");
+        ret[0] = .{ .pos = tl, .tex_coords = tx_tl, .color = bg };
+        ret[1] = .{ .pos = tr, .tex_coords = tx_tr, .color = bg };
+        ret[2] = .{ .pos = bl, .tex_coords = tx_bl, .color = bg };
+
+        ret[3] = .{ .pos = tr, .tex_coords = tx_tr, .color = bg };
+        ret[4] = .{ .pos = br, .tex_coords = tx_br, .color = bg };
+        ret[5] = .{ .pos = bl, .tex_coords = tx_bl, .color = bg };
+
+        return ret;
+    }
+
     /// TODO: Iterate rope text instead of passing string
     pub fn build_text_geometry(self: *Self, alloc: Allocator, text: []const u8, screenx: f32, screeny: f32) !void {
         _ = screenx;
@@ -212,14 +258,16 @@ const Renderer = struct {
 
         var starting_x = x;
 
+        var line: u32 = 0;
+        var col: u32 = 0;
         for (text) |char| {
             const glyph = self.atlas.lookup_char(char);
             const l: f32 = 0.0;
             const width = @intToFloat(f32, glyph.rect.widthCeil());
 
             const xx = x + l;
-            const yy = y + @intToFloat(f32, glyph.rect.maxyCeil());
-            const bot = y + @intToFloat(f32, glyph.rect.minyCeil());
+            var yy = y + @intToFloat(f32, glyph.rect.maxyCeil());
+            var bot = y + @intToFloat(f32, glyph.rect.minyCeil());
 
             const atlas_w = @intToFloat(f32, self.atlas.width);
             const atlas_h = @intToFloat(f32, self.atlas.height);
@@ -229,15 +277,29 @@ const Renderer = struct {
             const tyt = glyph.ty - @intToFloat(f32, glyph.rect.heightCeil()) / atlas_h;
             const tyb = glyph.ty;
 
+            const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;
+            const color = color: {
+                break :color if (has_cursor) math.float4(0.0, 0.0, 0.0, 1.0) else math.float4(1.0, 0.0, 0.0, 1.0);
+            };
+
+            if (has_cursor) {
+                const cursor_vertices = self.build_cursor_geometry(y, xx, width, @floatCast(f32, glyph.rect.origin.y));
+                try vertices.appendSlice(alloc, cursor_vertices[0..]);
+            }
+
             switch (char) {
                 // tab
                 9 => {
                     x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                    col += 4;
                 },
                 // newline, carriage return
                 10, 13 => {
                     x = starting_x;
-                    y += -@intToFloat(f32, self.atlas.max_glyph_height);
+                    // y += -@intToFloat(f32, self.atlas.max_glyph_height);
+                    y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                    line += 1;
+                    col = 0;
                 },
                 else => {
                     // skip empty glyphs
@@ -245,11 +307,10 @@ const Renderer = struct {
                         continue;
                     }
                     x += glyph.advance;
+                    col += 1;
                     // x += 100.0;
                 },
             }
-
-            const color = math.float4(1.0, 0.0, 0.0, 1.0);
 
             const tl = math.float2(xx, yy);
             const tr = math.float2(xx + width, yy);
@@ -268,7 +329,15 @@ const Renderer = struct {
             try vertices.append(alloc, .{ .pos = br, .tex_coords = tx_br, .color = color });
             try vertices.append(alloc, .{ .pos = bl, .tex_coords = tx_bl, .color = color });
         }
+
+        const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;
+        if (has_cursor) {
+            const cursor_vertices = self.build_cursor_geometry(y, x, @intToFloat(f32, self.atlas.max_glyph_width), 0.0);
+            try vertices.appendSlice(alloc, cursor_vertices[0..]);
+        }
     }
+
+    // pub fn build_geometry
 
     pub fn draw(self: *Self, view: metal.MTKView) void {
         const command_buffer = self.queue.command_buffer();
@@ -283,7 +352,8 @@ const Renderer = struct {
         const attachments = render_pass_desc.getProperty(objc.Object, "colorAttachments");
         const color_attachment_desc = attachments.msgSend(objc.Object, objc.sel("objectAtIndexedSubscript:"), .{@as(c_ulong, 0)});
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.clear);
-        color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = 0.0, .g = 0.0, .b = 0.0, .a = 0.0 });
+        const bg = math.hex4("#1a1b26");
+        color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
         const drawable_size = view.drawable_size();
@@ -341,7 +411,7 @@ const Renderer = struct {
                 try self.editor.insert(chars[0..1]);
             }
 
-            try self.update_text(alloc);
+            try self.update_if_needed(alloc);
             return;
         }
 
@@ -354,6 +424,7 @@ const Renderer = struct {
             },
             else => print("Unknown keycode: {d}\n", .{keycode}),
         }
+        try self.update_if_needed(alloc);
     }
 };
 
@@ -377,7 +448,7 @@ export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {
 
 export fn renderer_insert_text(renderer: *Renderer, text: [*:0]const u8, len: usize) void {
     renderer.editor.insert(text[0..len]) catch @panic("oops");
-    renderer.update_text(std.heap.c_allocator) catch @panic("oops");
+    renderer.update_if_needed(std.heap.c_allocator) catch @panic("oops");
 }
 
 export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void {

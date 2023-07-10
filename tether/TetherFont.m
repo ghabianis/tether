@@ -40,6 +40,13 @@
 //    MTLCommandBuffer buf;
 //}
 
+void DoShit(CTFontRef font) {
+    CTFontRef fontRef = CTFontCreateWithName((CFStringRef)@"Helvetica", 12, NULL);
+    NSNumber *baselineOffset = (__bridge NSNumber *)CTFontCopyAttribute(fontRef, kCTFontBaselineAdjustAttribute);
+    CGFloat baseline = [baselineOffset floatValue];
+    CFRelease(fontRef);
+}
+
 void ShowGlyphsAtPositions(
                            CGContextRef ctx,
                            const CGGlyph *glyphs,
@@ -50,7 +57,8 @@ void ShowGlyphsAtPositions(
 }
 
 void ShowGlyphsAtPoint(CGContextRef ctx, const CGGlyph *glyphs, CGFloat x, CGFloat y) {
-//    CTFontLe
+    
+    //    CTFontLe
     return CGContextShowGlyphsAtPoint(ctx, x, y, glyphs, 1);
 }
 

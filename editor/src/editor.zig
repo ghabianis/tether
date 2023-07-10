@@ -22,7 +22,8 @@ pub fn insert(self: *Self, chars: []const u8) !void {
 }
 
 pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8) !void {
-    self.cursor = try self.rope.insert_text(cursor, chars);
+    const new_cursor = try self.rope.insert_text(cursor, chars);
+    self.cursor = new_cursor;
     self.draw_text = true;
 }
 
@@ -49,7 +50,6 @@ pub fn left(self: *Self) void {
 }
 
 pub fn move_horizontal(self: *Self, delta_: i64) void {
-    print("CUSOR BEFORE: {any}\n", .{self.cursor});
     var index_result = self.rope.line_index_node(self.cursor.line) orelse @panic("No node");
     var cur_node = index_result.node;
 
@@ -77,7 +77,8 @@ pub fn move_horizontal(self: *Self, delta_: i64) void {
 
     self.cursor.line = line;
     self.cursor.col = @intCast(u32, col);
-    print("CUSOR AFTER: {any}\n", .{self.cursor});
+    // TODO: Probably very bad to redraw entire text after just moving cursor
+    self.draw_text = true;
 }
 
 pub fn text(self: *Self, alloc: Allocator) ![]const u8 {

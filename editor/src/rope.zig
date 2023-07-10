@@ -40,7 +40,7 @@ pub const Rope = struct {
         const text = text_.?;
         var end: usize = 0;
         while (end < text.len) : (end += 1) {
-            if (text[end] == '\n') {
+            if (is_newline(text[end])) {
                 const rest = rest: {
                     if (end + 1 >= text.len) {
                         break :rest null;
@@ -160,7 +160,7 @@ pub const Rope = struct {
             const len = node.data.items.len;
             if (text_start >= i and text_start < i + len) {
                 var node_cut_start = (text_start - i);
-                var node_cut_end: usize = if (text_end < i + node.data.items.len) node_cut_start + (text_end - i) else node.data.items.len;
+                var node_cut_end: usize = text_end - i;
                 const cut_len = node_cut_end - node_cut_start;
 
                 self.len -= cut_len;
@@ -170,7 +170,7 @@ pub const Rope = struct {
 
             if (node.data.items.len == 0 and node.next != null) {
                 try self.remove_node(node);
-            } else if (node.data.items.len > 0 and node.data.items[node.data.items.len - 1] != '\n') {
+            } else if (node.data.items.len > 0 and !is_newline(node.data.items[node.data.items.len - 1])) {
                 try self.collapse_nodes(node);
             }
             const next = node.next;
@@ -334,6 +334,10 @@ fn remove_range(src: []u8, start: usize, end: usize) []u8 {
         std.mem.copyForwards(u8, src, src[end..src.len]);
     }
     return src[0..len];
+}
+
+pub fn is_newline(c: u8) bool {
+    return c == '\n' or c == '\r';
 }
 
 test "linked list impl" {
