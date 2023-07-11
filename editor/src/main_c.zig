@@ -302,13 +302,13 @@ const Renderer = struct {
                     col = 0;
                 },
                 else => {
-                    // skip empty glyphs
-                    if (glyph.rect.width() == 0.0 and glyph.rect.height() == 0.0) {
-                        continue;
-                    }
                     x += glyph.advance;
                     col += 1;
-                    // x += 100.0;
+
+                    // don't add vertices for glyphs that are whitespace
+                    if (glyph.rect.width() == 0.0 or glyph.rect.height() == 0.0) {
+                        continue;
+                    }
                 },
             }
 
@@ -383,16 +383,6 @@ const Renderer = struct {
 
         _ = self.frame_arena.reset(.retain_capacity);
     }
-
-    // pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
-    //     const char = event.keycode();
-    //     // backspace
-    //     switch (char) {
-    //         127 => try self.editor.backspace(),
-    //         else => try self.editor.insert(&[_]u8{@intCast(u8, char)}),
-    //     }
-    //     try self.update_text(alloc);
-    // }
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
         var in_char_buf = [_]u8{0} ** 128;
