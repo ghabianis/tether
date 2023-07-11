@@ -1,9 +1,15 @@
 #+title: Todo
 
-* TODO Now [1/2]
+* TODO Now [2/4]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
-** TODO fix backspace on newline
-* TODO Later [/]
+** DONE fix backspace on newline
+** TODO Vim [0/2]
+*** TODO modes [0/4]
+**** TODO normal [/]
+**** TODO visual [/]
+**** TODO insert [/]
+*** TODO chaining movements
+* TODO Later [0/3]
 ** TODO Egui for debugging?
 ** TODO create deinit function for renderer/editor
 * TODO Moonshot [/]

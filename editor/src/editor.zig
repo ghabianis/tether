@@ -30,14 +30,25 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8) !void {
 pub fn backspace(self: *Self) !void {
     const pos = self.cursor;
     const idx_pos = self.rope.pos_to_idx(pos) orelse @panic("OOPS!");
-    try self.rope.remove_text(idx_pos - 1, idx_pos);
-    self.cursor = if (pos.col == 0) .{
-        .line = pos.line -| 1,
-        .col = 0,
-    } else .{
-        .line = pos.line,
-        .col = pos.col - 1,
+
+    self.cursor = cursor: {
+        if (pos.col == 0) {
+            const new_line = pos.line -| 1;
+            const line_node = self.rope.node_at_line(new_line) orelse @panic("No node");
+            break :cursor .{
+                .line = new_line,
+                .col = @intCast(u32, line_node.data.items.len) -| 1,
+            };
+        } else {
+            break :cursor .{
+                .line = pos.line,
+                .col = pos.col - 1,
+            };
+        }
     };
+
+    try self.rope.remove_text(idx_pos - 1, idx_pos);
+
     self.draw_text = true;
 }
 
@@ -50,8 +61,7 @@ pub fn left(self: *Self) void {
 }
 
 pub fn move_horizontal(self: *Self, delta_: i64) void {
-    var index_result = self.rope.line_index_node(self.cursor.line) orelse @panic("No node");
-    var cur_node = index_result.node;
+    var cur_node = self.rope.node_at_line(self.cursor.line) orelse @panic("No node");
 
     var line: u32 = self.cursor.line;
     var col: i64 = self.cursor.col;

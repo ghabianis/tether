@@ -24,7 +24,7 @@ pub const Float4 = extern struct {
         };
     }
 
-    pub fn hex(comptime str: []const u8) Float4 {
+    pub fn hex(str: []const u8) Float4 {
         var hex_str = str;
         if (hex_str[0] == '#') {
             hex_str = hex_str[1..];
@@ -191,12 +191,12 @@ fn hex_to_decimal(hex: u8) f32 {
         '7' => return 7.0,
         '8' => return 8.0,
         '9' => return 9.0,
-        'a' => return 10.0,
-        'b' => return 11.0,
-        'c' => return 12.0,
-        'd' => return 13.0,
-        'e' => return 14.0,
-        'f' => return 15.0,
+        'A', 'a' => return 10.0,
+        'B', 'b' => return 11.0,
+        'C', 'c' => return 12.0,
+        'D', 'd' => return 13.0,
+        'E', 'e' => return 14.0,
+        'F', 'f' => return 15.0,
         else => unreachable,
     }
 }

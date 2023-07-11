@@ -124,7 +124,14 @@ pub const Rope = struct {
         return null;
     }
 
-    pub fn line_index_node(self: *Self, line: u32) ?struct { node: *Node, i: usize } {
+    pub fn node_at_line(self: *Self, line: u32) ?*Node {
+        if (self.node_at_line_impl(line)) |nl| {
+            return nl.node;
+        }
+        return null;
+    }
+
+    fn node_at_line_impl(self: *Self, line: u32) ?struct { node: *Node, i: usize } {
         var i: usize = 0;
         var iter: ?*Node = self.nodes.first;
         while (iter != null and i < line) {

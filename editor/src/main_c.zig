@@ -29,6 +29,8 @@ pub const Vertex = extern struct {
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
 
+const TEXT_COLOR = math.hex4("#b8c1ea");
+
 const Renderer = struct {
     const Self = @This();
 
@@ -279,7 +281,7 @@ const Renderer = struct {
 
             const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;
             const color = color: {
-                break :color if (has_cursor) math.float4(0.0, 0.0, 0.0, 1.0) else math.float4(1.0, 0.0, 0.0, 1.0);
+                break :color if (has_cursor) math.float4(0.0, 0.0, 0.0, 1.0) else TEXT_COLOR;
             };
 
             if (has_cursor) {
