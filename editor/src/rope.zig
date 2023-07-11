@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const print = std.debug.print;
 
+const strutil = @import("./strutil.zig");
+
 pub const TextPos = struct {
     col: u32,
     line: u32,
@@ -18,7 +20,7 @@ pub const Rope = struct {
     /// is invalidated so we would have to update it (the nodes who point to the
     /// node we grow)
     const NodeList = DoublyLinkedList(ArrayList(u8));
-    const Node =
+    pub const Node =
         NodeList.Node;
 
     node_alloc: Allocator = std.heap.c_allocator,
@@ -40,7 +42,7 @@ pub const Rope = struct {
         const text = text_.?;
         var end: usize = 0;
         while (end < text.len) : (end += 1) {
-            if (is_newline(text[end])) {
+            if (strutil.is_newline(text[end])) {
                 const rest = rest: {
                     if (end + 1 >= text.len) {
                         break :rest null;
@@ -177,7 +179,7 @@ pub const Rope = struct {
 
             if (node.data.items.len == 0 and node.next != null) {
                 try self.remove_node(node);
-            } else if (node.data.items.len > 0 and !is_newline(node.data.items[node.data.items.len - 1])) {
+            } else if (node.data.items.len > 0 and !strutil.is_newline(node.data.items[node.data.items.len - 1])) {
                 try self.collapse_nodes(node);
             }
             const next = node.next;
@@ -341,10 +343,6 @@ fn remove_range(src: []u8, start: usize, end: usize) []u8 {
         std.mem.copyForwards(u8, src, src[end..src.len]);
     }
     return src[0..len];
-}
-
-pub fn is_newline(c: u8) bool {
-    return c == '\n' or c == '\r';
 }
 
 test "linked list impl" {

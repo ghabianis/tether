@@ -3,12 +3,27 @@
 * TODO Now [2/4]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
-** TODO Vim [0/2]
-*** TODO modes [0/4]
-**** TODO normal [/]
+** TODO Vim [0/3]
+*** TODO modes [2/4]
+**** DONE normal [2/2]
+***** DONE up/down/left/right
+***** DONE $, 0, A, a
 **** TODO visual [/]
-**** TODO insert [/]
+***** TODO draw selection
+**** DONE insert [0/0]
 *** TODO chaining movements
+*** TODO moving up/down lines preserves word column when possible
+example:
+#+begin_src zig
+pub fn start_of_line(self: *Self) void {
+    self.cursor.col = 0;
+    self.draw_text = true;
+}
+#+end_src
+
+if cursor is at =s= in =start_of_line= (index 7)
+
+when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
 * TODO Later [0/3]
 ** TODO Egui for debugging?
 ** TODO create deinit function for renderer/editor

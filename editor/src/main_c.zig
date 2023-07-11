@@ -9,6 +9,7 @@ const math = @import("./math.zig");
 const rope = @import("./rope.zig");
 const Editor = @import("./editor.zig");
 const ct = @import("./coretext.zig");
+const Vim = @import("./vim.zig");
 
 const print = std.debug.print;
 
@@ -285,7 +286,7 @@ const Renderer = struct {
             };
 
             if (has_cursor) {
-                const cursor_vertices = self.build_cursor_geometry(y, xx, width, @floatCast(f32, glyph.rect.origin.y));
+                const cursor_vertices = self.build_cursor_geometry(y, xx, if (width == 0.0) @intToFloat(f32, self.atlas.max_glyph_width) else width, @floatCast(f32, glyph.rect.origin.y));
                 try vertices.appendSlice(alloc, cursor_vertices[0..]);
             }
 
@@ -387,35 +388,9 @@ const Renderer = struct {
     }
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
-        var in_char_buf = [_]u8{0} ** 128;
-        const nschars = event.characters() orelse return;
-        if (nschars.to_c_string(&in_char_buf)) |chars| {
-            const len = cstring_len(chars);
-            if (len > 1) @panic("TODO: handle multi-char input");
-            // var out_char_buf = [_]u8{0} ** 128;
-            // const filtered_chars = Editor.filter_chars(chars[0..len], out_char_buf[0..128]);
-            // try self.editor.insert(self.editor.cursor, filtered_chars);
+        const key = Vim.Key.from_nsevent(event) orelse return;
+        try self.editor.keydown(key);
 
-            const char = chars[0];
-            if (char == 127) {
-                try self.editor.backspace();
-            } else {
-                try self.editor.insert(chars[0..1]);
-            }
-
-            try self.update_if_needed(alloc);
-            return;
-        }
-
-        const keycode = event.keycode();
-        switch (keycode) {
-            // left arrow
-            123 => {
-                print("HEY!\n", .{});
-                self.editor.right();
-            },
-            else => print("Unknown keycode: {d}\n", .{keycode}),
-        }
         try self.update_if_needed(alloc);
     }
 };
@@ -454,10 +429,4 @@ export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
 
 export fn renderer_get_val(renderer: *Renderer) u64 {
     return renderer.some_val;
-}
-
-fn cstring_len(cstr: [*:0]u8) usize {
-    var i: usize = 0;
-    while (cstr[i] != 0) : (i += 1) {}
-    return i;
 }
