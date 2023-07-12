@@ -8,7 +8,7 @@
 **** DONE normal [2/2]
 ***** DONE up/down/left/right
 ***** DONE $, 0, A, a
-**** TODO visual [2/3]
+**** TODO visual [2/4]
 ***** DONE selection logic
 ***** DONE yank
 ***** TODO draw selection [3/4]
@@ -16,6 +16,7 @@
 ****** DONE push those as vertices
 ****** DONE reuse the text/cursor render pass to draw. use cursor texel coords
 ****** TODO Fix selection overlap bug
+***** TODO bug: selection changing sides not correct
 **** DONE insert
 *** TODO chaining movements
 *** TODO moving up/down lines preserves word column when possible
