@@ -18,11 +18,10 @@
 
 @implementation TetherFont
 - (void) dealloc {
-    
     //    sel_
 //    MTKTextureLoader* textureLoader = [[MTKTextureLoader alloc] initWithDevice:device];
 //
-//    NSMutableDictionary *options = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *options = [[NSMutableDictionary alloc] init];
 //    [options setObject:@(MTLTextureUsageShaderRead) forKey:MTKTextureLoaderOptionTextureUsage];
 //    [options setObject:@(MTLStorageModePrivate) forKey:MTKTextureLoaderOptionTextureStorageMode];
 //    [options setObject:@(YES) forKey:MTKTextureLoaderOptionSRGB];

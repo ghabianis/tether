@@ -10,6 +10,7 @@ const rope = @import("./rope.zig");
 const Editor = @import("./editor.zig");
 const ct = @import("./coretext.zig");
 const Vim = @import("./vim.zig");
+const strutil = @import("./strutil.zig");
 
 const print = std.debug.print;
 
@@ -25,6 +26,63 @@ pub const Vertex = extern struct {
 
     pub fn default() Vertex {
         return .{ .pos = .{ .x = 0.0, .y = 0.0 }, .tex_coords = .{ .x = 0.0, .y = 0.0 }, .color = .{ .x = 0.0, .y = 0.0, .w = 0.0, .z = 0.0 } };
+    }
+
+    pub fn square(coords: struct { t: f32, b: f32, l: f32, r: f32 }, tex_coords: struct { t: f32, b: f32, l: f32, r: f32 }, color: math.Float4) [6]Vertex {
+        const t = coords.t;
+        const b = coords.b;
+        const l = coords.l;
+        const r = coords.r;
+
+        const tl = math.float2(l, t);
+        const tr = math.float2(r, t);
+        const bl = math.float2(l, b);
+        const br = math.float2(r, b);
+
+        const txt = tex_coords.t;
+        const txb = tex_coords.b;
+        const txl = tex_coords.l;
+        const txr = tex_coords.r;
+        const tx_tl = math.float2(txl, txt);
+        const tx_tr = math.float2(txr, txt);
+        const tx_bl = math.float2(txl, txb);
+        const tx_br = math.float2(txr, txb);
+
+        return [_]Vertex{
+            // triangle 1
+            .{
+                .pos = tl,
+                .tex_coords = tx_tl,
+                .color = color,
+            },
+            .{
+                .pos = tr,
+                .tex_coords = tx_tr,
+                .color = color,
+            },
+            .{
+                .pos = bl,
+                .tex_coords = tx_bl,
+                .color = color,
+            },
+
+            // triangle 2
+            .{
+                .pos = tr,
+                .tex_coords = tx_tr,
+                .color = color,
+            },
+            .{
+                .pos = br,
+                .tex_coords = tx_br,
+                .color = color,
+            },
+            .{
+                .pos = bl,
+                .tex_coords = tx_bl,
+                .color = color,
+            },
+        };
     }
 };
 
@@ -129,7 +187,12 @@ const Renderer = struct {
         // because it will be null pointer
         // defer std.heap.c_allocator.destroy(str);
 
-        try self.build_text_geometry(alloc, str, @floatCast(f32, self.screen_size.width), @floatCast(f32, self.screen_size.height));
+        const screenx = @floatCast(f32, self.screen_size.width);
+        const screeny = @floatCast(f32, self.screen_size.height);
+
+        try self.build_text_geometry(alloc, str, screenx, screeny);
+        try self.build_selection_geometry(alloc, str, screenx, screeny);
+
         // Creating a buffer of length 0 causes a crash, so we need to check if we have any vertices
         if (self.vertices.items.len > 0) {
             const old_vertex_buffer = self.vertex_buffer;
@@ -137,6 +200,7 @@ const Renderer = struct {
             self.vertex_buffer = self.device.new_buffer_with_bytes(@ptrCast([*]const u8, self.vertices.items.ptr)[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_shared);
             return;
         }
+
         self.editor.draw_text = false;
     }
 
@@ -238,7 +302,11 @@ const Renderer = struct {
         const tx_bl = math.float2(txl, txbb);
         const tx_br = math.float2(txr, txbb);
 
-        const bg = math.hex4("#b4f9f8");
+        var bg = math.hex4("#b4f9f8");
+        // if (self.editor.mode == .Visual) {
+        //     bg.w = 0.5;
+        // }
+
         ret[0] = .{ .pos = tl, .tex_coords = tx_tl, .color = bg };
         ret[1] = .{ .pos = tr, .tex_coords = tx_tr, .color = bg };
         ret[2] = .{ .pos = bl, .tex_coords = tx_bl, .color = bg };
@@ -340,7 +408,157 @@ const Renderer = struct {
         }
     }
 
-    // pub fn build_geometry
+    pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32) !void {
+        _ = screenx;
+        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
+        var bg = math.hex4("#b4f9f8");
+        bg.w = 0.2;
+        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
+        const color = bg;
+        const selection = self.editor.selection orelse return;
+
+        var y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
+        var x: f32 = 0.0;
+        var starting_x: f32 = 0.0;
+        var text = text_;
+
+        var i: u32 = 0;
+        var line_state = false;
+        var t: f32 = 0.0;
+        var b: f32 = 0.0;
+        var l: f32 = 0.0;
+        var r: f32 = 0.0;
+        for (text) |char| {
+            defer i += 1;
+            if (i >= selection.end) break;
+            const glyph = self.atlas.lookup_char(char);
+
+            if (i < selection.start) {
+                if (char == 9) {
+                    x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                } else if (strutil.is_newline(char)) {
+                    x = starting_x;
+                    y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent - 3.5;
+                    // y -= @intToFloat(f32, self.atlas.max_glyph_height);
+                } else {
+                    x += glyph.advance;
+                }
+                continue;
+            }
+
+            if (!line_state) {
+                t = y;
+                b = y - @intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                l = x;
+                // r = x + @intToFloat(f32, self.atlas.max_glyph_width);
+                r = x + glyph.advance;
+                line_state = true;
+            } else {
+                r += glyph.advance;
+            }
+
+            if (char == 9) {
+                x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+            } else if (strutil.is_newline(char)) {
+                x = starting_x;
+                y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent - 3.5;
+                // y -= @intToFloat(f32, self.atlas.max_glyph_height);
+            } else {
+                x += glyph.advance;
+            }
+
+            // Push vertices if end of line or entire selection
+            if (strutil.is_newline(char) or i == selection.end -| 1) {
+                line_state = false;
+
+                try self.vertices.appendSlice(alloc, &Vertex.square(.{
+                    .t = t + @intToFloat(f32, self.atlas.max_glyph_height),
+                    // .b = b + @intToFloat(f32, self.atlas.max_glyph_height),
+                    // .b = t + 4.0 - @intToFloat(f32, self.atlas.max_glyph_height) / 2.0,
+                    .b = t - @intToFloat(f32, self.atlas.max_glyph_height) / 2.0,
+                    .l = l,
+                    .r = r,
+                }, .{
+                    .t = self.atlas.cursor_ty,
+                    .b = self.atlas.cursor_ty - self.atlas.cursor_h,
+                    .l = self.atlas.cursor_tx,
+                    .r = self.atlas.cursor_tx + self.atlas.cursor_w,
+                }, color));
+            }
+        }
+
+        // var iter = Rope.next_line(text);
+        // var i: u32 = 0;
+        // while (iter.line) |line| {
+        //     defer {
+        //         iter = Rope.next_line(iter.rest);
+        //         y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+        //     }
+
+        //     var t = y;
+        //     var b = y - @intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+        //     var l = starting_x;
+        //     var r = starting_x + self.atlas.max_glyph_width;
+
+        //     for (line) |char| {
+        //         const glyph = self.atlas.lookup_char(char);
+        //         r += glyph.advance;
+        //         i += 1;
+        //     }
+
+        //     const tl = math.float2(l, t);
+        //     const tr = math.float2(r, t);
+        //     const bl = math.float2(l, b);
+        //     const br = math.float2(r, b);
+
+        //     const txt = self.atlas.cursor_ty;
+        //     const txb = txt - self.atlas.cursor_h;
+        //     const txl = self.atlas.cursor_tx;
+        //     const txr = txl + self.atlas.cursor_w;
+        //     const tx_tl = math.float2(txl, txt);
+        //     const tx_tr = math.float2(txr, txt);
+        //     const tx_bl = math.float2(txl, txb);
+        //     const tx_br = math.float2(txr, txb);
+
+        //     try self.vertices.appendSlice(alloc, [_]Vertex{
+        //         // triangle 1
+        //         .{
+        //             .pos = tl,
+        //             .tex_coords = tx_tl,
+        //             .color = color,
+        //         },
+        //         .{
+        //             .pos = tr,
+        //             .tex_coords = tx_tr,
+        //             .color = color,
+        //         },
+        //         .{
+        //             .pos = bl,
+        //             .tex_coords = tx_bl,
+        //             .color = color,
+        //         },
+
+        //         // triangle 2
+        //         .{
+        //             .pos = tr,
+        //             .tex_coords = tx_tr,
+        //             .color = color,
+        //         },
+        //         .{
+        //             .pos = br,
+        //             .tex_coords = tx_br,
+        //             .color = color,
+        //         },
+        //         .{
+        //             .pos = bl,
+        //             .tex_coords = tx_bl,
+        //             .color = color,
+        //         },
+        //     });
+        // }
+    }
 
     pub fn draw(self: *Self, view: metal.MTKView) void {
         const command_buffer = self.queue.command_buffer();

@@ -9,6 +9,42 @@ pub fn is_tagged_pointer(id: objc.c.id) bool {
     return @bitCast(isize, @ptrToInt(id)) < 0;
 }
 
+pub const NSMutableArray = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn array() Self {
+        const Class = Self.get_class();
+        const arr_id = Class.msgSend(objc.c.id, objc.sel("array"), .{});
+        return Self.from_id(arr_id);
+    }
+
+    pub fn add_object(self: Self, obj: objc.Object) void {
+        self.obj.msgSend(void, objc.sel("addObject:"), .{obj});
+    }
+};
+
+pub const NSPasteboard = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn general_pasteboard() Self {
+        const Class = Self.get_class();
+        const id = Class.msgSend(objc.c.id, objc.sel("generalPasteboard"), .{});
+        return Self.from_id(id);
+    }
+
+    pub fn clear_contents(self: Self) void {
+        self.obj.msgSend(void, objc.sel("clearContents"), .{});
+    }
+
+    pub fn write_objects(self: Self, array: objc.Object) void {
+        self.obj.msgSend(void, objc.sel("writeObjects:"), .{array});
+    }
+};
+
 pub const NSEvent = struct {
     const Self = @This();
     obj: objc.Object,
@@ -538,6 +574,10 @@ fn DefineObject(comptime T: type) type {
 
         pub fn release(self: T) void {
             self.obj.msgSend(void, objc.sel("release"), .{});
+        }
+
+        pub fn retain(self: T) void {
+            self.obj.msgSend(void, objc.sel("retain"), .{});
         }
     };
 

@@ -8,6 +8,14 @@ const strutil = @import("./strutil.zig");
 pub const TextPos = struct {
     col: u32,
     line: u32,
+
+    pub fn cmp(a: TextPos, b: TextPos) enum { Less, Equal, Greater } {
+        if (a.line < b.line) return .Less;
+        if (a.line > b.line) return .Greater;
+        if (a.col < b.col) return .Less;
+        if (a.col > b.col) return .Greater;
+        return .Equal;
+    }
 };
 
 /// Data structure to make text editing operations more efficient for longer text.
@@ -37,7 +45,7 @@ pub const Rope = struct {
         _ = try self.nodes.insert(self.node_alloc, ArrayList(u8){}, null);
     }
 
-    fn next_line(text_: ?[]const u8) struct { line: ?[]const u8, rest: ?[]const u8, newline: bool } {
+    pub fn next_line(text_: ?[]const u8) struct { line: ?[]const u8, rest: ?[]const u8, newline: bool } {
         if (text_ == null or text_.?.len == 0) return .{ .line = null, .rest = null, .newline = false };
         const text = text_.?;
         var end: usize = 0;

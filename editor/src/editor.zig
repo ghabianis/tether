@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const print = std.debug.print;
 
 const objc = @import("zig-objc");
 const strutil = @import("./strutil.zig");
@@ -10,7 +11,7 @@ const Rope = rope.Rope;
 
 const Vim = @import("./vim.zig");
 
-const print = std.debug.print;
+const Clipboard = @import("./clipboard.zig");
 
 const Self = @This();
 
@@ -19,16 +20,19 @@ rope: Rope = Rope{},
 cursor: TextPos = .{ .line = 0, .col = 0 },
 draw_text: bool = false,
 mode: Vim.Mode = Vim.Mode.Normal,
+selection: ?Selection = null,
+clipboard: Clipboard = undefined,
 
 pub fn init(self: *Self) !void {
     try self.rope.init();
+    self.clipboard = Clipboard.init();
 }
 
 pub fn keydown(self: *Self, key: Vim.Key) !void {
     switch (self.mode) {
         .Insert => try self.keydown_insert(key),
         .Normal => try self.keydown_normal(key),
-        .Visual => try self.keydown_normal(key),
+        .Visual => try self.keydown_visual(key),
     }
 }
 
@@ -37,13 +41,13 @@ fn keydown_insert(self: *Self, key: Vim.Key) !void {
         .Char => |c| {
             try self.insert_char(c);
         },
-        .Up => {},
-        .Down => {},
+        .Up => self.up(),
+        .Down => self.down(),
         .Left => self.left(),
         .Right => self.right(),
         .Esc => {
             self.left();
-            self.mode = Vim.Mode.Normal;
+            self.switch_mode(.Normal);
         },
         .Shift => {},
         .Newline => try self.insert_char('\n'),
@@ -58,38 +62,40 @@ fn keydown_normal(self: *Self, key: Vim.Key) !void {
     switch (key) {
         .Char => |c| {
             switch (c) {
+                'v' => self.switch_mode(.Visual),
+
                 'h' => self.left(),
                 'l' => self.right(),
                 'k' => self.up(),
                 'j' => self.down(),
                 'i' => {
-                    self.mode = Vim.Mode.Insert;
+                    self.switch_mode(.Insert);
                 },
                 'a' => {
-                    self.mode = Vim.Mode.Insert;
+                    self.switch_mode(.Insert);
                     self.right();
                 },
                 'A' => {
-                    self.mode = Vim.Mode.Insert;
+                    self.switch_mode(.Insert);
                     self.end_of_line();
                 },
                 '$' => {
                     self.end_of_line();
                 },
                 'I' => {
-                    self.mode = Vim.Mode.Insert;
+                    self.switch_mode(.Insert);
                     self.start_of_line();
                 },
                 '0' => {
                     self.start_of_line();
                 },
                 'o' => {
-                    self.mode = Vim.Mode.Insert;
+                    self.switch_mode(.Insert);
                     self.end_of_line();
                     try self.insert_char('\n');
                 },
                 'O' => {
-                    self.mode = Vim.Mode.Insert;
+                    self.switch_mode(.Insert);
                     if (self.cursor.line == 0) {
                         const pos = .{ .line = 0, .col = 0 };
                         try self.insert_char_at(pos, '\n');
@@ -103,8 +109,8 @@ fn keydown_normal(self: *Self, key: Vim.Key) !void {
                 else => {},
             }
         },
-        .Up => {},
-        .Down => {},
+        .Up => self.up(),
+        .Down => self.down(),
         .Left => self.left(),
         .Right => self.right(),
         .Esc => {},
@@ -115,6 +121,98 @@ fn keydown_normal(self: *Self, key: Vim.Key) !void {
         .Backspace => self.left(),
         .Tab => {},
     }
+}
+
+fn visual_move(self: *Self, comptime func: *const fn (*Self) void) void {
+    print("PREV SEL: {any}\n", .{self.selection});
+
+    const prev_cursor = self.cursor;
+    func(self);
+    const next_cursor = self.cursor;
+
+    const prev_abs = @intCast(u32, self.rope.pos_to_idx(prev_cursor) orelse @panic("ohno"));
+    const next_abs = @intCast(u32, self.rope.pos_to_idx(next_cursor) orelse @panic("ohno"));
+
+    if (prev_abs <= next_abs) {
+        self.selection = .{ .start = if (self.selection) |sel| sel.start else prev_abs, .end = next_abs };
+    } else {
+        self.selection = .{ .start = next_abs, .end = if (self.selection) |sel| sel.end else prev_abs };
+    }
+    self.draw_text = true;
+
+    print("NEXT SEL: {any}\n", .{self.selection});
+}
+
+fn keydown_visual(self: *Self, key: Vim.Key) !void {
+    switch (key) {
+        .Char => |c| {
+            switch (c) {
+                'v' => self.switch_mode(.Normal),
+
+                'h' => self.visual_move(Self.left),
+                'l' => self.visual_move(Self.right),
+                'k' => self.visual_move(Self.up),
+                'j' => self.visual_move(Self.down),
+                'A' => {
+                    // TODO: move cursor to end of selection, wait for input, then replace selection
+                    // self.switch_mode(.Insert);
+                    // self.end_of_line();
+                    self.end_of_selection();
+                    @panic("TODO");
+                },
+                '$' => {
+                    self.end_of_line();
+                },
+                'I' => {
+                    // TODO: move cursor to start of selection, wait for input, then replace selection
+                    // self.switch_mode(.Insert);
+                    // self.end_of_line();
+                    self.start_of_selection();
+                    @panic("TODO");
+                },
+                '0' => {
+                    self.visual_move(Self.start_of_line);
+                },
+                'y' => {
+                    const sel = try self.get_selection(std.heap.c_allocator) orelse return;
+                    // defer std.heap.c_allocator.free(sel);
+                    print("COPYING TEXT!! {s}\n", .{sel});
+                    // defer std.heap.c_allocator.destroy(sel);
+                    self.clipboard.clear();
+                    self.clipboard.write_text(sel);
+                },
+                else => {},
+            }
+        },
+        .Up => self.visual_move(Self.up),
+        .Down => self.visual_move(Self.down),
+        .Left => self.visual_move(Self.left),
+        .Right => self.visual_move(Self.right),
+        .Esc => {
+            self.switch_mode(.Normal);
+        },
+        .Shift => {},
+        .Newline => {},
+        .Ctrl => {},
+        .Alt => {},
+        .Backspace => self.visual_move(Self.left),
+        .Tab => {},
+    }
+}
+
+pub fn switch_mode(self: *Self, mode: Vim.Mode) void {
+    if (self.mode == .Visual) {
+        self.selection = null;
+    }
+    if (mode == .Visual) {
+        const cursor_absolute_pos = @intCast(u32, self.rope.pos_to_idx(self.cursor) orelse @panic("SHIT!"));
+        self.selection = .{ .start = cursor_absolute_pos, .end = cursor_absolute_pos + 1 };
+    }
+    self.mode = mode;
+}
+
+pub fn yank(self: *Self) !void {
+    _ = self;
 }
 
 pub fn insert_char(self: *Self, c: u8) !void {
@@ -175,15 +273,35 @@ fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
     return if (line_node.data.items.len > 0 and !strutil.is_newline(line_node.data.items[line_node.data.items.len - 1])) @intCast(u32, line_node.data.items.len + 1) else @intCast(u32, line_node.data.items.len);
 }
 
+pub fn start_of_line(self: *Self) void {
+    self.cursor.col = 0;
+    self.draw_text = true;
+}
+
 pub fn end_of_line(self: *Self) void {
     var cur_node = self.rope.node_at_line(self.cursor.line) orelse @panic("No node");
     self.cursor.col = self.cursor_eol_for_mode(cur_node) -| 1;
     self.draw_text = true;
 }
 
-pub fn start_of_line(self: *Self) void {
-    self.cursor.col = 0;
-    self.draw_text = true;
+pub fn start_of_selection(self: *Self) void {
+    _ = self;
+    @panic("TODO!");
+}
+
+pub fn end_of_selection(self: *Self) void {
+    _ = self;
+    @panic("TODO!");
+}
+
+pub fn get_selection(self: *Self, alloc: Allocator) !?[]const u8 {
+    const sel = self.selection orelse return null;
+    // TODO: this is inefficient for large text
+    const ret = try alloc.alloc(u8, sel.len());
+    const str = try self.rope.as_str(alloc);
+    defer std.heap.c_allocator.destroy(str);
+    @memcpy(ret, str[sel.start..sel.end]);
+    return ret;
 }
 
 pub fn left(self: *Self) void {
@@ -278,6 +396,15 @@ pub fn filter_chars(in: []const u8, out: []u8) []u8 {
     }
     return out[0..len];
 }
+
+pub const Selection = struct {
+    start: u32,
+    end: u32,
+
+    pub fn len(self: Selection) u32 {
+        return self.end - self.start;
+    }
+};
 
 test "backspace simple" {
     var editor = Self{};
