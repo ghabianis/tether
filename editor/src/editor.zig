@@ -125,19 +125,47 @@ fn keydown_normal(self: *Self, key: Vim.Key) !void {
 
 fn visual_move(self: *Self, comptime func: *const fn (*Self) void) void {
     print("PREV SEL: {any}\n", .{self.selection});
-
     const prev_cursor = self.cursor;
-    func(self);
-    const next_cursor = self.cursor;
 
+    func(self);
+
+    const sel = self.selection orelse return;
+
+    const next_cursor = self.cursor;
     const prev_abs = @intCast(u32, self.rope.pos_to_idx(prev_cursor) orelse @panic("ohno"));
     const next_abs = @intCast(u32, self.rope.pos_to_idx(next_cursor) orelse @panic("ohno"));
 
-    if (prev_abs <= next_abs) {
-        self.selection = .{ .start = if (self.selection) |sel| sel.start else prev_abs, .end = next_abs };
-    } else {
-        self.selection = .{ .start = next_abs, .end = if (self.selection) |sel| sel.end else prev_abs };
+    if (prev_abs == sel.start and sel.end == sel.start + 1) {
+        if (next_abs > sel.start) {
+            self.selection = .{
+                .start = sel.start,
+                .end = next_abs,
+            };
+        } else {
+            self.selection = .{
+                .start = next_abs,
+                .end = sel.start + 1,
+            };
+        }
+    } else if (next_abs >= sel.start and next_abs < sel.end) {
+        const swap = prev_abs != sel.end -| 1;
+        self.selection = if (swap) .{
+            .start = next_abs,
+            .end = sel.end,
+        } else .{ .start = sel.start, .end = next_abs + 1 };
+    } else if (next_abs >= sel.end) {
+        const swap = prev_abs == sel.start;
+        self.selection = if (swap) .{
+            .start = sel.end -| 1,
+            .end = next_abs + 1,
+        } else .{
+            .start = sel.start,
+            .end = next_abs + 1,
+        };
+    } else if (next_abs < sel.start) {
+        self.selection = .{ .start = next_abs, .end = sel.end };
     }
+
     self.draw_text = true;
 
     print("NEXT SEL: {any}\n", .{self.selection});
@@ -263,8 +291,10 @@ pub fn backspace(self: *Self) !void {
 fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
     if (self.mode == .Normal) {
         if (line_node.data.items.len > 0) {
-            if (strutil.is_newline(line_node.data.items[line_node.data.items.len - 1])) {
-                return @intCast(u32, line_node.data.items.len -| 1);
+            const has_newline = strutil.is_newline(line_node.data.items[line_node.data.items.len - 1]);
+            if (line_node == self.rope.nodes.last or has_newline) {
+                if (has_newline) return @intCast(u32, line_node.data.items.len -| 1);
+                return @intCast(u32, line_node.data.items.len);
             }
         } else {
             return 0;

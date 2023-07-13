@@ -282,11 +282,11 @@ const Renderer = struct {
         return pipeline;
     }
 
-    pub fn build_cursor_geometry(self: *Self, y: f32, xx: f32, width: f32, glyph_origin_y: f32) [6]Vertex {
+    pub fn build_cursor_geometry(self: *Self, y: f32, xx: f32, width: f32) [6]Vertex {
+        const yy2 = y + self.atlas.ascent;
+        const bot2 = y - self.atlas.descent;
         var ret: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
 
-        const yy2 = y + @floatCast(f32, glyph_origin_y) + @intToFloat(f32, self.atlas.max_glyph_height);
-        const bot2 = y + @floatCast(f32, glyph_origin_y) - @intToFloat(f32, self.atlas.max_glyph_height) / 2.0;
         const tl = math.float2(xx, yy2);
         const tr = math.float2(xx + width, yy2);
         const br = math.float2(xx + width, bot2);
@@ -354,7 +354,7 @@ const Renderer = struct {
             };
 
             if (has_cursor) {
-                const cursor_vertices = self.build_cursor_geometry(y, xx, if (width == 0.0) @intToFloat(f32, self.atlas.max_glyph_width) else width, @floatCast(f32, glyph.rect.origin.y));
+                const cursor_vertices = self.build_cursor_geometry(y, xx, if (width == 0.0) @intToFloat(f32, self.atlas.max_glyph_width) else width);
                 try vertices.appendSlice(alloc, cursor_vertices[0..]);
             }
 
@@ -368,7 +368,8 @@ const Renderer = struct {
                 10, 13 => {
                     x = starting_x;
                     // y += -@intToFloat(f32, self.atlas.max_glyph_height);
-                    y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                    y -= self.atlas.descent + self.atlas.ascent;
                     line += 1;
                     col = 0;
                 },
@@ -403,7 +404,7 @@ const Renderer = struct {
 
         const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;
         if (has_cursor) {
-            const cursor_vertices = self.build_cursor_geometry(y, x, @intToFloat(f32, self.atlas.max_glyph_width), 0.0);
+            const cursor_vertices = self.build_cursor_geometry(y, x, @intToFloat(f32, self.atlas.max_glyph_width));
             try vertices.appendSlice(alloc, cursor_vertices[0..]);
         }
     }
@@ -424,8 +425,7 @@ const Renderer = struct {
 
         var i: u32 = 0;
         var line_state = false;
-        var t: f32 = 0.0;
-        var b: f32 = 0.0;
+        var yy: f32 = 0.0;
         var l: f32 = 0.0;
         var r: f32 = 0.0;
         for (text) |char| {
@@ -438,9 +438,8 @@ const Renderer = struct {
                     x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
                 } else if (strutil.is_newline(char)) {
                     x = starting_x;
-                    y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent - 3.5;
-                    // y -= @intToFloat(f32, self.atlas.max_glyph_height);
+                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                    y -= self.atlas.descent + self.atlas.ascent;
                 } else {
                     x += glyph.advance;
                 }
@@ -448,8 +447,7 @@ const Renderer = struct {
             }
 
             if (!line_state) {
-                t = y;
-                b = y - @intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                yy = y;
                 l = x;
                 // r = x + @intToFloat(f32, self.atlas.max_glyph_width);
                 r = x + glyph.advance;
@@ -462,9 +460,8 @@ const Renderer = struct {
                 x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
             } else if (strutil.is_newline(char)) {
                 x = starting_x;
-                y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent - 3.5;
-                // y -= @intToFloat(f32, self.atlas.max_glyph_height);
+                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                y -= self.atlas.descent + self.atlas.ascent;
             } else {
                 x += glyph.advance;
             }
@@ -474,10 +471,8 @@ const Renderer = struct {
                 line_state = false;
 
                 try self.vertices.appendSlice(alloc, &Vertex.square(.{
-                    .t = t + @intToFloat(f32, self.atlas.max_glyph_height),
-                    // .b = b + @intToFloat(f32, self.atlas.max_glyph_height),
-                    // .b = t + 4.0 - @intToFloat(f32, self.atlas.max_glyph_height) / 2.0,
-                    .b = t - @intToFloat(f32, self.atlas.max_glyph_height) / 2.0,
+                    .t = yy + self.atlas.ascent,
+                    .b = yy - self.atlas.descent,
                     .l = l,
                     .r = r,
                 }, .{
@@ -488,76 +483,6 @@ const Renderer = struct {
                 }, color));
             }
         }
-
-        // var iter = Rope.next_line(text);
-        // var i: u32 = 0;
-        // while (iter.line) |line| {
-        //     defer {
-        //         iter = Rope.next_line(iter.rest);
-        //         y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-        //     }
-
-        //     var t = y;
-        //     var b = y - @intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-        //     var l = starting_x;
-        //     var r = starting_x + self.atlas.max_glyph_width;
-
-        //     for (line) |char| {
-        //         const glyph = self.atlas.lookup_char(char);
-        //         r += glyph.advance;
-        //         i += 1;
-        //     }
-
-        //     const tl = math.float2(l, t);
-        //     const tr = math.float2(r, t);
-        //     const bl = math.float2(l, b);
-        //     const br = math.float2(r, b);
-
-        //     const txt = self.atlas.cursor_ty;
-        //     const txb = txt - self.atlas.cursor_h;
-        //     const txl = self.atlas.cursor_tx;
-        //     const txr = txl + self.atlas.cursor_w;
-        //     const tx_tl = math.float2(txl, txt);
-        //     const tx_tr = math.float2(txr, txt);
-        //     const tx_bl = math.float2(txl, txb);
-        //     const tx_br = math.float2(txr, txb);
-
-        //     try self.vertices.appendSlice(alloc, [_]Vertex{
-        //         // triangle 1
-        //         .{
-        //             .pos = tl,
-        //             .tex_coords = tx_tl,
-        //             .color = color,
-        //         },
-        //         .{
-        //             .pos = tr,
-        //             .tex_coords = tx_tr,
-        //             .color = color,
-        //         },
-        //         .{
-        //             .pos = bl,
-        //             .tex_coords = tx_bl,
-        //             .color = color,
-        //         },
-
-        //         // triangle 2
-        //         .{
-        //             .pos = tr,
-        //             .tex_coords = tx_tr,
-        //             .color = color,
-        //         },
-        //         .{
-        //             .pos = br,
-        //             .tex_coords = tx_br,
-        //             .color = color,
-        //         },
-        //         .{
-        //             .pos = bl,
-        //             .tex_coords = tx_bl,
-        //             .color = color,
-        //         },
-        //     });
-        // }
     }
 
     pub fn draw(self: *Self, view: metal.MTKView) void {

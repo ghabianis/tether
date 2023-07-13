@@ -25,6 +25,8 @@ pub const kCGImageAlphaPremultipliedLast: u32 = 1;
 
 pub extern "C" fn CTFontGetAscent(font: CTFontRef) metal.CGFloat;
 pub extern "C" fn CTFontGetDescent(font: CTFontRef) metal.CGFloat;
+pub extern "C" fn CTFontGetLeading(font: CTFontRef) metal.CGFloat;
+pub extern "C" fn CTFontGetBoundingBox(font: CTFontRef) metal.CGRect;
 pub extern "C" fn CTFontGetGlyphsForCharacters(font: CTFontRef, characters: [*]const Unichar, glyphs: [*]metal.CGGlyph, count: CFIndex) bool;
 pub extern "C" fn CTFontGetBoundingRectsForGlyphs(font: CTFontRef, orientation: CTFontOrientation, glyphs: [*]const metal.CGGlyph, bounding_rects: [*]metal.CGRect, count: CFIndex) metal.CGRect;
 pub extern "C" fn CTFontCopyGraphicsFont(font: CTFontRef, attributes: ?[*]const objc.c.id) objc.c.id;

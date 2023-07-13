@@ -50,7 +50,10 @@ pub const Atlas = struct {
     width: i32,
     height: i32,
     baseline: f32,
+    ascent: f32,
     descent: f32,
+    leading: f32,
+    lowest_origin: f32,
 
     cursor_tx: f32,
     cursor_ty: f32,
@@ -64,6 +67,8 @@ pub const Atlas = struct {
         const baseline_nsnumber = metal.NSNumber.from_id(ct.CTFontCopyAttribute(font.value, ct.kCTFontBaselineAdjustAttribute));
         defer baseline_nsnumber.release();
         const baseline = baseline_nsnumber.float_value();
+        const bb = ct.CTFontGetBoundingBox(font.value);
+        _ = bb;
 
         return Self{
             .font = font,
@@ -76,7 +81,10 @@ pub const Atlas = struct {
             .width = undefined,
             .height = undefined,
             .baseline = @floatCast(f32, baseline),
+            .ascent = @floatCast(f32, ct.CTFontGetAscent(font.value)),
             .descent = undefined,
+            .leading = @floatCast(f32, ct.CTFontGetLeading(font.value)),
+            .lowest_origin = undefined,
 
             .cursor_tx = undefined,
             .cursor_ty = undefined,
@@ -131,6 +139,7 @@ pub const Atlas = struct {
         var h: i32 = 0;
         var max_w: i32 = 0;
         var max_advance: i32 = 0;
+        var lowest_origin: f32 = 0.0;
         {
             var i: usize = 32;
             while (i < Self.CHAR_END) : (i += 1) {
@@ -139,6 +148,7 @@ pub const Atlas = struct {
                 const glyph_rect: metal.CGRect = glyph_rects[j];
                 const advance = self.get_advance(cgfont, glyph);
                 max_advance = @max(max_advance, advance);
+                lowest_origin = @min(lowest_origin, @floatCast(f32, glyph_rect.origin.y));
 
                 if (roww + glyph_rect.widthCeil() + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     w = @max(w, roww);
@@ -166,6 +176,7 @@ pub const Atlas = struct {
         self.max_glyph_width = max_w;
         w = @max(w, roww);
         h += rowh;
+        h += max_h;
 
         const tex_w = w;
         const tex_h = h;
@@ -187,7 +198,7 @@ pub const Atlas = struct {
         ct.CGContextSetFontSize(ctx, self.font_size);
 
         // self.descent = @intToFloat(f32, ct.CGFontGetDescent(cgfont));
-        self.descent = @floatCast(f32, ct.CTFontGetDescent(self.font.value));
+        self.descent = @ceil(@floatCast(f32, ct.CTFontGetDescent(self.font.value)));
 
         ct.CGContextSetShouldAntialias(ctx, true);
         ct.CGContextSetAllowsAntialiasing(ctx, true);
@@ -206,7 +217,6 @@ pub const Atlas = struct {
 
         var ox: i32 = 0;
         var oy: i32 = 10;
-
         {
             var i: usize = 32;
             while (i < CHAR_END) : (i += 1) {

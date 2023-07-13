@@ -1,22 +1,22 @@
 #+title: Todo
 
-* TODO Now [2/5]
+* TODO Now [5/7]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
 ** TODO Vim [0/3]
-*** TODO modes [2/4]
+*** TODO modes [3/3]
 **** DONE normal [2/2]
 ***** DONE up/down/left/right
 ***** DONE $, 0, A, a
-**** TODO visual [2/4]
+**** DONE visual [0/0]
 ***** DONE selection logic
 ***** DONE yank
-***** TODO draw selection [3/4]
+***** DONE draw selection [0/0]
 ****** DONE compute top/left/bot/right points for each line
 ****** DONE push those as vertices
 ****** DONE reuse the text/cursor render pass to draw. use cursor texel coords
-****** TODO Fix selection overlap bug
-***** TODO bug: selection changing sides not correct
+****** DONE Fix selection overlap bug
+***** DONE bug: selection changing sides not correct
 **** DONE insert
 *** TODO chaining movements
 *** TODO moving up/down lines preserves word column when possible
@@ -31,7 +31,8 @@ pub fn start_of_line(self: *Self) void {
 if cursor is at =s= in =start_of_line= (index 7)
 
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
-** TODO Cursor position messed up for glyphs with low origin
+** DONE bug: THE FUCKING CURSOR HEIGHT TEXTURE THING IS WRONG
+** DONE bug: Cursor position messed up for glyphs with low origin
 ex:
 #+begin_src
 FUCK(y
@@ -39,7 +40,7 @@ o__y
 #+end_src
 if cursor is on =(=, =y=, or =_= then the cursor is
 translated a bit lower
-** TODO last line cursor bug
+** DONE bug: last line cursor
 #+begin_src
 FUCK THIS SHIT MAN
 nice
@@ -47,6 +48,7 @@ no
 way
 #+end_src
 On the last line in normal mode the cursor can still be on the newline, why?
+** TODO bug: semicolon texture fucked up
 
 * TODO Later [0/3]
 ** TODO Egui for debugging?
