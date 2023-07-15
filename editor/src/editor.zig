@@ -56,28 +56,16 @@ pub fn handle_cmd_insert(self: *Self, cmd: Vim.Cmd) !void {
 
 pub fn handle_cmd_normal(self: *Self, cmd: Vim.Cmd) !void {
     switch (cmd.kind) {
-        .Delete => {},
-        .Change => {},
-        .Yank => {},
+        .Delete => |the_mv| try self.handle_cmd_move(.Delete, cmd.repeat, the_mv),
+        .Change => |the_mv| try self.handle_cmd_move(.Change, cmd.repeat, the_mv),
+        .Yank => |the_mv| try self.handle_cmd_move(.Yank, cmd.repeat, the_mv),
 
-        .Move => |kind| {
-            if (cmd.repeat > 1) {
-                self.move_repeated(cmd.repeat, kind);
-            } else {
-                self.move(kind);
-            }
-        },
+        .Move => |kind| self.move(cmd.repeat, kind),
         .SwitchMove => |swm| {
             self.switch_mode(swm.mode);
-            if (cmd.repeat > 1) {
-                self.move_repeated(cmd.repeat, swm.mv);
-            } else {
-                self.move(swm.mv);
-            }
+            self.move(cmd.repeat, swm.mv);
         },
-        .SwitchMode => |m| {
-            self.switch_mode(m);
-        },
+        .SwitchMode => |m| self.switch_mode(m),
         .NewLine => |nwl| {
             if (nwl.switch_mode) self.switch_mode(.Insert);
             if (!nwl.up) {
@@ -103,19 +91,108 @@ pub fn handle_cmd_normal(self: *Self, cmd: Vim.Cmd) !void {
 }
 
 pub fn handle_cmd_visual(self: *Self, cmd: Vim.Cmd) !void {
-    _ = cmd;
-    _ = self;
+    switch (cmd.kind) {
+        .Delete => |the_mv| try self.handle_cmd_move(.Delete, cmd.repeat, the_mv),
+        .Change => |the_mv| try self.handle_cmd_move(.Change, cmd.repeat, the_mv),
+        .Yank => |the_mv| try self.handle_cmd_move(.Yank, cmd.repeat, the_mv),
+
+        .Move => |kind| {
+            self.visual_move(.{ .repeat = cmd.repeat, .kind = kind });
+        },
+        .SwitchMove => |swm| {
+            self.switch_mode(swm.mode);
+            self.move(cmd.repeat, swm.mv);
+        },
+        .SwitchMode => |m| self.switch_mode(m),
+        .NewLine => |nwl| {
+            if (nwl.switch_mode) self.switch_mode(.Insert);
+            if (!nwl.up) {
+                self.end_of_line();
+                try self.insert_char('\n');
+            } else {
+                if (self.cursor.line == 0) {
+                    const pos = .{ .line = 0, .col = 0 };
+                    try self.insert_char_at(pos, '\n');
+                    self.cursor = pos;
+                } else {
+                    self.up();
+                    self.end_of_line();
+                    try self.insert_char('\n');
+                }
+            }
+        },
+        .Undo => {},
+        .Redo => {},
+
+        .Custom => {},
+    }
+}
+
+fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16, the_move: ?Vim.Move) !void {
+    if (comptime cmd_kind == .Change) self.switch_mode(.Insert);
+    // TODO: Handle visual mode
+    if (self.vim.mode == .Visual) {
+        if (comptime cmd_kind == .Yank) {}
+        self.switch_mode(.Normal);
+        return;
+    }
+
+    if (the_move) |mv| {
+        var i: usize = 0;
+        while (i < repeat) : (i += 1) {
+            const prev_cursor = self.cursor;
+            self.move(mv.repeat, mv.kind);
+            const next_cursor = self.cursor;
+
+            const prev_abs = self.rope.pos_to_idx(prev_cursor) orelse unreachable;
+            const next_abs = self.rope.pos_to_idx(next_cursor) orelse unreachable;
+
+            const end_offset: usize = if (mv.kind.is_delete_end_inclusive()) 1 else 0;
+            const start = @min(prev_abs, next_abs);
+            const end = @max(prev_abs, next_abs) + end_offset;
+
+            if (comptime cmd_kind == .Change or cmd_kind == .Delete) {
+                try self.rope.remove_text(start, end);
+            } else {
+                try self.yank(.{ .start = @intCast(u32, start), .end = @intCast(u32, end) });
+            }
+
+            if (next_abs >= prev_abs) {
+                self.cursor = prev_cursor;
+            } else {
+                self.cursor = next_cursor;
+            }
+        }
+        return;
+    }
+
+    var i: usize = 0;
+    while (i < repeat) : (i += 1) {
+        if (comptime cmd_kind == .Change or cmd_kind == .Delete) {
+            try self.delete_line();
+        } else {
+            try self.yank_line(self.cursor.line);
+        }
+    }
+}
+
+fn move(self: *Self, amount: u16, mv: Vim.MoveKind) void {
+    if (amount > 1) {
+        self.move_repeated(amount, mv);
+    } else {
+        self.move_impl(mv);
+    }
 }
 
 fn move_repeated(self: *Self, amount: u16, mv: Vim.MoveKind) void {
     var i: u16 = 0;
     while (i < amount) : (i += 1) {
         i += 1;
-        self.move(mv);
+        self.move_impl(mv);
     }
 }
 
-fn move(self: *Self, mv: Vim.MoveKind) void {
+fn move_impl(self: *Self, mv: Vim.MoveKind) void {
     switch (mv) {
         .Left => self.left(),
         .Right => self.right(),
@@ -162,133 +239,71 @@ fn handle_key_insert(self: *Self, key: Key) !void {
     }
 }
 
-fn keydown_normal(self: *Self, key: Key) !void {
-    switch (key) {
-        .Char => |c| {
-            switch (c) {
-                'v' => self.switch_mode(.Visual),
+// fn keydown_visual(self: *Self, key: Key) !void {
+//     switch (key) {
+//         .Char => |c| {
+//             switch (c) {
+//                 'v' => self.switch_mode(.Normal),
 
-                'h' => self.left(),
-                'l' => self.right(),
-                'k' => self.up(),
-                'j' => self.down(),
-                'i' => {
-                    self.switch_mode(.Insert);
-                },
-                'a' => {
-                    self.switch_mode(.Insert);
-                    self.right();
-                },
-                'A' => {
-                    self.switch_mode(.Insert);
-                    self.end_of_line();
-                },
-                '$' => {
-                    self.end_of_line();
-                },
-                'I' => {
-                    self.switch_mode(.Insert);
-                    self.start_of_line();
-                },
-                '0' => {
-                    self.start_of_line();
-                },
-                'o' => {
-                    self.switch_mode(.Insert);
-                    self.end_of_line();
-                    try self.insert_char('\n');
-                },
-                'O' => {
-                    self.switch_mode(.Insert);
-                    if (self.cursor.line == 0) {
-                        const pos = .{ .line = 0, .col = 0 };
-                        try self.insert_char_at(pos, '\n');
-                        self.cursor = pos;
-                    } else {
-                        self.up();
-                        self.end_of_line();
-                        try self.insert_char('\n');
-                    }
-                },
-                else => {},
-            }
-        },
-        .Up => self.up(),
-        .Down => self.down(),
-        .Left => self.left(),
-        .Right => self.right(),
-        .Esc => {},
-        .Shift => {},
-        .Newline => {},
-        .Ctrl => {},
-        .Alt => {},
-        .Backspace => self.left(),
-        .Tab => {},
-    }
-}
+//                 'h' => self.visual_move(Self.left),
+//                 'l' => self.visual_move(Self.right),
+//                 'k' => self.visual_move(Self.up),
+//                 'j' => self.visual_move(Self.down),
+//                 'A' => {
+//                     // TODO: move cursor to end of selection, wait for input, then replace selection
+//                     // self.switch_mode(.Insert);
+//                     // self.end_of_line();
+//                     self.end_of_selection();
+//                     @panic("TODO");
+//                 },
+//                 '$' => {
+//                     self.end_of_line();
+//                 },
+//                 'I' => {
+//                     // TODO: move cursor to start of selection, wait for input, then replace selection
+//                     // self.switch_mode(.Insert);
+//                     // self.end_of_line();
+//                     self.start_of_selection();
+//                     @panic("TODO");
+//                 },
+//                 '0' => {
+//                     self.visual_move(Self.start_of_line);
+//                 },
+//                 'y' => {
+//                     const sel = try self.get_selection(std.heap.c_allocator) orelse return;
+//                     // defer std.heap.c_allocator.free(sel);
+//                     print("COPYING TEXT!! {s}\n", .{sel});
+//                     // defer std.heap.c_allocator.destroy(sel);
+//                     self.clipboard.clear();
+//                     self.clipboard.write_text(sel);
+//                 },
+//                 else => {},
+//             }
+//         },
+//         .Up => self.visual_move(Self.up),
+//         .Down => self.visual_move(Self.down),
+//         .Left => self.visual_move(Self.left),
+//         .Right => self.visual_move(Self.right),
+//         .Esc => {
+//             self.switch_mode(.Normal);
+//         },
+//         .Shift => {},
+//         .Newline => {},
+//         .Ctrl => {},
+//         .Alt => {},
+//         .Backspace => self.visual_move(Self.left),
+//         .Tab => {},
+//     }
+// }
 
-fn keydown_visual(self: *Self, key: Key) !void {
-    switch (key) {
-        .Char => |c| {
-            switch (c) {
-                'v' => self.switch_mode(.Normal),
-
-                'h' => self.visual_move(Self.left),
-                'l' => self.visual_move(Self.right),
-                'k' => self.visual_move(Self.up),
-                'j' => self.visual_move(Self.down),
-                'A' => {
-                    // TODO: move cursor to end of selection, wait for input, then replace selection
-                    // self.switch_mode(.Insert);
-                    // self.end_of_line();
-                    self.end_of_selection();
-                    @panic("TODO");
-                },
-                '$' => {
-                    self.end_of_line();
-                },
-                'I' => {
-                    // TODO: move cursor to start of selection, wait for input, then replace selection
-                    // self.switch_mode(.Insert);
-                    // self.end_of_line();
-                    self.start_of_selection();
-                    @panic("TODO");
-                },
-                '0' => {
-                    self.visual_move(Self.start_of_line);
-                },
-                'y' => {
-                    const sel = try self.get_selection(std.heap.c_allocator) orelse return;
-                    // defer std.heap.c_allocator.free(sel);
-                    print("COPYING TEXT!! {s}\n", .{sel});
-                    // defer std.heap.c_allocator.destroy(sel);
-                    self.clipboard.clear();
-                    self.clipboard.write_text(sel);
-                },
-                else => {},
-            }
-        },
-        .Up => self.visual_move(Self.up),
-        .Down => self.visual_move(Self.down),
-        .Left => self.visual_move(Self.left),
-        .Right => self.visual_move(Self.right),
-        .Esc => {
-            self.switch_mode(.Normal);
-        },
-        .Shift => {},
-        .Newline => {},
-        .Ctrl => {},
-        .Alt => {},
-        .Backspace => self.visual_move(Self.left),
-        .Tab => {},
-    }
-}
-
-fn visual_move(self: *Self, comptime func: *const fn (*Self) void) void {
+fn visual_move(self: *Self, mv: Vim.Move) void {
     print("PREV SEL: {any}\n", .{self.selection});
     const prev_cursor = self.cursor;
 
-    func(self);
+    var i: usize = 0;
+    while (i < mv.repeat) : (i += 1) {
+        self.move_impl(mv.kind);
+    }
 
     const sel = self.selection orelse return;
 
@@ -345,8 +360,21 @@ pub fn switch_mode(self: *Self, mode: Vim.Mode) void {
     self.vim.mode = mode;
 }
 
-pub fn yank(self: *Self) !void {
-    _ = self;
+pub fn yank(self: *Self, range: Selection) !void {
+    const sel = try self.get_selection_impl(std.heap.c_allocator, range) orelse return;
+    defer std.heap.c_allocator.free(sel);
+    self.yank_text(sel);
+}
+
+fn yank_text(self: *Self, txt: []const u8) void {
+    print("COPYING TEXT!! {s}\n", .{txt});
+    self.clipboard.clear();
+    self.clipboard.write_text(txt);
+}
+
+fn yank_line(self: *Self, line: u32) !void {
+    const the_line = self.rope.node_at_line(line) orelse return;
+    self.yank_text(the_line.data.items);
 }
 
 pub fn insert_char(self: *Self, c: u8) !void {
@@ -392,6 +420,15 @@ pub fn backspace(self: *Self) !void {
     self.draw_text = true;
 }
 
+pub fn delete_line(self: *Self) !void {
+    try self.rope.remove_line(self.cursor.line);
+    if (self.cursor.line >= self.rope.nodes.len) {
+        self.cursor.line = self.cursor.line -| 1;
+    }
+
+    self.cursor.col = if (self.rope.nodes.last) |last| @min(self.cursor_eol_for_mode(last) -| 1, self.cursor.col) else 0;
+}
+
 /// Normal mode -> cursor can only be on the last char
 /// Visual/Insert mode -> cursor is allowed to be in front of the last char
 fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
@@ -432,6 +469,10 @@ pub fn end_of_selection(self: *Self) void {
 
 pub fn get_selection(self: *Self, alloc: Allocator) !?[]const u8 {
     const sel = self.selection orelse return null;
+    return self.get_selection_impl(alloc, sel);
+}
+
+fn get_selection_impl(self: *Self, alloc: Allocator, sel: Selection) !?[]const u8 {
     // TODO: this is inefficient for large text
     const ret = try alloc.alloc(u8, sel.len());
     const str = try self.rope.as_str(alloc);
@@ -566,3 +607,5 @@ test "backspace line" {
     try std.testing.expectEqualStrings("HEY MAN!", str);
     str = try editor.text(std.heap.c_allocator);
 }
+
+// 012345

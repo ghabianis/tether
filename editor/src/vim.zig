@@ -14,16 +14,19 @@ pub const DEFAULT_PARSERS = [_]CommandParser{
     CommandParser.comptime_new(.Move, "<mv>", .{ .normal = true, .visual = true }),
 
     // delete
-    CommandParser.comptime_new(.Delete, "<#> d <mv>", .{ .normal = true, .visual = true }),
-    CommandParser.comptime_new(.Delete, "<#> d d", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.Delete, "<#> d <mv>", .{ .normal = true }),
+    CommandParser.comptime_new(.Delete, "<#> d d", .{ .normal = true }),
+    CommandParser.comptime_new(.Delete, "<#> d", .{ .visual = true }),
 
     // change
-    CommandParser.comptime_new(.Change, "<#> c <mv>", .{ .normal = true, .visual = true }),
-    CommandParser.comptime_new(.Change, "<#> c c", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.Change, "<#> c <mv>", .{ .normal = true }),
+    CommandParser.comptime_new(.Change, "<#> c c", .{ .normal = true }),
+    CommandParser.comptime_new(.Change, "<#> c", .{ .visual = true }),
 
     // yank
-    CommandParser.comptime_new(.Yank, "<#> y <mv>", .{ .normal = true, .visual = true }),
-    CommandParser.comptime_new(.Yank, "<#> y y", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.Yank, "<#> y <mv>", .{ .normal = true }),
+    CommandParser.comptime_new(.Yank, "<#> y y", .{ .normal = true }),
+    CommandParser.comptime_new(.Yank, "<#> y", .{ .visual = true }),
 
     // switch moves
     CommandParser.comptime_new(.SwitchMove, "<#> I", .{ .normal = true, .visual = true }),
@@ -70,7 +73,7 @@ pub fn parse(self: *Self, key: Key) ?Cmd {
         var p = &self.parsers[i];
         const res = p.parse(self.mode, key);
         if (res == .Accept) {
-            const result = p.result();
+            const result = p.result(self.mode);
             self.reset_parser();
             return result;
         }
@@ -180,6 +183,13 @@ pub const MoveKind = union(enum) {
     Word: bool,
     BeginningWord: bool,
     EndWord: bool,
+
+    pub fn is_delete_end_inclusive(self: *const MoveKind) bool {
+        return switch (self.*) {
+            .Left, .Right, .Up, .Down, .LineStart, .LineEnd, .ParagraphBegin, .ParagraphEnd, .Start, .End, .Word, .BeginningWord, .EndWord => false,
+            .Find => true,
+        };
+    }
 };
 
 pub const CustomCmd = struct {};
@@ -451,8 +461,27 @@ pub const CommandParser = struct {
         }
     }
 
-    fn result_dcy(self: *CommandParser, comptime dcy_kind: CmdTag) Cmd {
+    fn result_dcy(self: *CommandParser, comptime dcy_kind: CmdTag, mode: Mode) Cmd {
         const amount = self.inputs[0].Number.result() orelse 1;
+        if (mode == .Visual) {
+            const kind = k: {
+                switch (dcy_kind) {
+                    inline else => {
+                        if (dcy_kind == .Delete) {
+                            break :k .{ .Delete = null };
+                        } else if (dcy_kind == .Change) {
+                            break :k .{ .Change = null };
+                        } else if (dcy_kind == .Yank) {
+                            break :k .{ .Yank = null };
+                        } else {
+                            @panic("Invalid input");
+                        }
+                    },
+                }
+            };
+            return .{ .repeat = amount, .kind = kind };
+        }
+
         switch (@as(InputEnum, self.inputs[2])) {
             .Move => {
                 const move = self.inputs[2].Move.result();
@@ -495,7 +524,7 @@ pub const CommandParser = struct {
         }
     }
 
-    pub fn result(self: *CommandParser) Cmd {
+    pub fn result(self: *CommandParser, mode: Mode) Cmd {
         switch (self.tag) {
             .Move => {
                 const move = self.inputs[0].Move.result() orelse @panic("oopts");
@@ -503,13 +532,13 @@ pub const CommandParser = struct {
             },
 
             .Delete => {
-                return self.result_dcy(.Delete);
+                return self.result_dcy(.Delete, mode);
             },
             .Change => {
-                return self.result_dcy(.Change);
+                return self.result_dcy(.Change, mode);
             },
             .Yank => {
-                return self.result_dcy(.Yank);
+                return self.result_dcy(.Yank, mode);
             },
 
             .SwitchMove => {
@@ -667,7 +696,7 @@ pub const CommandParser = struct {
     }
 };
 
-fn test_parse(alloc: Allocator, vim: *Self, input: []const u8, expected: Cmd) !Cmd {
+fn test_parse(alloc: Allocator, vim: *Self, input: []const u8, expected: ?Cmd) !?Cmd {
     if (vim.parsers.len == 0) {
         try vim.init(alloc, DEFAULT_PARSERS[0..]);
     }
@@ -677,7 +706,8 @@ fn test_parse(alloc: Allocator, vim: *Self, input: []const u8, expected: Cmd) !C
             return cmd;
         }
     }
-    @panic("Failed to parse");
+    try std.testing.expectEqualDeep(expected, null);
+    return null;
 }
 
 test "valid mode" {
@@ -694,7 +724,7 @@ test "valid mode" {
     try std.testing.expectEqual(false, metadata.is_valid_mode(mode));
 }
 
-test "command parse" {
+test "command parse normal" {
     const alloc = std.heap.c_allocator;
     var self = Self{};
 
@@ -732,4 +762,16 @@ test "command parse" {
     _ = try test_parse(alloc, &self, "20i", .{ .repeat = 1, .kind = .{ .SwitchMode = .Insert } });
     _ = try test_parse(alloc, &self, "v", .{ .repeat = 1, .kind = .{ .SwitchMode = .Visual } });
     _ = try test_parse(alloc, &self, "200v", .{ .repeat = 1, .kind = .{ .SwitchMode = .Visual } });
+}
+
+test "command parse visual" {
+    const alloc = std.heap.c_allocator;
+    var self = Self{};
+
+    self.mode = .Visual;
+
+    _ = try test_parse(alloc, &self, "12d", .{ .repeat = 12, .kind = .{ .Delete = null } });
+    _ = try test_parse(alloc, &self, "d", .{ .repeat = 1, .kind = .{ .Delete = null } });
+    _ = try test_parse(alloc, &self, "c", .{ .repeat = 1, .kind = .{ .Change = null } });
+    _ = try test_parse(alloc, &self, "y", .{ .repeat = 1, .kind = .{ .Yank = null } });
 }

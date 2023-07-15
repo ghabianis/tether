@@ -34,7 +34,9 @@ pub const Rope = struct {
     node_alloc: Allocator = std.heap.c_allocator,
     text_alloc: Allocator = std.heap.c_allocator,
 
+    /// The length of the text in the rope
     len: usize = 0,
+
     /// each node represents a line of text
     /// TODO: this is inefficient for text with many small lines. easy
     /// optimization for now is to have a separate kind of node just for
@@ -167,6 +169,12 @@ pub const Rope = struct {
         return i + @intCast(usize, pos.col);
     }
 
+    pub fn remove_line(self: *Self, line: u32) !void {
+        var node = self.node_at_line(line) orelse unreachable;
+
+        try self.remove_node(node);
+    }
+
     pub fn remove_text(self: *Self, text_start_: usize, text_end: usize) !void {
         var text_start = text_start_;
         var index_result = self.char_index_node(text_start, null) orelse return;
@@ -216,6 +224,7 @@ pub const Rope = struct {
     }
 
     fn remove_node(self: *Self, node: *Node) !void {
+        self.len -= node.data.items.len;
         _ = self.nodes.remove(node);
         try node.free(self.node_alloc);
     }
@@ -231,6 +240,15 @@ pub const Rope = struct {
         }
 
         return str;
+    }
+
+    /// TODO: Make this more efficient
+    pub fn as_str_range(self: *const Self, alloc: Allocator, start: u32, end: u32) ![]const u8 {
+        const ret = try alloc.alloc(u8, end - start);
+        const str = try self.as_str(alloc);
+        defer alloc.free(str);
+        @memcpy(ret, str[start..end]);
+        return ret;
     }
 };
 
