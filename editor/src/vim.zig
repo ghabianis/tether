@@ -35,7 +35,7 @@ pub const DEFAULT_PARSERS = [_]CommandParser{
     CommandParser.comptime_new(.NewLine, "<#> o", .{ .normal = true, .visual = true }),
 
     // switch mode
-    CommandParser.comptime_new(.SwitchMode, "<#> i", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.SwitchMode, "<#> i", .{ .normal = true, .visual = false }),
     CommandParser.comptime_new(.SwitchMode, "<#> v", .{
         .normal = true,
     }),
@@ -210,18 +210,18 @@ pub const CommandParser = struct {
 
     const InputEnum = enum {
         Number,
-        Char,
+        Key,
         Move,
     };
     const Input = union(InputEnum) {
         Number: NumberParser,
-        Char: CharParser,
+        Key: KeyParser,
         Move: MoveParser,
 
         fn parse(self: *Input, key: Key) ParseResult {
             switch (@as(InputEnum, self.*)) {
                 .Number => return self.Number.parse(key),
-                .Char => return self.Char.parse(key),
+                .Key => return self.Key.parse(key),
                 .Move => return self.Move.parse(key),
             }
         }
@@ -237,8 +237,8 @@ pub const CommandParser = struct {
         fn reset(self: *Input) void {
             switch (@as(InputEnum, self.*)) {
                 .Number => self.Number.reset(),
-                .Char => {
-                    self.* = .{ .Char = .{ .desired = self.Char.desired } };
+                .Key => {
+                    self.* = .{ .Key = .{ .desired = self.Key.desired } };
                 },
                 .Move => self.Move.reset(),
             }
@@ -286,37 +286,44 @@ pub const CommandParser = struct {
         }
     };
     /// TODO: Rename to KeyParser, because this should match keys and not just chars
-    const CharParser = struct {
-        desired: u8,
+    const KeyParser = struct {
+        desired: Key,
 
-        fn result(self: *CharParser) u8 {
+        fn result(self: *KeyParser) Key {
             return self.desired;
         }
 
-        fn parse(self: *CharParser, key: Key) ParseResult {
-            switch (key) {
-                .Char => |c| {
-                    if (c == self.desired) return .Accept;
-                },
-                else => {},
-            }
+        fn parse(self: *KeyParser, key: Key) ParseResult {
+            if (key.eq(self.desired)) return .Accept;
             return .Fail;
         }
     };
     const MoveParser = struct {
         num: NumberParser = .{},
-        chars: [4]u8 = [_]u8{0} ** 4,
-        char_len: u8 = 0,
+        keys: [4]Key = [_]Key{.Up} ** 4,
+        data: PackedData = .{},
         kind: ?MoveKind = null,
-        num_done: bool = false,
-        optional: bool = false,
+
+        /// packed struct for additional fields so
+        /// the struct can be packed into 16 bytes
+        const PackedData = packed struct {
+            keys_len: u6 = 0,
+            _num_done: u1 = 0,
+            _optional: u1 = 0,
+
+            fn optional(self: PackedData) bool {
+                return self._optional != 0;
+            }
+
+            fn num_done(self: PackedData) bool {
+                return self._num_done != 0;
+            }
+        };
 
         fn reset(self: *MoveParser) void {
             self.num.reset();
-            self.char_len = 0;
+            self.data = .{};
             self.kind = null;
-            self.num_done = false;
-            self.optional = false;
         }
 
         fn result(self: *MoveParser) ?Move {
@@ -326,42 +333,50 @@ pub const CommandParser = struct {
         }
 
         fn parse(self: *MoveParser, key: Key) ParseResult {
-            if (!self.num_done) {
+            if (!self.data.num_done()) {
                 const res = self.num.parse(key);
                 switch (res) {
                     .Accept => {
-                        self.num_done = true;
+                        self.data._num_done = 1;
                         return .Continue;
                     },
                     .Fail => {
-                        self.num_done = true;
+                        self.data._num_done = 1;
                         self.num.reset();
                     },
                     .Continue => return .Continue,
                     .TryTransition => {
-                        self.num_done = true;
+                        self.data._num_done = 1;
                     },
                     .Skip => {
-                        self.num_done = true;
+                        self.data._num_done = 1;
                     },
                 }
             }
 
-            if (self.char_len >= self.chars.len) {
+            if (self.data.keys_len >= self.keys.len) {
                 @panic("Too long!");
             }
 
-            const c = key.as_char() orelse return .Fail;
-            self.chars[self.char_len] = c;
+            self.keys[self.data.keys_len] = key;
 
-            switch (self.chars[0]) {
-                '0' => return self.set_kind(.LineStart),
-                '$' => return self.set_kind(.LineEnd),
-                'h' => return self.set_kind(.Left),
-                'j' => return self.set_kind(.Down),
-                'k' => return self.set_kind(.Up),
-                'l' => return self.set_kind(.Right),
-                else => return if (self.optional) .Skip else .Fail,
+            switch (self.keys[0]) {
+                .Char => |c| {
+                    switch (c) {
+                        '0' => return self.set_kind(.LineStart),
+                        '$' => return self.set_kind(.LineEnd),
+                        'h' => return self.set_kind(.Left),
+                        'j' => return self.set_kind(.Down),
+                        'k' => return self.set_kind(.Up),
+                        'l' => return self.set_kind(.Right),
+                        else => return if (self.data.optional()) .Skip else .Fail,
+                    }
+                },
+                .Up => return self.set_kind(.Up),
+                .Down => return self.set_kind(.Down),
+                .Left => return self.set_kind(.Left),
+                .Right => return self.set_kind(.Right),
+                else => return if (self.data.optional()) .Skip else .Fail,
             }
         }
 
@@ -458,7 +473,7 @@ pub const CommandParser = struct {
                 };
                 return .{ .repeat = amount, .kind = kind };
             },
-            .Char => {
+            .Key => {
                 const kind = k: {
                     switch (dcy_kind) {
                         inline else => {
@@ -498,31 +513,41 @@ pub const CommandParser = struct {
             },
 
             .SwitchMove => {
-                const move_char = self.inputs[1].Char.result();
+                const move_char = self.inputs[1].Key.result();
                 switch (move_char) {
-                    'I' => {
-                        return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineStart, .mode = .Insert } } };
+                    .Char => |c| {
+                        switch (c) {
+                            'I' => {
+                                return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineStart, .mode = .Insert } } };
+                            },
+                            'A' => {
+                                return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineEnd, .mode = .Insert } } };
+                            },
+                            'a' => {
+                                return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .Right, .mode = .Insert } } };
+                            },
+                            else => @panic("Unknown char: " ++ [_]u8{c}),
+                        }
                     },
-                    'A' => {
-                        return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineEnd, .mode = .Insert } } };
-                    },
-                    'a' => {
-                        return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .Right, .mode = .Insert } } };
-                    },
-                    else => @panic("Unknown char: " ++ [_]u8{move_char}),
+                    else => @panic("Unknown key"),
                 }
             },
             .SwitchMode => {
-                const move_char = self.inputs[1].Char.result();
+                const move_char = self.inputs[1].Key.result();
                 const kind: Mode = b: {
                     switch (move_char) {
-                        'i' => {
-                            break :b .Insert;
+                        .Char => |c| {
+                            switch (c) {
+                                'i' => {
+                                    break :b .Insert;
+                                },
+                                'v' => {
+                                    break :b .Visual;
+                                },
+                                else => @panic("Unknown char: " ++ [_]u8{c}),
+                            }
                         },
-                        'v' => {
-                            break :b .Visual;
-                        },
-                        else => @panic("Unknown char: " ++ [_]u8{move_char}),
+                        else => @panic("Unknown key"),
                     }
                 };
                 return .{
@@ -532,16 +557,21 @@ pub const CommandParser = struct {
             },
             .NewLine => {
                 const amount = self.inputs[0].Number.result() orelse 1;
-                const move_char = self.inputs[1].Char.result();
+                const move_char = self.inputs[1].Key.result();
                 const newline: NewLine = b: {
                     switch (move_char) {
-                        'O' => {
-                            break :b .{ .up = true, .switch_mode = true };
+                        .Char => |c| {
+                            switch (c) {
+                                'O' => {
+                                    break :b .{ .up = true, .switch_mode = true };
+                                },
+                                'o' => {
+                                    break :b .{ .up = false, .switch_mode = true };
+                                },
+                                else => @panic("Bad char: " ++ [_]u8{c}),
+                            }
                         },
-                        'o' => {
-                            break :b .{ .up = false, .switch_mode = true };
-                        },
-                        else => @panic("Bad char: " ++ [_]u8{move_char}),
+                        else => @panic("Bad key"),
                     }
                 };
                 return .{
@@ -610,7 +640,7 @@ pub const CommandParser = struct {
                 if (token.len != 1) {
                     @panic("Invalid token");
                 }
-                var val: Input = .{ .Char = .{ .desired = token[0] } };
+                var val: Input = .{ .Key = .{ .desired = .{ .Char = token[0] } } };
                 input[i] = val;
                 i += 1;
                 continue;

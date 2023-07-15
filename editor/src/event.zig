@@ -42,7 +42,11 @@ pub const Key = union(KeyEnum) {
     }
 
     pub fn eq(a: Key, b: Key) bool {
-        return a == b;
+        if (@as(KeyEnum, a) != @as(KeyEnum, b)) return false;
+        if (@as(KeyEnum, a) == KeyEnum.Char) {
+            return a.Char == b.Char;
+        }
+        return false;
     }
 
     pub fn from_nsevent(event: metal.NSEvent) ?Key {

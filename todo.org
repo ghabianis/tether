@@ -3,23 +3,8 @@
 * TODO Now [5/7]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
-** TODO Vim [2/6]
-*** DONE modes [0/0]
-**** DONE normal [2/2]
-***** DONE up/down/left/right
-***** DONE $, 0, A, a
-**** DONE visual [0/0]
-***** DONE selection logic
-***** DONE yank
-***** DONE draw selection [0/0]
-****** DONE compute top/left/bot/right points for each line
-****** DONE push those as vertices
-****** DONE reuse the text/cursor render pass to draw. use cursor texel coords
-****** DONE Fix selection overlap bug
-***** DONE bug: selection changing sides not correct
-**** DONE insert
-*** DONE chaining movements
-*** TODO support =Key= and not just chars (change CharParser to KeyParser)
+** TODO Vim [1/4]
+*** DONE support =Key= and not just chars (change CharParser to KeyParser)
 *** TODO support delete/change/yank + movement
 *** TODO support w/W/b/B/e/E
 *** TODO moving up/down lines preserves word column when possible
@@ -36,7 +21,7 @@ if cursor is at =s= in =start_of_line= (index 7)
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
 ** TODO bug: semicolon texture fucked up
 
-* TODO Later [0/3]
+* TODO Later [0/4]
 ** TODO Egui for debugging?
 ** TODO create deinit function for renderer/editor
 ** TODO curves svg etc
