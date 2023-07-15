@@ -10,8 +10,9 @@ const TextPos = rope.TextPos;
 const Rope = rope.Rope;
 
 const Vim = @import("./vim.zig");
-
 const Clipboard = @import("./clipboard.zig");
+const Event = @import("./event.zig");
+const Key = Event.Key;
 
 const Self = @This();
 
@@ -19,24 +20,130 @@ rope: Rope = Rope{},
 // TODO: also store the node of the current line
 cursor: TextPos = .{ .line = 0, .col = 0 },
 draw_text: bool = false,
-mode: Vim.Mode = Vim.Mode.Normal,
+vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
 
 pub fn init(self: *Self) !void {
     try self.rope.init();
+    try self.vim.init(std.heap.c_allocator, &Vim.DEFAULT_PARSERS);
     self.clipboard = Clipboard.init();
 }
 
-pub fn keydown(self: *Self, key: Vim.Key) !void {
-    switch (self.mode) {
-        .Insert => try self.keydown_insert(key),
-        .Normal => try self.keydown_normal(key),
-        .Visual => try self.keydown_visual(key),
+pub fn keydown(self: *Self, key: Key) !void {
+    if (self.vim.parse(key)) |cmd| {
+        switch (self.vim.mode) {
+            .Insert => try self.handle_cmd_insert(cmd),
+            .Normal => try self.handle_cmd_normal(cmd),
+            .Visual => try self.handle_cmd_visual(cmd),
+        }
+        return;
+    }
+
+    if (self.vim.mode == .Insert) {
+        try self.handle_key_insert(key);
     }
 }
 
-fn keydown_insert(self: *Self, key: Vim.Key) !void {
+pub fn handle_cmd_insert(self: *Self, cmd: Vim.Cmd) !void {
+    switch (cmd.kind) {
+        .SwitchMode => |m| {
+            self.switch_mode(m);
+        },
+        else => unreachable,
+    }
+}
+
+pub fn handle_cmd_normal(self: *Self, cmd: Vim.Cmd) !void {
+    switch (cmd.kind) {
+        .Delete => {},
+        .Change => {},
+        .Yank => {},
+
+        .Move => |kind| {
+            if (cmd.repeat > 1) {
+                self.move_repeated(cmd.repeat, kind);
+            } else {
+                self.move(kind);
+            }
+        },
+        .SwitchMove => |swm| {
+            self.switch_mode(swm.mode);
+            if (cmd.repeat > 1) {
+                self.move_repeated(cmd.repeat, swm.mv);
+            } else {
+                self.move(swm.mv);
+            }
+        },
+        .SwitchMode => |m| {
+            self.switch_mode(m);
+        },
+        .NewLine => |nwl| {
+            if (nwl.switch_mode) self.switch_mode(.Insert);
+            if (!nwl.up) {
+                self.end_of_line();
+                try self.insert_char('\n');
+            } else {
+                if (self.cursor.line == 0) {
+                    const pos = .{ .line = 0, .col = 0 };
+                    try self.insert_char_at(pos, '\n');
+                    self.cursor = pos;
+                } else {
+                    self.up();
+                    self.end_of_line();
+                    try self.insert_char('\n');
+                }
+            }
+        },
+        .Undo => {},
+        .Redo => {},
+
+        .Custom => {},
+    }
+}
+
+pub fn handle_cmd_visual(self: *Self, cmd: Vim.Cmd) !void {
+    _ = cmd;
+    _ = self;
+}
+
+fn move_repeated(self: *Self, amount: u16, mv: Vim.MoveKind) void {
+    var i: u16 = 0;
+    while (i < amount) : (i += 1) {
+        i += 1;
+        self.move(mv);
+    }
+}
+
+fn move(self: *Self, mv: Vim.MoveKind) void {
+    switch (mv) {
+        .Left => self.left(),
+        .Right => self.right(),
+        .Up => self.up(),
+        .Down => self.down(),
+        .LineStart => self.start_of_line(),
+        .LineEnd => self.end_of_line(),
+        // Bool is true if find in reverse
+        .Find => |f| {
+            _ = f;
+        },
+        .ParagraphBegin => {},
+        .ParagraphEnd => {},
+        .Start => {},
+        .End => {},
+        .Word => |rev| {
+            _ = rev;
+        },
+        .BeginningWord => |rev| {
+            _ = rev;
+        },
+        .EndWord => |rev| {
+            _ = rev;
+        },
+    }
+}
+
+fn handle_key_insert(self: *Self, key: Key) !void {
     switch (key) {
         .Char => |c| {
             try self.insert_char(c);
@@ -45,10 +152,7 @@ fn keydown_insert(self: *Self, key: Vim.Key) !void {
         .Down => self.down(),
         .Left => self.left(),
         .Right => self.right(),
-        .Esc => {
-            self.left();
-            self.switch_mode(.Normal);
-        },
+        .Esc => unreachable,
         .Shift => {},
         .Newline => try self.insert_char('\n'),
         .Ctrl => {},
@@ -58,7 +162,7 @@ fn keydown_insert(self: *Self, key: Vim.Key) !void {
     }
 }
 
-fn keydown_normal(self: *Self, key: Vim.Key) !void {
+fn keydown_normal(self: *Self, key: Key) !void {
     switch (key) {
         .Char => |c| {
             switch (c) {
@@ -123,55 +227,7 @@ fn keydown_normal(self: *Self, key: Vim.Key) !void {
     }
 }
 
-fn visual_move(self: *Self, comptime func: *const fn (*Self) void) void {
-    print("PREV SEL: {any}\n", .{self.selection});
-    const prev_cursor = self.cursor;
-
-    func(self);
-
-    const sel = self.selection orelse return;
-
-    const next_cursor = self.cursor;
-    const prev_abs = @intCast(u32, self.rope.pos_to_idx(prev_cursor) orelse @panic("ohno"));
-    const next_abs = @intCast(u32, self.rope.pos_to_idx(next_cursor) orelse @panic("ohno"));
-
-    if (prev_abs == sel.start and sel.end == sel.start + 1) {
-        if (next_abs > sel.start) {
-            self.selection = .{
-                .start = sel.start,
-                .end = next_abs,
-            };
-        } else {
-            self.selection = .{
-                .start = next_abs,
-                .end = sel.start + 1,
-            };
-        }
-    } else if (next_abs >= sel.start and next_abs < sel.end) {
-        const swap = prev_abs != sel.end -| 1;
-        self.selection = if (swap) .{
-            .start = next_abs,
-            .end = sel.end,
-        } else .{ .start = sel.start, .end = next_abs + 1 };
-    } else if (next_abs >= sel.end) {
-        const swap = prev_abs == sel.start;
-        self.selection = if (swap) .{
-            .start = sel.end -| 1,
-            .end = next_abs + 1,
-        } else .{
-            .start = sel.start,
-            .end = next_abs + 1,
-        };
-    } else if (next_abs < sel.start) {
-        self.selection = .{ .start = next_abs, .end = sel.end };
-    }
-
-    self.draw_text = true;
-
-    print("NEXT SEL: {any}\n", .{self.selection});
-}
-
-fn keydown_visual(self: *Self, key: Vim.Key) !void {
+fn keydown_visual(self: *Self, key: Key) !void {
     switch (key) {
         .Char => |c| {
             switch (c) {
@@ -228,15 +284,65 @@ fn keydown_visual(self: *Self, key: Vim.Key) !void {
     }
 }
 
+fn visual_move(self: *Self, comptime func: *const fn (*Self) void) void {
+    print("PREV SEL: {any}\n", .{self.selection});
+    const prev_cursor = self.cursor;
+
+    func(self);
+
+    const sel = self.selection orelse return;
+
+    const next_cursor = self.cursor;
+    const prev_abs = @intCast(u32, self.rope.pos_to_idx(prev_cursor) orelse @panic("ohno"));
+    const next_abs = @intCast(u32, self.rope.pos_to_idx(next_cursor) orelse @panic("ohno"));
+
+    if (prev_abs == sel.start and sel.end == sel.start + 1) {
+        if (next_abs > sel.start) {
+            self.selection = .{
+                .start = sel.start,
+                .end = next_abs,
+            };
+        } else {
+            self.selection = .{
+                .start = next_abs,
+                .end = sel.start + 1,
+            };
+        }
+    } else if (next_abs >= sel.start and next_abs < sel.end) {
+        const swap = prev_abs != sel.end -| 1;
+        self.selection = if (swap) .{
+            .start = next_abs,
+            .end = sel.end,
+        } else .{ .start = sel.start, .end = next_abs + 1 };
+    } else if (next_abs >= sel.end) {
+        const swap = prev_abs == sel.start;
+        self.selection = if (swap) .{
+            .start = sel.end -| 1,
+            .end = next_abs + 1,
+        } else .{
+            .start = sel.start,
+            .end = next_abs + 1,
+        };
+    } else if (next_abs < sel.start) {
+        self.selection = .{ .start = next_abs, .end = sel.end };
+    }
+
+    self.draw_text = true;
+
+    print("NEXT SEL: {any}\n", .{self.selection});
+}
+
 pub fn switch_mode(self: *Self, mode: Vim.Mode) void {
-    if (self.mode == .Visual) {
+    if (self.vim.mode == .Visual) {
         self.selection = null;
     }
     if (mode == .Visual) {
         const cursor_absolute_pos = @intCast(u32, self.rope.pos_to_idx(self.cursor) orelse @panic("SHIT!"));
         self.selection = .{ .start = cursor_absolute_pos, .end = cursor_absolute_pos + 1 };
+    } else if (self.vim.mode == .Insert and mode == .Normal) {
+        self.left();
     }
-    self.mode = mode;
+    self.vim.mode = mode;
 }
 
 pub fn yank(self: *Self) !void {
@@ -289,7 +395,7 @@ pub fn backspace(self: *Self) !void {
 /// Normal mode -> cursor can only be on the last char
 /// Visual/Insert mode -> cursor is allowed to be in front of the last char
 fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
-    if (self.mode == .Normal) {
+    if (self.vim.mode == .Normal) {
         if (line_node.data.items.len > 0) {
             const has_newline = strutil.is_newline(line_node.data.items[line_node.data.items.len - 1]);
             if (line_node == self.rope.nodes.last or has_newline) {

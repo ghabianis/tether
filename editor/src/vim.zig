@@ -1,58 +1,705 @@
 const std = @import("std");
-const metal = @import("./metal.zig");
+const BitSet = std.bit_set.DynamicBitSetUnmanaged;
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
-const strutil = @import("./strutil.zig");
+const ArrayList = std.ArrayListUnmanaged;
 
-pub const Mode = enum {
-    Normal,
-    Insert,
-    Visual,
+const metal = @import("./metal.zig");
+const strutil = @import("./strutil.zig");
+const Key = @import("./event.zig").Key;
+
+const Self = @This();
+pub const DEFAULT_PARSERS = [_]CommandParser{
+    // move
+    CommandParser.comptime_new(.Move, "<mv>", .{ .normal = true, .visual = true }),
+
+    // delete
+    CommandParser.comptime_new(.Delete, "<#> d <mv>", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.Delete, "<#> d d", .{ .normal = true, .visual = true }),
+
+    // change
+    CommandParser.comptime_new(.Change, "<#> c <mv>", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.Change, "<#> c c", .{ .normal = true, .visual = true }),
+
+    // yank
+    CommandParser.comptime_new(.Yank, "<#> y <mv>", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.Yank, "<#> y y", .{ .normal = true, .visual = true }),
+
+    // switch moves
+    CommandParser.comptime_new(.SwitchMove, "<#> I", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.SwitchMove, "<#> A", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.SwitchMove, "<#> a", .{ .normal = true, .visual = true }),
+
+    // newline
+    CommandParser.comptime_new(.NewLine, "<#> O", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.NewLine, "<#> o", .{ .normal = true, .visual = true }),
+
+    // switch mode
+    CommandParser.comptime_new(.SwitchMode, "<#> i", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.SwitchMode, "<#> v", .{
+        .normal = true,
+    }),
 };
 
-pub const Key = union(enum) {
-    Char: u8,
-    Up,
-    Down,
+mode: Mode = .Normal,
+
+parsers: []CommandParser = &[_]CommandParser{},
+failed_parsers: BitSet = .{},
+
+pub fn init(self: *Self, alloc: Allocator, parsers: []const CommandParser) !void {
+    self.parsers = try std.heap.c_allocator.alloc(CommandParser, parsers.len);
+    var index: usize = 0;
+    var i: usize = 0;
+    while (i < parsers.len) {
+        self.parsers[index] = try parsers[i].copy(std.heap.c_allocator);
+        index += 1;
+        i += 1;
+    }
+    self.failed_parsers = try BitSet.initEmpty(alloc, self.parsers.len);
+}
+
+pub fn parse(self: *Self, key: Key) ?Cmd {
+    if (key == .Esc) {
+        self.reset_parser();
+        return .{ .repeat = 1, .kind = .{ .SwitchMode = .Normal } };
+    }
+
+    var i: usize = 0;
+    while (i < self.parsers.len) : (i += 1) {
+        if (self.failed_parsers.isSet(i)) continue;
+        var p = &self.parsers[i];
+        const res = p.parse(self.mode, key);
+        if (res == .Accept) {
+            const result = p.result();
+            self.reset_parser();
+            return result;
+        }
+        if (res == .Fail) {
+            self.failed_parsers.set(i);
+        }
+    }
+
+    if (self.failed_parsers.count() == self.parsers.len) {
+        self.reset_parser();
+    }
+
+    return null;
+}
+
+fn reset_parser(self: *Self) void {
+    for (self.parsers) |*p| {
+        p.reset();
+    }
+    self.failed_parsers.setRangeValue(.{ .start = 0, .end = self.parsers.len }, false);
+}
+
+pub const Mode = enum(u8) {
+    Insert = 1,
+    Normal = 2,
+    Visual = 4,
+};
+
+pub const ValidMode = struct {
+    insert: bool = false,
+    normal: bool = false,
+    visual: bool = false,
+};
+
+const FailError = error{ Continue, Reset };
+
+pub const Cmd = struct {
+    repeat: u16 = 1,
+    kind: CmdKind,
+};
+
+pub const CmdKindEnum = enum {
+    Delete,
+    Change,
+    Yank,
+
+    Move,
+    SwitchMove,
+    SwitchMode,
+    NewLine,
+    Undo,
+    Redo,
+
+    Custom,
+};
+
+pub const CmdTag = union(CmdKindEnum) {
+    Delete,
+    Change,
+    Yank,
+
+    Move,
+    SwitchMove,
+    SwitchMode,
+    NewLine,
+    Undo,
+    Redo,
+
+    Custom: []const u8,
+};
+
+pub const CmdKind = union(CmdKindEnum) {
+    Delete: ?Move,
+    Change: ?Move,
+    Yank: ?Move,
+
+    Move: MoveKind,
+    SwitchMove: struct { mv: MoveKind, mode: Mode },
+    SwitchMode: Mode,
+    NewLine: NewLine,
+    Undo,
+    Redo,
+
+    Custom: *CustomCmd,
+};
+
+pub const NewLine = struct { up: bool, switch_mode: bool };
+
+pub const Move = struct {
+    kind: MoveKind,
+    repeat: u16,
+};
+
+pub const MoveKind = union(enum) {
     Left,
     Right,
-    Esc,
-    Shift,
-    Newline,
-    Ctrl,
-    Alt,
-    Backspace,
-    Tab,
+    Up,
+    Down,
+    LineStart,
+    LineEnd,
+    // Bool is true if find in reverse
+    Find: struct { char: u8, reverse: bool },
+    ParagraphBegin,
+    ParagraphEnd,
+    Start,
+    End,
+    Word: bool,
+    BeginningWord: bool,
+    EndWord: bool,
+};
 
-    pub fn from_nsevent(event: metal.NSEvent) ?Key {
-        var in_char_buf = [_]u8{0} ** 128;
-        const nschars = event.characters() orelse return null;
-        if (nschars.to_c_string(&in_char_buf)) |chars| {
-            const len = strutil.cstring_len(chars);
-            if (len > 1) @panic("TODO: handle multi-char input");
-            // var out_char_buf = [_]u8{0} ** 128;
-            // const filtered_chars = Editor.filter_chars(chars[0..len], out_char_buf[0..128]);
-            // try self.editor.insert(self.editor.cursor, filtered_chars);
+pub const CustomCmd = struct {};
 
-            const char = chars[0];
+pub const CommandParser = struct {
+    const Self = @This();
 
-            print("CHAR: {d} {c}\n", .{ char, char });
-            switch (char) {
-                27 => return Key.Esc,
-                127 => return Key.Backspace,
-                else => return Key{ .Char = char },
+    inputs: []Input,
+    data: Metadata,
+    tag: CmdTag,
+
+    const Metadata = packed struct {
+        insert_mode: u1,
+        normal_mode: u1,
+        visual_mode: u1,
+        _pad: u1 = 0,
+        idx: u4 = 0,
+
+        fn is_valid_mode(self: Metadata, mode: Mode) bool {
+            return (@bitCast(u8, self) & 0b00000111) & @bitCast(u8, @enumToInt(mode)) != 0;
+        }
+
+        pub fn from_valid_modes(modes: ValidMode) Metadata {
+            var ret: Metadata = .{ .idx = 0, .insert_mode = if (modes.insert) 1 else 0, .normal_mode = if (modes.normal) 1 else 0, .visual_mode = if (modes.visual) 1 else 0 };
+            return ret;
+        }
+    };
+
+    const InputEnum = enum {
+        Number,
+        Char,
+        Move,
+    };
+    const Input = union(InputEnum) {
+        Number: NumberParser,
+        Char: CharParser,
+        Move: MoveParser,
+
+        fn parse(self: *Input, key: Key) ParseResult {
+            switch (@as(InputEnum, self.*)) {
+                .Number => return self.Number.parse(key),
+                .Char => return self.Char.parse(key),
+                .Move => return self.Move.parse(key),
             }
         }
 
-        const keycode = event.keycode();
-        switch (keycode) {
-            123 => return Key.Left,
-            124 => return Key.Right,
-            125 => return Key.Down,
-            126 => return Key.Up,
-            else => print("Unknown keycode: {d}\n", .{keycode}),
+        fn copy(self: *const Input) Input {
+            switch (self.*) {
+                .Number => return .{ .Number = .{} },
+                .Char => return .{ .Char = .{ .desired = self.Char.desired } },
+                .Move => return .{ .Move = .{} },
+            }
         }
 
-        return null;
+        fn reset(self: *Input) void {
+            switch (@as(InputEnum, self.*)) {
+                .Number => self.Number.reset(),
+                .Char => {
+                    self.* = .{ .Char = .{ .desired = self.Char.desired } };
+                },
+                .Move => self.Move.reset(),
+            }
+        }
+    };
+    const ParseResult = enum { Accept, Fail, Continue, TryTransition, Skip };
+
+    /// TODO: Rename to AmountParser because this is technically for amounts e.g. 20j, where 0 is not allowed
+    const NumberParser = struct {
+        amount: u16 = 0,
+
+        fn result(self: *NumberParser) ?u16 {
+            return if (self.amount == 0) null else self.amount;
+        }
+
+        fn parse(self: *NumberParser, key: Key) ParseResult {
+            switch (key) {
+                .Char => |c| {
+                    switch (c) {
+                        '0' => {
+                            if (self.amount == 0) return .Skip;
+                            self.amount *= 10;
+                            return .Continue;
+                        },
+                        '1', '2', '3', '4', '5', '6', '7', '8', '9' => {
+                            self.amount *= 10;
+                            self.amount += c - 48;
+                            return .Continue;
+                        },
+                        else => {
+                            if (self.amount == 0) return .Skip;
+                            return .TryTransition;
+                        },
+                    }
+                },
+                else => {
+                    if (self.amount == 0) return .Skip;
+                    return .TryTransition;
+                },
+            }
+        }
+
+        fn reset(self: *NumberParser) void {
+            self.amount = 0;
+        }
+    };
+    /// TODO: Rename to KeyParser, because this should match keys and not just chars
+    const CharParser = struct {
+        desired: u8,
+
+        fn result(self: *CharParser) u8 {
+            return self.desired;
+        }
+
+        fn parse(self: *CharParser, key: Key) ParseResult {
+            switch (key) {
+                .Char => |c| {
+                    if (c == self.desired) return .Accept;
+                },
+                else => {},
+            }
+            return .Fail;
+        }
+    };
+    const MoveParser = struct {
+        num: NumberParser = .{},
+        chars: [4]u8 = [_]u8{0} ** 4,
+        char_len: u8 = 0,
+        kind: ?MoveKind = null,
+        num_done: bool = false,
+        optional: bool = false,
+
+        fn reset(self: *MoveParser) void {
+            self.num.reset();
+            self.char_len = 0;
+            self.kind = null;
+            self.num_done = false;
+            self.optional = false;
+        }
+
+        fn result(self: *MoveParser) ?Move {
+            const kind = self.kind orelse return null;
+            const amount = self.num.result() orelse 1;
+            return .{ .kind = kind, .repeat = amount };
+        }
+
+        fn parse(self: *MoveParser, key: Key) ParseResult {
+            if (!self.num_done) {
+                const res = self.num.parse(key);
+                switch (res) {
+                    .Accept => {
+                        self.num_done = true;
+                        return .Continue;
+                    },
+                    .Fail => {
+                        self.num_done = true;
+                        self.num.reset();
+                    },
+                    .Continue => return .Continue,
+                    .TryTransition => {
+                        self.num_done = true;
+                    },
+                    .Skip => {
+                        self.num_done = true;
+                    },
+                }
+            }
+
+            if (self.char_len >= self.chars.len) {
+                @panic("Too long!");
+            }
+
+            const c = key.as_char() orelse return .Fail;
+            self.chars[self.char_len] = c;
+
+            switch (self.chars[0]) {
+                '0' => return self.set_kind(.LineStart),
+                '$' => return self.set_kind(.LineEnd),
+                'h' => return self.set_kind(.Left),
+                'j' => return self.set_kind(.Down),
+                'k' => return self.set_kind(.Up),
+                'l' => return self.set_kind(.Right),
+                else => return if (self.optional) .Skip else .Fail,
+            }
+        }
+
+        fn set_kind(self: *MoveParser, kind: MoveKind) ParseResult {
+            self.kind = kind;
+            return .Accept;
+        }
+    };
+
+    pub fn new(tag: CmdTag, inputs: []Input, metadata: Metadata) CommandParser {
+        return .{
+            .inputs = inputs,
+            .data = metadata,
+            .tag = tag,
+        };
+    }
+
+    pub fn reset(self: *CommandParser) void {
+        var i: usize = 0;
+        while (i < self.inputs.len) {
+            var input = &self.inputs[i];
+            input.reset();
+            i += 1;
+        }
+        self.data.idx = 0;
+    }
+
+    pub fn copy(self: *const CommandParser, alloc: Allocator) !CommandParser {
+        var cpy = CommandParser{
+            .data = self.data,
+            .tag = self.tag,
+            .inputs = try alloc.alloc(Input, self.inputs.len),
+        };
+
+        var i: usize = 0;
+        while (i < self.inputs.len) {
+            // var input = &self.inputs[i];
+            // cpy.inputs[i] = input.copy();
+            cpy.inputs[i] = self.inputs[i];
+            i += 1;
+        }
+
+        return cpy;
+    }
+
+    fn is_valid_mode(self: *CommandParser, mode: Mode) bool {
+        _ = mode;
+        _ = self;
+        // @ptrCast(u8, self.data + s)
+        return true;
+    }
+
+    pub fn parse(self: *CommandParser, mode: Mode, key: Key) ParseResult {
+        if (!self.data.is_valid_mode(mode)) return .Fail;
+        if (self.data.idx >= self.inputs.len) return .Fail;
+
+        var parser = &self.inputs[self.data.idx];
+        const res = parser.parse(key);
+
+        switch (res) {
+            .Accept => {
+                self.data.idx += 1;
+                if (self.data.idx >= self.inputs.len) return .Accept;
+                return .Continue;
+            },
+            .Skip, .TryTransition => {
+                self.data.idx += 1;
+                return self.parse(mode, key);
+            },
+            .Fail => return .Fail,
+            .Continue => return .Continue,
+        }
+    }
+
+    fn result_dcy(self: *CommandParser, comptime dcy_kind: CmdTag) Cmd {
+        const amount = self.inputs[0].Number.result() orelse 1;
+        switch (@as(InputEnum, self.inputs[2])) {
+            .Move => {
+                const move = self.inputs[2].Move.result();
+                const kind = k: {
+                    switch (dcy_kind) {
+                        inline else => {
+                            if (dcy_kind == .Delete) {
+                                break :k .{ .Delete = move };
+                            } else if (dcy_kind == .Change) {
+                                break :k .{ .Change = move };
+                            } else if (dcy_kind == .Yank) {
+                                break :k .{ .Yank = move };
+                            } else {
+                                @panic("Invalid input");
+                            }
+                        },
+                    }
+                };
+                return .{ .repeat = amount, .kind = kind };
+            },
+            .Char => {
+                const kind = k: {
+                    switch (dcy_kind) {
+                        inline else => {
+                            if (dcy_kind == .Delete) {
+                                break :k .{ .Delete = null };
+                            } else if (dcy_kind == .Change) {
+                                break :k .{ .Change = null };
+                            } else if (dcy_kind == .Yank) {
+                                break :k .{ .Yank = null };
+                            } else {
+                                @panic("Invalid input");
+                            }
+                        },
+                    }
+                };
+                return .{ .repeat = amount, .kind = kind };
+            },
+            else => @panic("Invalid input"),
+        }
+    }
+
+    pub fn result(self: *CommandParser) Cmd {
+        switch (self.tag) {
+            .Move => {
+                const move = self.inputs[0].Move.result() orelse @panic("oopts");
+                return .{ .repeat = move.repeat, .kind = .{ .Move = move.kind } };
+            },
+
+            .Delete => {
+                return self.result_dcy(.Delete);
+            },
+            .Change => {
+                return self.result_dcy(.Change);
+            },
+            .Yank => {
+                return self.result_dcy(.Yank);
+            },
+
+            .SwitchMove => {
+                const move_char = self.inputs[1].Char.result();
+                switch (move_char) {
+                    'I' => {
+                        return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineStart, .mode = .Insert } } };
+                    },
+                    'A' => {
+                        return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineEnd, .mode = .Insert } } };
+                    },
+                    'a' => {
+                        return .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .Right, .mode = .Insert } } };
+                    },
+                    else => @panic("Unknown char: " ++ [_]u8{move_char}),
+                }
+            },
+            .SwitchMode => {
+                const move_char = self.inputs[1].Char.result();
+                const kind: Mode = b: {
+                    switch (move_char) {
+                        'i' => {
+                            break :b .Insert;
+                        },
+                        'v' => {
+                            break :b .Visual;
+                        },
+                        else => @panic("Unknown char: " ++ [_]u8{move_char}),
+                    }
+                };
+                return .{
+                    .repeat = 1,
+                    .kind = .{ .SwitchMode = kind },
+                };
+            },
+            .NewLine => {
+                const amount = self.inputs[0].Number.result() orelse 1;
+                const move_char = self.inputs[1].Char.result();
+                const newline: NewLine = b: {
+                    switch (move_char) {
+                        'O' => {
+                            break :b .{ .up = true, .switch_mode = true };
+                        },
+                        'o' => {
+                            break :b .{ .up = false, .switch_mode = true };
+                        },
+                        else => @panic("Bad char: " ++ [_]u8{move_char}),
+                    }
+                };
+                return .{
+                    .repeat = amount,
+                    .kind = .{ .NewLine = newline },
+                };
+            },
+            .Undo => {},
+            .Redo => {},
+
+            .Custom => |name| {
+                _ = name;
+                unreachable;
+            },
+        }
+        unreachable;
+    }
+
+    pub fn comptime_new(comptime tag: CmdTag, comptime str: []const u8, comptime valid_modes: ValidMode) CommandParser {
+        const N = comptime CommandParser.input_len_from_str(str);
+        // var inputs = comptime _: {
+        //     var inputs = [_]Input{.{ .Number = .{} }} ** N;
+        //     var n: usize = N;
+        //     _ = n;
+        //     CommandParser.populate_from_str(inputs[0..N], str);
+        //     break :_ inputs;
+        // };
+        var inputs = comptime input_blah(N, str);
+
+        const metadata = comptime Metadata.from_valid_modes(valid_modes);
+        const parser = CommandParser.new(tag, inputs, metadata);
+
+        return parser;
+    }
+
+    fn input_blah(comptime N: usize, comptime str: []const u8) []Input {
+        var inputs = [_]Input{.{ .Number = .{} }} ** N;
+        var n: usize = N;
+        CommandParser.populate_from_str(inputs[0..N], str);
+        return inputs[0..n];
+    }
+
+    fn input_len_from_str(str: []const u8) usize {
+        var iter = std.mem.splitSequence(u8, str, " ");
+        var n: u32 = 0;
+        while (iter.next()) |val| {
+            if (std.mem.eql(u8, "<mv>", val)) {
+                // n += 1;
+            }
+            n += 1;
+        }
+        return n;
+    }
+
+    fn populate_from_str(input: []Input, str: []const u8) void {
+        var iter = std.mem.splitSequence(u8, str, " ");
+        var i: usize = 0;
+        while (iter.next()) |token| {
+            const Case = enum {
+                SPC,
+                // ALT, CTRL,
+                @"<mv>",
+                @"<#>",
+            };
+            const case = std.meta.stringToEnum(Case, token) orelse {
+                if (token.len != 1) {
+                    @panic("Invalid token");
+                }
+                var val: Input = .{ .Char = .{ .desired = token[0] } };
+                input[i] = val;
+                i += 1;
+                continue;
+            };
+            switch (case) {
+                .SPC => {
+                    input[i] = .{ .Char = .{ .desired = ' ' } };
+                    i += 1;
+                },
+                // .ALT => .{ .Special = .ALT },
+                // .CTRL => .{ .Special = .CTRL },
+                .@"<mv>" => {
+                    // input[i] = .{ .Number = .{} };
+                    // i += 1;
+                    input[i] = .{ .Move = .{} };
+                    i += 1;
+                },
+                .@"<#>" => {
+                    input[i] = .{ .Number = .{} };
+                    i += 1;
+                },
+            }
+        }
     }
 };
+
+fn test_parse(alloc: Allocator, vim: *Self, input: []const u8, expected: Cmd) !Cmd {
+    if (vim.parsers.len == 0) {
+        try vim.init(alloc, DEFAULT_PARSERS[0..]);
+    }
+    for (input) |c| {
+        if (vim.parse(.{ .Char = c })) |cmd| {
+            try std.testing.expectEqualDeep(expected, cmd);
+            return cmd;
+        }
+    }
+    @panic("Failed to parse");
+}
+
+test "valid mode" {
+    var mode: Mode = .Insert;
+    var metadata = CommandParser.Metadata.from_valid_modes(.{ .insert = true, .normal = true });
+
+    try std.testing.expectEqual(true, metadata.is_valid_mode(mode));
+
+    mode = .Normal;
+    metadata = CommandParser.Metadata.from_valid_modes(.{
+        .insert = true,
+    });
+
+    try std.testing.expectEqual(false, metadata.is_valid_mode(mode));
+}
+
+test "command parse" {
+    const alloc = std.heap.c_allocator;
+    var self = Self{};
+
+    // move
+    _ = try test_parse(alloc, &self, "h", .{ .repeat = 1, .kind = .{ .Move = .Left } });
+    _ = try test_parse(alloc, &self, "j", .{ .repeat = 1, .kind = .{ .Move = .Down } });
+    _ = try test_parse(alloc, &self, "k", .{ .repeat = 1, .kind = .{ .Move = .Up } });
+    _ = try test_parse(alloc, &self, "l", .{ .repeat = 1, .kind = .{ .Move = .Right } });
+    _ = try test_parse(alloc, &self, "20l", .{ .repeat = 20, .kind = .{ .Move = .Right } });
+
+    // d/c/y
+    _ = try test_parse(alloc, &self, "69d20l", .{ .repeat = 69, .kind = .{ .Delete = .{ .repeat = 20, .kind = .Right } } });
+    _ = try test_parse(alloc, &self, "69dd", .{ .repeat = 69, .kind = .{ .Delete = null } });
+    _ = try test_parse(alloc, &self, "420c20l", .{ .repeat = 420, .kind = .{ .Change = .{ .repeat = 20, .kind = .Right } } });
+    _ = try test_parse(alloc, &self, "420cc", .{ .repeat = 420, .kind = .{ .Change = null } });
+    _ = try test_parse(alloc, &self, "420y20l", .{ .repeat = 420, .kind = .{ .Yank = .{ .repeat = 20, .kind = .Right } } });
+    _ = try test_parse(alloc, &self, "420yy", .{ .repeat = 420, .kind = .{ .Yank = null } });
+
+    // switch move
+    _ = try test_parse(alloc, &self, "I", .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineStart, .mode = .Insert } } });
+    _ = try test_parse(alloc, &self, "22I", .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineStart, .mode = .Insert } } });
+    _ = try test_parse(alloc, &self, "A", .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineEnd, .mode = .Insert } } });
+    _ = try test_parse(alloc, &self, "1A", .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .LineEnd, .mode = .Insert } } });
+    _ = try test_parse(alloc, &self, "a", .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .Right, .mode = .Insert } } });
+    _ = try test_parse(alloc, &self, "50a", .{ .repeat = 1, .kind = .{ .SwitchMove = .{ .mv = .Right, .mode = .Insert } } });
+
+    // newline
+    _ = try test_parse(alloc, &self, "O", .{ .repeat = 1, .kind = .{ .NewLine = .{ .up = true, .switch_mode = true } } });
+    _ = try test_parse(alloc, &self, "10O", .{ .repeat = 10, .kind = .{ .NewLine = .{ .up = true, .switch_mode = true } } });
+    _ = try test_parse(alloc, &self, "o", .{ .repeat = 1, .kind = .{ .NewLine = .{ .up = false, .switch_mode = true } } });
+    _ = try test_parse(alloc, &self, "50o", .{ .repeat = 50, .kind = .{ .NewLine = .{ .up = false, .switch_mode = true } } });
+
+    // switch mode
+    _ = try test_parse(alloc, &self, "i", .{ .repeat = 1, .kind = .{ .SwitchMode = .Insert } });
+    _ = try test_parse(alloc, &self, "20i", .{ .repeat = 1, .kind = .{ .SwitchMode = .Insert } });
+    _ = try test_parse(alloc, &self, "v", .{ .repeat = 1, .kind = .{ .SwitchMode = .Visual } });
+    _ = try test_parse(alloc, &self, "200v", .{ .repeat = 1, .kind = .{ .SwitchMode = .Visual } });
+}

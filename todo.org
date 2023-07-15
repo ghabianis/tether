@@ -3,8 +3,8 @@
 * TODO Now [5/7]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
-** TODO Vim [0/3]
-*** TODO modes [3/3]
+** TODO Vim [2/6]
+*** DONE modes [0/0]
 **** DONE normal [2/2]
 ***** DONE up/down/left/right
 ***** DONE $, 0, A, a
@@ -18,7 +18,10 @@
 ****** DONE Fix selection overlap bug
 ***** DONE bug: selection changing sides not correct
 **** DONE insert
-*** TODO chaining movements
+*** DONE chaining movements
+*** TODO support =Key= and not just chars (change CharParser to KeyParser)
+*** TODO support delete/change/yank + movement
+*** TODO support w/W/b/B/e/E
 *** TODO moving up/down lines preserves word column when possible
 example:
 #+begin_src zig
@@ -31,23 +34,6 @@ pub fn start_of_line(self: *Self) void {
 if cursor is at =s= in =start_of_line= (index 7)
 
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
-** DONE bug: THE FUCKING CURSOR HEIGHT TEXTURE THING IS WRONG
-** DONE bug: Cursor position messed up for glyphs with low origin
-ex:
-#+begin_src
-FUCK(y
-o__y
-#+end_src
-if cursor is on =(=, =y=, or =_= then the cursor is
-translated a bit lower
-** DONE bug: last line cursor
-#+begin_src
-FUCK THIS SHIT MAN
-nice
-no
-way
-#+end_src
-On the last line in normal mode the cursor can still be on the newline, why?
 ** TODO bug: semicolon texture fucked up
 
 * TODO Later [0/3]

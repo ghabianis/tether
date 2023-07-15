@@ -10,6 +10,7 @@ const rope = @import("./rope.zig");
 const Editor = @import("./editor.zig");
 const ct = @import("./coretext.zig");
 const Vim = @import("./vim.zig");
+const Event = @import("./event.zig");
 const strutil = @import("./strutil.zig");
 
 const print = std.debug.print;
@@ -531,7 +532,7 @@ const Renderer = struct {
     }
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
-        const key = Vim.Key.from_nsevent(event) orelse return;
+        const key = Event.Key.from_nsevent(event) orelse return;
         try self.editor.keydown(key);
 
         try self.update_if_needed(alloc);
