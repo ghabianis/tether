@@ -1,17 +1,19 @@
 #+title: Todo
 
-* TODO Now [2/9]
+* TODO Now [3/9]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
-** TODO Vim [2/5]
+** DONE Vim [0/0]
 *** DONE support =Key= and not just chars (change CharParser to KeyParser)
 *** DONE support delete/change/yank + movement
-*** TODO support w/W/b/B/e/E [2/3]
+*** DONE support w/W/b/B/e/E [0/0]
 **** DONE w/W
-**** TODO b/B
+**** DONE b/B
 **** DONE e/E
 ** TODO LIGATURES!
 ** TODO bug: delete/change range broken
+cause I added `self.len -= node.data.items.len;` to Rope.remove_node() and this fucks up Rope.remove_text() because it is already doing the calculation
+need to make separate functions: one that subtracts len and one that doesn't
 ** TODO bug: paste broken
 try pasting this into empty editor:
 #+begin_src zig

@@ -224,8 +224,8 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         .Word => |skip_punctuation| {
             self.forward_word(skip_punctuation);
         },
-        .BeginningWord => |rev| {
-            _ = rev;
+        .BeginningWord => |skip_punctuation| {
+            self.backward_word(skip_punctuation);
         },
         .EndWord => |skip_punctuation| {
             print("NICE: \n", .{});
@@ -465,10 +465,10 @@ fn get_selection_impl(self: *Self, alloc: Allocator, sel: Selection) !?[]const u
     return ret;
 }
 
-// w -> start of next word
-// W -> same as above but punctuation inclusive
-//
-// w/W => always goes to next word, if EOL then go to the last char
+/// w -> start of next word
+/// W -> same as above but punctuation inclusive
+///
+/// w/W => always goes to next word, if EOL then go to the last char
 fn forward_word(self: *Self, skip_punctuation: bool) void {
     var node = self.rope.node_at_line(self.cursor.line) orelse return;
 
@@ -494,19 +494,28 @@ fn forward_word(self: *Self, skip_punctuation: bool) void {
     self.cursor = prev_cursor;
 }
 
-// e -> end of word (if already at end of cur word go to end of next word)
-// E -> same as above, punctuation inclusive
-//
-// b -> start of word (if pos == cur word start then go to next word)
-// B -> start of prev word, punctuation inclusive
-//
-// e/E => need to check if at the end of the current word, which means
-//        char_at(cur_pos + 1) is whitespace or punctuation (if E)
-//
-// b/B => need to check if at start of cur word, meaning char_at(cur_pos - 1) is
-//        whitespace or punctuation (if B)
-//
+/// e -> end of word (if already at end of cur word go to end of next word)
+/// E -> same as above, punctuation inclusive
+///
+/// e/E => need to check if at the end of the current word, which means
+///        char_at(cur_pos + 1) is whitespace or punctuation (if E)
+///
 fn forward_word_end(self: *Self, skip_punctuation: bool) void {
+    self.backward_word_or_forward_word_end(skip_punctuation, .EndWord);
+}
+
+/// b -> start of word (if pos == cur word start then go to next word)
+/// B -> start of prev word, punctuation inclusive
+///
+/// b/B => need to check if at start of cur word, meaning char_at(cur_pos - 1) is
+///        whitespace or punctuation (if B)
+///
+fn backward_word(self: *Self, skip_punctuation: bool) void {
+    self.backward_word_or_forward_word_end(skip_punctuation, .BeginningWord);
+}
+
+/// b/B and e/E are the inverse of each other
+fn backward_word_or_forward_word_end(self: *Self, skip_punctuation: bool, comptime dir: Vim.MoveKindEnum) void {
     var node = self.rope.node_at_line(self.cursor.line) orelse return;
     var prev_cursor: TextPos = .{ .line = self.cursor.line, .col = self.cursor.col };
 
@@ -515,10 +524,10 @@ fn forward_word_end(self: *Self, skip_punctuation: bool) void {
     var prev_char_punctual: bool = self.is_punctuation(prev_char, node.data.items[prev_cursor.col]);
     _ = prev_char_punctual;
 
-    var iter = Rope.iter_chars(
+    var iter = if (comptime dir == .BeginningWord) Rope.iter_chars_rev(
         node,
         prev_cursor,
-    );
+    ) else if (comptime dir == .EndWord) Rope.iter_chars(node, prev_cursor) else @compileError("BAD dir");
 
     if (iter.peek()) |initial_peek| {
         // Skip initial whitespace
@@ -562,11 +571,6 @@ fn forward_word_end(self: *Self, skip_punctuation: bool) void {
     }
 
     self.cursor = prev_cursor;
-}
-
-fn backward_word(self: *Self, skip_punctuation: bool) void {
-    _ = skip_punctuation;
-    _ = self;
 }
 
 fn breaks_word(self: *Self, skip_punctuation: bool, prev_char_punctual: bool, prev_char: u8, c: u8) bool {

@@ -274,85 +274,125 @@ pub const Rope = struct {
             .cursor = cursor,
         };
     }
+
+    pub fn iter_chars_rev(starting_node: *Node, cursor: TextPos) RopeCharIteratorRev {
+        return .{
+            .node = starting_node,
+            .cursor = cursor,
+        };
+    }
 };
 
-pub const RopeCharIterator = struct {
-    node: *const Rope.Node,
+fn _RopeCharIterator(comptime Reverse: bool) type {
+    return struct {
+        node: *const Rope.Node,
 
-    /// Points to the NEXT position to look at
-    cursor: TextPos,
+        /// Points to the NEXT position to look at
+        cursor: TextPos,
 
-    pub fn next(self: *RopeCharIterator) ?u8 {
-        // This means next_node() was called and there was no next node,
-        // so quit
-        if (self.cursor.col >= self.node.data.items.len) return null;
+        past_boundary: if (Reverse) bool else void = if (Reverse) false else undefined,
 
-        const ret = self.node.data.items[self.cursor.col];
-        self.incr_cursor();
-        return ret;
-    }
+        pub fn next(self: *@This()) ?u8 {
+            // This means next_node() was called and there was no next node,
+            // so quit
+            if (comptime Reverse != true) {
+                if (self.cursor.col >= self.node.data.items.len) return null;
+            } else {
+                if (self.past_boundary) return null;
+            }
 
-    pub fn next_update_prev_cursor(self: *RopeCharIterator, prev: *TextPos) ?u8 {
-        const temp = self.cursor;
-        if (self.next()) |ret| {
-            prev.* = temp;
+            const ret = self.node.data.items[self.cursor.col];
+            self.incr_cursor();
             return ret;
         }
-        return null;
-    }
 
-    /// Look at the current char without consuming it
-    pub fn peek(self: *RopeCharIterator) ?u8 {
-        var node_cpy = self.node;
-        var cursor_cpy = self.cursor;
-
-        const ret = self.next();
-
-        self.node = node_cpy;
-        self.cursor = cursor_cpy;
-
-        return ret;
-    }
-
-    pub fn peek2(self: *RopeCharIterator) ?u8 {
-        var node_cpy = self.node;
-        var cursor_cpy = self.cursor;
-
-        _ = self.next();
-        const ret = self.next();
-        print("PEEK2 result: {any}\n", .{ret});
-
-        self.node = node_cpy;
-        self.cursor = cursor_cpy;
-
-        return ret;
-    }
-
-    pub fn back(self: *RopeCharIterator, prev: *TextPos) void {
-        if (self.cursor.col == 0) {
-            self.node = self.node.prev orelse @panic("Back on col 0 line 0");
-        }
-        self.cursor = prev;
-    }
-
-    fn incr_cursor(self: *RopeCharIterator) void {
-        self.cursor.col += 1;
-        if (self.cursor.col >= self.node.data.items.len) {
-            _ = self.next_node();
-        }
-    }
-
-    fn next_node(self: *RopeCharIterator) bool {
-        if (self.node.next) |n| {
-            self.cursor.line += 1;
-            self.cursor.col = 0;
-            self.node = n;
-            return true;
+        pub fn next_update_prev_cursor(self: *@This(), prev: *TextPos) ?u8 {
+            const temp = self.cursor;
+            if (self.next()) |ret| {
+                prev.* = temp;
+                return ret;
+            }
+            return null;
         }
 
-        return false;
-    }
-};
+        /// Look at the current char without consuming it
+        pub fn peek(self: *@This()) ?u8 {
+            var node_cpy = self.node;
+            var cursor_cpy = self.cursor;
+            var past_boundary_cpy = self.past_boundary;
+
+            const ret = self.next();
+
+            self.node = node_cpy;
+            self.cursor = cursor_cpy;
+            self.past_boundary = past_boundary_cpy;
+
+            return ret;
+        }
+
+        pub fn peek2(self: *@This()) ?u8 {
+            var node_cpy = self.node;
+            var cursor_cpy = self.cursor;
+            var past_boundary_cpy = self.past_boundary;
+
+            _ = self.next();
+            const ret = self.next();
+
+            self.node = node_cpy;
+            self.cursor = cursor_cpy;
+            self.past_boundary = past_boundary_cpy;
+
+            return ret;
+        }
+
+        pub fn back(self: *@This(), prev: *TextPos) void {
+            if (self.cursor.col == 0) {
+                self.node = self.node.prev orelse @panic("Back on col 0 line 0");
+            }
+            self.cursor = prev;
+        }
+
+        fn incr_cursor(self: *@This()) void {
+            if (comptime Reverse) {
+                if (self.cursor.col == 0) {
+                    _ = self.next_node();
+                } else {
+                    self.cursor.col -= 1;
+                }
+            } else {
+                self.cursor.col += 1;
+                if (self.cursor.col >= self.node.data.items.len) {
+                    _ = self.next_node();
+                }
+            }
+        }
+
+        fn next_node(self: *@This()) bool {
+            if (comptime Reverse) {
+                if (self.node.prev) |n| {
+                    self.cursor.line -= 1;
+                    self.cursor.col = @intCast(u32, n.data.items.len) -| 1;
+                    self.node = n;
+                    return true;
+                }
+                self.past_boundary = true;
+                return false;
+            } else {
+                if (self.node.next) |n| {
+                    self.cursor.line += 1;
+                    self.cursor.col = 0;
+                    self.node = n;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+    };
+}
+
+pub const RopeCharIterator = _RopeCharIterator(false);
+pub const RopeCharIteratorRev = _RopeCharIterator(true);
 
 fn DoublyLinkedList(comptime T: type) type {
     return struct {

@@ -177,7 +177,24 @@ pub const Move = struct {
     repeat: u16,
 };
 
-pub const MoveKind = union(enum) {
+pub const MoveKindEnum = enum {
+    Left,
+    Right,
+    Up,
+    Down,
+    LineStart,
+    LineEnd,
+    Find,
+    ParagraphBegin,
+    ParagraphEnd,
+    Start,
+    End,
+    Word,
+    BeginningWord,
+    EndWord,
+};
+
+pub const MoveKind = union(MoveKindEnum) {
     Left,
     Right,
     Up,
@@ -401,6 +418,12 @@ pub const CommandParser = struct {
                         }),
                         'E' => return self.set_kind(.{
                             .EndWord = true,
+                        }),
+                        'b' => return self.set_kind(.{
+                            .BeginningWord = false,
+                        }),
+                        'B' => return self.set_kind(.{
+                            .BeginningWord = true,
                         }),
 
                         else => return if (self.data.optional()) .Skip else .Fail,
@@ -800,6 +823,8 @@ test "command parse normal" {
 }
 
 test "command parse visual" {
+    const rope = @import("./rope.zig");
+    _ = rope;
     const alloc = std.heap.c_allocator;
     var self = Self{};
 
