@@ -133,9 +133,9 @@ pub fn handle_cmd_visual(self: *Self, cmd: Vim.Cmd) !void {
 }
 
 fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16, the_move: ?Vim.Move) !void {
-    // TODO: Handle visual mode
     if (self.vim.mode == .Visual) {
         const sel = self.selection orelse unreachable;
+        self.rope.print_nodes();
         if (comptime cmd_kind == .Delete) {
             try self.delete_range(sel);
             self.switch_mode(.Normal);
@@ -145,6 +145,16 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
         } else if (comptime cmd_kind == .Yank) {
             try self.yank(sel);
             self.switch_mode(.Normal);
+        }
+
+        if (comptime cmd_kind == .Delete or cmd_kind == .Change) {
+            // If cursor is on the right side of the selection,
+            // the cursor has to be moved back to the start
+            const cursor_abs = self.rope.pos_to_idx(self.cursor) orelse std.math.maxInt(usize);
+            if (cursor_abs != sel.start) {
+                const pos: TextPos = self.rope.idx_to_pos(sel.start) orelse .{ .line = 0, .col = 0 };
+                self.cursor = pos;
+            }
         }
         return;
     }

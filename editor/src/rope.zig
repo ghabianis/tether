@@ -49,6 +49,18 @@ pub const Rope = struct {
         _ = try self.nodes.insert(self.node_alloc, ArrayList(u8){}, null);
     }
 
+    pub fn print_nodes(self: *Self) void {
+        print("NODES: [\n", .{});
+        var node = self.nodes.first;
+        var i: usize = 0;
+        while (node) |n| {
+            print("  {d}: {s}\n", .{ i, n.data.items });
+            i += 1;
+            node = n.next;
+        }
+        print("]", .{});
+    }
+
     pub fn next_line(text_: ?[]const u8) struct { line: ?[]const u8, rest: ?[]const u8, newline: bool } {
         if (text_ == null or text_.?.len == 0) return .{ .line = null, .rest = null, .newline = false };
         const text = text_.?;
@@ -171,6 +183,25 @@ pub const Rope = struct {
         return i + @intCast(usize, pos.col);
     }
 
+    pub fn idx_to_pos(self: *Self, idx: usize) ?TextPos {
+        var line: u32 = 0;
+        var col: u32 = 0;
+
+        var node = self.nodes.first;
+        var i: usize = 0;
+        while (node) |n| {
+            if (idx >= i and idx < i + n.data.items.len) {
+                col = @intCast(u32, idx - i);
+                return .{ .line = line, .col = col };
+            }
+            line += 1;
+            i += n.data.items.len;
+            node = n.next;
+        }
+
+        return null;
+    }
+
     pub fn remove_line(self: *Self, line: u32) !void {
         var node = self.node_at_line(line) orelse unreachable;
 
@@ -187,20 +218,20 @@ pub const Rope = struct {
             const len = node.data.items.len;
             if (text_start >= i and text_start < i + len) {
                 var node_cut_start = (text_start - i);
-                var node_cut_end: usize = text_end - i;
+                var node_cut_end: usize = if (text_end - i > len) len else text_end - i;
                 const cut_len = node_cut_end - node_cut_start;
 
                 self.len -= cut_len;
                 node.data.items = remove_range(node.data.items, node_cut_start, node_cut_end);
-                text_start += len;
+                text_start += cut_len;
             }
 
+            const next = node.next;
             if (node.data.items.len == 0 and node.next != null) {
-                try self.remove_node(node);
+                try self.remove_node_dont_decrement_len(node);
             } else if (node.data.items.len > 0 and !strutil.is_newline(node.data.items[node.data.items.len - 1])) {
                 try self.collapse_nodes(node);
             }
-            const next = node.next;
 
             node = next orelse return;
             i += len;
@@ -227,8 +258,17 @@ pub const Rope = struct {
 
     fn remove_node(self: *Self, node: *Node) !void {
         self.len -= node.data.items.len;
-        _ = self.nodes.remove(node);
-        try node.free(self.node_alloc);
+        try self.remove_node_dont_decrement_len(node);
+    }
+
+    fn remove_node_dont_decrement_len(self: *Self, node: *Node) !void {
+        // if we have 1 node keep it around
+        if (node == self.nodes.first and node.next == null) {
+            node.data.items.len = 0;
+        } else {
+            _ = self.nodes.remove(node);
+            try node.free(self.node_alloc);
+        }
     }
 
     pub fn as_str(self: *const Self, alloc: Allocator) ![]const u8 {
@@ -614,6 +654,18 @@ test "deletion multiline" {
     try rope.remove_text(0, 10);
     str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings("e 2\n", str);
+}
+
+test "delete all" {
+    var rope = Rope{};
+    try rope.init();
+
+    const insertion_text = "fuck\nthis\nshit\nbro!";
+    _ = try rope.insert_text(.{ .line = 0, .col = 0 }, insertion_text);
+    try rope.remove_text(0, insertion_text.len);
+
+    var str = try rope.as_str(std.heap.c_allocator);
+    try std.testing.expectEqualStrings("", str);
 }
 
 test "remove range" {

@@ -1,6 +1,6 @@
 #+title: Todo
 
-* TODO Now [3/9]
+* TODO Now [5/9]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
 ** DONE Vim [0/0]
@@ -11,10 +11,10 @@
 **** DONE b/B
 **** DONE e/E
 ** TODO LIGATURES!
-** TODO bug: delete/change range broken
+** DONE bug: delete/change range broken
 cause I added `self.len -= node.data.items.len;` to Rope.remove_node() and this fucks up Rope.remove_text() because it is already doing the calculation
 need to make separate functions: one that subtracts len and one that doesn't
-** TODO bug: paste broken
+** DONE bug: paste broken
 try pasting this into empty editor:
 #+begin_src zig
 fn fuck(self: *Self) void {
@@ -58,6 +58,7 @@ if cursor is at =s= in =start_of_line= (index 7)
 
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
 ** TODO bug: semicolon texture fucked up
+if you look at the atlas, the =)= glyph is intersecting with the =;= glyph.
 * TODO Later [0/4]
 ** TODO Egui for debugging?
 ** TODO create deinit function for renderer/editor

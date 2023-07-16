@@ -104,13 +104,13 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module
 fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target: std.zig.CrossTarget, optimize: std.builtin.Mode) void {
     const test_step = b.step("test", "Run tests");
 
-    // build_test(b, test_step, modules, .{
-    //     .name = "rope_tests",
-    //     .root_source_file = .{ .path = "src/rope.zig" },
-    //     .target = target,
-    //     .optimize = optimize,
-    //     .filter = "coroutine test",
-    // });
+    build_test(b, test_step, modules, .{
+        .name = "rope_tests",
+        .root_source_file = .{ .path = "src/rope.zig" },
+        .target = target,
+        .optimize = optimize,
+        // .filter = "coroutine test",
+    });
 
     build_test(b, test_step, modules, .{
         .name = "vim_tests",

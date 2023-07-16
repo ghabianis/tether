@@ -61,7 +61,6 @@ pub const Key = union(KeyEnum) {
 
             const char = chars[0];
 
-            print("CHAR: {d} {c}\n", .{ char, char });
             switch (char) {
                 27 => return Key.Esc,
                 127 => return Key.Backspace,
