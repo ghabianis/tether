@@ -389,6 +389,20 @@ pub const CommandParser = struct {
                         'j' => return self.set_kind(.Down),
                         'k' => return self.set_kind(.Up),
                         'l' => return self.set_kind(.Right),
+
+                        'w' => return self.set_kind(.{
+                            .Word = false,
+                        }),
+                        'W' => return self.set_kind(.{
+                            .Word = true,
+                        }),
+                        'e' => return self.set_kind(.{
+                            .EndWord = false,
+                        }),
+                        'E' => return self.set_kind(.{
+                            .EndWord = true,
+                        }),
+
                         else => return if (self.data.optional()) .Skip else .Fail,
                     }
                 },

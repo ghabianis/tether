@@ -1,13 +1,25 @@
 #+title: Todo
 
-* TODO Now [5/7]
+* TODO Now [2/8]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
-** TODO Vim [2/4]
+** TODO Vim [2/5]
 *** DONE support =Key= and not just chars (change CharParser to KeyParser)
 *** DONE support delete/change/yank + movement
-*** TODO support w/W/b/B/e/E
-*** TODO moving up/down lines preserves word column when possible
+*** TODO support w/W/b/B/e/E [2/3]
+**** DONE w/W
+**** TODO b/B
+**** DONE e/E
+** TODO LIGATURES!
+** TODO bug: delete/change range broken
+** TODO bug: paste broken
+try pasting this into empty editor:
+#+begin_src zig
+fn fuck(self: *Self) void {
+    _ = self;
+}
+#+end_src
+** TODO moving up/down/creating lines preserves word column when possible
 example:
 #+begin_src zig
 pub fn start_of_line(self: *Self) void {
@@ -20,7 +32,6 @@ if cursor is at =s= in =start_of_line= (index 7)
 
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
 ** TODO bug: semicolon texture fucked up
-
 * TODO Later [0/4]
 ** TODO Egui for debugging?
 ** TODO create deinit function for renderer/editor

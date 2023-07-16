@@ -6,6 +6,8 @@ const print = std.debug.print;
 const strutil = @import("./strutil.zig");
 
 pub const TextPos = struct {
+    /// An important thing to note is that in VISUAL and INSERT mode,
+    /// the cursor is allowed to go past the end of the line. See `Editor.cursor_eol_for_mode()`
     col: u32,
     line: u32,
 
@@ -249,6 +251,21 @@ pub const Rope = struct {
         defer alloc.free(str);
         @memcpy(ret, str[start..end]);
         return ret;
+    }
+
+    pub fn next_char(self: *const Self, node: *const Node, idx: u32) ?u8 {
+        _ = self;
+
+        if (idx + 1 < node.data.items.len) {
+            return node.data.items[idx + 1];
+        }
+
+        if (node.next) |next| {
+            if (next.data.items.len > 0)
+                return next.data.items[0];
+        }
+
+        return null;
     }
 };
 

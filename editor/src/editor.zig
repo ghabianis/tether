@@ -221,14 +221,15 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         .ParagraphEnd => {},
         .Start => {},
         .End => {},
-        .Word => |rev| {
-            _ = rev;
+        .Word => |skip_punctuation| {
+            self.forward_word(skip_punctuation);
         },
         .BeginningWord => |rev| {
             _ = rev;
         },
-        .EndWord => |rev| {
-            _ = rev;
+        .EndWord => |skip_punctuation| {
+            print("NICE: \n", .{});
+            self.forward_word_end(skip_punctuation);
         },
     }
 }
@@ -343,9 +344,10 @@ fn paste(self: *Self, before: bool) !void {
     if (before) {
         insert_pos.col = insert_pos.col -| 1;
     } else {
-        insert_pos.col += 1;
+        insert_pos.col = @min(self.rope.len, insert_pos.col + 1);
     }
     self.cursor = try self.rope.insert_text(insert_pos, str);
+    self.draw_text = true;
 }
 
 pub fn insert_char(self: *Self, c: u8) !void {
@@ -418,7 +420,13 @@ fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
             return 0;
         }
     }
-    return if (line_node.data.items.len > 0 and !strutil.is_newline(line_node.data.items[line_node.data.items.len - 1])) @intCast(u32, line_node.data.items.len + 1) else @intCast(u32, line_node.data.items.len);
+
+    // Even if there is no \n at end of line, visual and insert mode can be to the right of the last char.
+    if (line_node.data.items.len > 0 and !strutil.is_newline(line_node.data.items[line_node.data.items.len - 1])) {
+        return @intCast(u32, line_node.data.items.len + 1);
+    }
+
+    return @intCast(u32, line_node.data.items.len);
 }
 
 pub fn start_of_line(self: *Self) void {
@@ -454,6 +462,164 @@ fn get_selection_impl(self: *Self, alloc: Allocator, sel: Selection) !?[]const u
     defer std.heap.c_allocator.destroy(str);
     @memcpy(ret, str[sel.start..sel.end]);
     return ret;
+}
+
+// w -> start of next word
+// W -> same as above but punctuation inclusive
+//
+// w/W => always goes to next word, if EOL then go to the last char
+fn forward_word(self: *Self, skip_punctuation: bool) void {
+    var node = self.rope.node_at_line(self.cursor.line);
+
+    var line: u32 = self.cursor.line;
+    var col: u32 = self.cursor.col + 1;
+
+    // TODO: initialize this properly
+    var prev_char: u8 = 0;
+    var can_break = !skip_punctuation and if (node) |n| self.is_punctuation(prev_char, n.data.items[self.cursor.col]) else false;
+    while (node) |n| {
+        if (col >= n.data.items.len) break;
+        const char = n.data.items[col];
+
+        if (strutil.is_whitespace(char)) {
+            can_break = true;
+        } else if (can_break or (!skip_punctuation and self.is_punctuation(prev_char, char))) {
+            break;
+        }
+
+        prev_char = char;
+        col += 1;
+        const cursor_eol = self.cursor_eol_for_mode(n);
+        if (col >= cursor_eol) {
+            if (n.next != null) {
+                node = n.next;
+                line += 1;
+                col = 0;
+            } else {
+                col = cursor_eol -| 1;
+                break;
+            }
+        }
+    }
+
+    self.cursor.line = line;
+    self.cursor.col = col;
+}
+
+// e -> end of word (if already at end of cur word go to end of next word)
+// E -> same as above, punctuation inclusive
+//
+// b -> start of word (if pos == cur word start then go to next word)
+// B -> start of prev word, punctuation inclusive
+//
+// e/E => need to check if at the end of the current word, which means
+//        char_at(cur_pos + 1) is whitespace or punctuation (if E)
+//
+// b/B => need to check if at start of cur word, meaning char_at(cur_pos - 1) is
+//        whitespace or punctuation (if B)
+//
+// fn fuck(self: *Self)
+fn forward_word_end(self: *Self, skip_punctuation: bool) void {
+    var node = self.rope.node_at_line(self.cursor.line);
+
+    var line: u32 = self.cursor.line;
+    var col: u32 = self.cursor.col;
+
+    // TODO: Initialize this properly
+    var prev_char: u8 = 0;
+
+    // Skip leading whitespace
+    if (node != null and strutil.is_whitespace(node.?.data.items[col])) {
+        while (node) |n| {
+            const char = n.data.items[col];
+            if (strutil.is_whitespace(char)) {
+                prev_char = char;
+                col += 1;
+                const cursor_eol = self.cursor_eol_for_mode(n);
+                if (col >= cursor_eol) {
+                    if (n.next != null) {
+                        node = n.next;
+                        line += 1;
+                        col = 0;
+                    } else {
+                        col = cursor_eol -| 1;
+                        break;
+                    }
+                }
+                continue;
+            }
+            break;
+        }
+    } else if (node) |n| {
+        // Check if at end of word
+        if (self.rope.next_char(n, col)) |next_char| {
+            if (strutil.is_whitespace(next_char) or (!skip_punctuation and self.is_punctuation(prev_char, next_char))) {
+                col += 1;
+                // Then skip whitespace to arrive at next word
+                while (node) |nn| {
+                    const char = nn.data.items[col];
+                    if (strutil.is_whitespace(char)) {
+                        prev_char = char;
+                        col += 1;
+                        const cursor_eol = self.cursor_eol_for_mode(nn);
+                        if (col >= cursor_eol) {
+                            if (nn.next != null) {
+                                node = nn.next;
+                                line += 1;
+                                col = 0;
+                            } else {
+                                col = cursor_eol -| 1;
+                                break;
+                            }
+                        }
+                        continue;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    while (node) |n| {
+        const char = n.data.items[col];
+
+        // Check if at end of word
+        if (self.rope.next_char(n, col)) |next_char| {
+            if (strutil.is_whitespace(next_char) or (!skip_punctuation and self.is_punctuation(prev_char, next_char))) {
+                break;
+            }
+        }
+
+        prev_char = char;
+        col += 1;
+        const cursor_eol = self.cursor_eol_for_mode(n);
+        if (col >= cursor_eol) {
+            if (n.next != null) {
+                node = n.next;
+                line += 1;
+                col = 0;
+            } else {
+                col = cursor_eol -| 1;
+                break;
+            }
+        }
+    }
+
+    self.cursor.line = line;
+    self.cursor.col = col;
+}
+
+fn is_punctuation(self: *Self, prev_char: u8, c: u8) bool {
+    _ = self;
+    return switch (c) {
+        '#', '&', '^', '%', '!', '@', '`', ':', ';', '/', '-', '+', '*', '.', ',', '(', '[', '<' => true,
+        '"' => return prev_char != '"',
+        '\'' => return prev_char != '\'',
+        ')' => return prev_char != '(',
+        ']' => return prev_char != '[',
+        '>' => return prev_char != '<',
+        else => false,
+    };
 }
 
 pub fn left(self: *Self) void {

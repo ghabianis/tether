@@ -62,6 +62,8 @@ pub const Atlas = struct {
 
     pub fn new(font_size: metal.CGFloat) Self {
         const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
+        // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Light", .ascii);
+        // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Italic", .ascii);
         const Class = objc.Class.getClass("NSFont").?;
         const font = Class.msgSend(objc.Object, objc.sel("fontWithName:size:"), .{ iosevka, font_size });
         const baseline_nsnumber = metal.NSNumber.from_id(ct.CTFontCopyAttribute(font.value, ct.kCTFontBaselineAdjustAttribute));
@@ -205,10 +207,10 @@ pub const Atlas = struct {
         ct.CGContextSetShouldSmoothFonts(ctx, true);
         ct.CGContextSetAllowsFontSmoothing(ctx, true);
 
-        ct.CGContextSetShouldSubpixelPositionFonts(ctx, false);
-        ct.CGContextSetShouldSubpixelQuantizeFonts(ctx, false);
-        ct.CGContextSetAllowsFontSubpixelPositioning(ctx, false);
-        ct.CGContextSetAllowsFontSubpixelQuantization(ctx, false);
+        ct.CGContextSetShouldSubpixelPositionFonts(ctx, true);
+        ct.CGContextSetShouldSubpixelQuantizeFonts(ctx, true);
+        ct.CGContextSetAllowsFontSubpixelPositioning(ctx, true);
+        ct.CGContextSetAllowsFontSubpixelQuantization(ctx, true);
 
         const text_color = ct.CGColorCreateGenericRGB(1.0, 0.0, 0.0, 1.0);
         defer ct.CGColorRelease(text_color);
