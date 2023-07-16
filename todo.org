@@ -1,6 +1,6 @@
 #+title: Todo
 
-* TODO Now [2/8]
+* TODO Now [2/9]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
 ** TODO Vim [2/5]
@@ -19,6 +19,30 @@ fn fuck(self: *Self) void {
     _ = self;
 }
 #+end_src
+** TODO bug: word breaking with punctuation detection for w/W/e/E/b/B
+Word breaking rules are fucked.
+
+Word can break in 3 cases:
+- when whitespace is encountered
+- when punctuation is encountered IF the word is comprised of NON-punctuation characters
+- whenn non-punctuation is encountered IF the word is comprised of punctuation characters
+
+This means there are two types of words, those comprised of punctuation characters, and those that dont!
+
+For example:
+#+begin_src
+fuck+++yay!
+#+end_src
+with the cursor on the first =+=, pressing =w= should bring the cursor the first =y=. instead it goes to the next =+=.
+
+Another case
+#+begin_src zig
+fn fuck(self: *Self) void {
+
+}
+#+end_src
+With cursor on =k=, pressing =E= should go to =(= but instead goes to end of =self=.
+
 ** TODO moving up/down/creating lines preserves word column when possible
 example:
 #+begin_src zig

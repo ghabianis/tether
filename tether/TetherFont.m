@@ -25,6 +25,9 @@
 //    [options setObject:@(MTLStorageModePrivate) forKey:MTKTextureLoaderOptionTextureStorageMode];
 //    [options setObject:@(YES) forKey:MTKTextureLoaderOptionSRGB];
     
+//    NSPasteboard *pb = NSPasteboard.generalPasteboard;
+//    [pb stringForType:]
+    
     printf("HOLY FUCKING SHIT IT WORKS!\n");
 }
 @end

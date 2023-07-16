@@ -267,6 +267,91 @@ pub const Rope = struct {
 
         return null;
     }
+
+    pub fn iter_chars(starting_node: *Node, cursor: TextPos) RopeCharIterator {
+        return .{
+            .node = starting_node,
+            .cursor = cursor,
+        };
+    }
+};
+
+pub const RopeCharIterator = struct {
+    node: *const Rope.Node,
+
+    /// Points to the NEXT position to look at
+    cursor: TextPos,
+
+    pub fn next(self: *RopeCharIterator) ?u8 {
+        // This means next_node() was called and there was no next node,
+        // so quit
+        if (self.cursor.col >= self.node.data.items.len) return null;
+
+        const ret = self.node.data.items[self.cursor.col];
+        self.incr_cursor();
+        return ret;
+    }
+
+    pub fn next_update_prev_cursor(self: *RopeCharIterator, prev: *TextPos) ?u8 {
+        const temp = self.cursor;
+        if (self.next()) |ret| {
+            prev.* = temp;
+            return ret;
+        }
+        return null;
+    }
+
+    /// Look at the current char without consuming it
+    pub fn peek(self: *RopeCharIterator) ?u8 {
+        var node_cpy = self.node;
+        var cursor_cpy = self.cursor;
+
+        const ret = self.next();
+
+        self.node = node_cpy;
+        self.cursor = cursor_cpy;
+
+        return ret;
+    }
+
+    pub fn peek2(self: *RopeCharIterator) ?u8 {
+        var node_cpy = self.node;
+        var cursor_cpy = self.cursor;
+
+        _ = self.next();
+        const ret = self.next();
+        print("PEEK2 result: {any}\n", .{ret});
+
+        self.node = node_cpy;
+        self.cursor = cursor_cpy;
+
+        return ret;
+    }
+
+    pub fn back(self: *RopeCharIterator, prev: *TextPos) void {
+        if (self.cursor.col == 0) {
+            self.node = self.node.prev orelse @panic("Back on col 0 line 0");
+        }
+        self.cursor = prev;
+    }
+
+    fn incr_cursor(self: *RopeCharIterator) void {
+        self.cursor.col += 1;
+        if (self.cursor.col >= self.node.data.items.len) {
+            _ = self.next_node();
+        }
+    }
+
+    fn next_node(self: *RopeCharIterator) bool {
+        if (self.node.next) |n| {
+            self.cursor.line += 1;
+            self.cursor.col = 0;
+            self.node = n;
+            return true;
+        }
+
+        return false;
+    }
 };
 
 fn DoublyLinkedList(comptime T: type) type {
