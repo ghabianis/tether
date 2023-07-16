@@ -85,6 +85,8 @@ pub fn handle_cmd_normal(self: *Self, cmd: Vim.Cmd) !void {
         },
         .Undo => {},
         .Redo => {},
+        .Paste => try self.paste(false),
+        .PasteBefore => try self.paste(true),
 
         .Custom => {},
     }
@@ -123,19 +125,30 @@ pub fn handle_cmd_visual(self: *Self, cmd: Vim.Cmd) !void {
         },
         .Undo => {},
         .Redo => {},
+        .Paste => try self.paste(false),
+        .PasteBefore => try self.paste(true),
 
         .Custom => {},
     }
 }
 
 fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16, the_move: ?Vim.Move) !void {
-    if (comptime cmd_kind == .Change) self.switch_mode(.Insert);
     // TODO: Handle visual mode
     if (self.vim.mode == .Visual) {
-        if (comptime cmd_kind == .Yank) {}
-        self.switch_mode(.Normal);
+        const sel = self.selection orelse unreachable;
+        if (comptime cmd_kind == .Delete) {
+            try self.delete_range(sel);
+            self.switch_mode(.Normal);
+        } else if (comptime cmd_kind == .Change) {
+            self.switch_mode(.Insert);
+            try self.delete_range(sel);
+        } else if (comptime cmd_kind == .Yank) {
+            try self.yank(sel);
+            self.switch_mode(.Normal);
+        }
         return;
     }
+    if (comptime cmd_kind == .Change) self.switch_mode(.Insert);
 
     if (the_move) |mv| {
         var i: usize = 0;
@@ -148,13 +161,13 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
             const next_abs = self.rope.pos_to_idx(next_cursor) orelse unreachable;
 
             const end_offset: usize = if (mv.kind.is_delete_end_inclusive()) 1 else 0;
-            const start = @min(prev_abs, next_abs);
-            const end = @max(prev_abs, next_abs) + end_offset;
+            const start = @intCast(u32, @min(prev_abs, next_abs));
+            const end = @intCast(u32, @max(prev_abs, next_abs) + end_offset);
 
             if (comptime cmd_kind == .Change or cmd_kind == .Delete) {
-                try self.rope.remove_text(start, end);
+                try self.delete_range(.{ .start = start, .end = end });
             } else {
-                try self.yank(.{ .start = @intCast(u32, start), .end = @intCast(u32, end) });
+                try self.yank(.{ .start = start, .end = end });
             }
 
             if (next_abs >= prev_abs) {
@@ -239,63 +252,6 @@ fn handle_key_insert(self: *Self, key: Key) !void {
     }
 }
 
-// fn keydown_visual(self: *Self, key: Key) !void {
-//     switch (key) {
-//         .Char => |c| {
-//             switch (c) {
-//                 'v' => self.switch_mode(.Normal),
-
-//                 'h' => self.visual_move(Self.left),
-//                 'l' => self.visual_move(Self.right),
-//                 'k' => self.visual_move(Self.up),
-//                 'j' => self.visual_move(Self.down),
-//                 'A' => {
-//                     // TODO: move cursor to end of selection, wait for input, then replace selection
-//                     // self.switch_mode(.Insert);
-//                     // self.end_of_line();
-//                     self.end_of_selection();
-//                     @panic("TODO");
-//                 },
-//                 '$' => {
-//                     self.end_of_line();
-//                 },
-//                 'I' => {
-//                     // TODO: move cursor to start of selection, wait for input, then replace selection
-//                     // self.switch_mode(.Insert);
-//                     // self.end_of_line();
-//                     self.start_of_selection();
-//                     @panic("TODO");
-//                 },
-//                 '0' => {
-//                     self.visual_move(Self.start_of_line);
-//                 },
-//                 'y' => {
-//                     const sel = try self.get_selection(std.heap.c_allocator) orelse return;
-//                     // defer std.heap.c_allocator.free(sel);
-//                     print("COPYING TEXT!! {s}\n", .{sel});
-//                     // defer std.heap.c_allocator.destroy(sel);
-//                     self.clipboard.clear();
-//                     self.clipboard.write_text(sel);
-//                 },
-//                 else => {},
-//             }
-//         },
-//         .Up => self.visual_move(Self.up),
-//         .Down => self.visual_move(Self.down),
-//         .Left => self.visual_move(Self.left),
-//         .Right => self.visual_move(Self.right),
-//         .Esc => {
-//             self.switch_mode(.Normal);
-//         },
-//         .Shift => {},
-//         .Newline => {},
-//         .Ctrl => {},
-//         .Alt => {},
-//         .Backspace => self.visual_move(Self.left),
-//         .Tab => {},
-//     }
-// }
-
 fn visual_move(self: *Self, mv: Vim.Move) void {
     print("PREV SEL: {any}\n", .{self.selection});
     const prev_cursor = self.cursor;
@@ -377,6 +333,21 @@ fn yank_line(self: *Self, line: u32) !void {
     self.yank_text(the_line.data.items);
 }
 
+fn paste(self: *Self, before: bool) !void {
+    const result = try self.clipboard.copy_text_cstr(std.heap.c_allocator) orelse return;
+    defer std.heap.c_allocator.free(result.str[0 .. result.len + 2]);
+
+    const str = result.str[0..result.len];
+
+    var insert_pos = self.cursor;
+    if (before) {
+        insert_pos.col = insert_pos.col -| 1;
+    } else {
+        insert_pos.col += 1;
+    }
+    self.cursor = try self.rope.insert_text(insert_pos, str);
+}
+
 pub fn insert_char(self: *Self, c: u8) !void {
     try self.insert_at(self.cursor, &[_]u8{c});
 }
@@ -418,6 +389,10 @@ pub fn backspace(self: *Self) !void {
     try self.rope.remove_text(idx_pos - 1, idx_pos);
 
     self.draw_text = true;
+}
+
+fn delete_range(self: *Self, range: Selection) !void {
+    try self.rope.remove_text(range.start, range.end);
 }
 
 pub fn delete_line(self: *Self) !void {

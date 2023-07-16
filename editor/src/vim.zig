@@ -42,6 +42,10 @@ pub const DEFAULT_PARSERS = [_]CommandParser{
     CommandParser.comptime_new(.SwitchMode, "<#> v", .{
         .normal = true,
     }),
+
+    // paste
+    CommandParser.comptime_new(.Paste, "<#> p", .{ .normal = true, .visual = true }),
+    CommandParser.comptime_new(.PasteBefore, "<#> P", .{ .normal = true, .visual = true }),
 };
 
 mode: Mode = .Normal,
@@ -126,6 +130,8 @@ pub const CmdKindEnum = enum {
     NewLine,
     Undo,
     Redo,
+    Paste,
+    PasteBefore,
 
     Custom,
 };
@@ -141,6 +147,8 @@ pub const CmdTag = union(CmdKindEnum) {
     NewLine,
     Undo,
     Redo,
+    Paste,
+    PasteBefore,
 
     Custom: []const u8,
 };
@@ -156,6 +164,8 @@ pub const CmdKind = union(CmdKindEnum) {
     NewLine: NewLine,
     Undo,
     Redo,
+    Paste,
+    PasteBefore,
 
     Custom: *CustomCmd,
 };
@@ -610,6 +620,14 @@ pub const CommandParser = struct {
             },
             .Undo => {},
             .Redo => {},
+            .Paste => {
+                const amount = self.inputs[0].Number.result() orelse 1;
+                return .{ .repeat = amount, .kind = .Paste };
+            },
+            .PasteBefore => {
+                const amount = self.inputs[0].Number.result() orelse 1;
+                return .{ .repeat = amount, .kind = .PasteBefore };
+            },
 
             .Custom => |name| {
                 _ = name;
@@ -762,6 +780,9 @@ test "command parse normal" {
     _ = try test_parse(alloc, &self, "20i", .{ .repeat = 1, .kind = .{ .SwitchMode = .Insert } });
     _ = try test_parse(alloc, &self, "v", .{ .repeat = 1, .kind = .{ .SwitchMode = .Visual } });
     _ = try test_parse(alloc, &self, "200v", .{ .repeat = 1, .kind = .{ .SwitchMode = .Visual } });
+
+    _ = try test_parse(alloc, &self, "200p", .{ .repeat = 200, .kind = .Paste });
+    _ = try test_parse(alloc, &self, "200P", .{ .repeat = 200, .kind = .PasteBefore });
 }
 
 test "command parse visual" {

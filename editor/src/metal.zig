@@ -25,6 +25,9 @@ pub const NSMutableArray = struct {
     }
 };
 
+const NSPasteboardType = objc.c.id; // NSString
+pub extern "C" const NSPasteboardTypeString: NSPasteboardType;
+
 pub const NSPasteboard = struct {
     const Self = @This();
     obj: objc.Object,
@@ -42,6 +45,14 @@ pub const NSPasteboard = struct {
 
     pub fn write_objects(self: Self, array: objc.Object) void {
         self.obj.msgSend(void, objc.sel("writeObjects:"), .{array});
+    }
+
+    pub fn string_for_type(self: Self, ty: NSPasteboardType) ?NSString {
+        const id = self.obj.msgSend(objc.c.id, objc.sel("stringForType:"), .{ty});
+        if (id == 0) {
+            return null;
+        }
+        return NSString.from_id(id);
     }
 };
 

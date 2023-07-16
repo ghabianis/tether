@@ -1,3 +1,6 @@
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const objc = @import("zig-objc");
 const metal = @import("./metal.zig");
 
@@ -32,4 +35,27 @@ pub fn write_text(self: *Self, text: []const u8) void {
     arr.add_object(str.obj);
 
     self.pasteboard.write_objects(arr.obj);
+}
+
+pub fn copy_text(self: *Self) ?NSString {
+    const str = self.pasteboard.string_for_type(metal.NSPasteboardTypeString) orelse return null;
+    return str;
+}
+
+pub fn copy_text_cstr(self: *Self, alloc: Allocator) !?struct { str: [*:0]u8, len: usize } {
+    const pool = objc.AutoreleasePool.init();
+    defer pool.deinit();
+
+    const str = self.copy_text() orelse return null;
+    const len = str.length();
+    var buf = try alloc.alloc(u8, len + 1);
+    var cstr = str.to_c_string(buf) orelse {
+        alloc.free(buf);
+        return null;
+    };
+
+    return .{
+        .str = cstr,
+        .len = len,
+    };
 }
