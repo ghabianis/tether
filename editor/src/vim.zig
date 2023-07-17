@@ -396,6 +396,7 @@ pub const CommandParser = struct {
             }
 
             self.keys[self.data.keys_len] = key;
+            self.data.keys_len += 1;
 
             switch (self.keys[0]) {
                 .Char => |c| {
@@ -426,6 +427,9 @@ pub const CommandParser = struct {
                             .BeginningWord = true,
                         }),
 
+                        'g' => return self.parse_g(),
+                        'G' => return self.set_kind(.End),
+
                         else => return if (self.data.optional()) .Skip else .Fail,
                     }
                 },
@@ -433,6 +437,19 @@ pub const CommandParser = struct {
                 .Down => return self.set_kind(.Down),
                 .Left => return self.set_kind(.Left),
                 .Right => return self.set_kind(.Right),
+                else => return if (self.data.optional()) .Skip else .Fail,
+            }
+        }
+
+        fn parse_g(self: *MoveParser) ParseResult {
+            if (self.data.keys_len <= 1) return .Continue;
+            switch (self.keys[1]) {
+                .Char => |c| {
+                    switch (c) {
+                        'g' => return self.set_kind(.Start),
+                        else => return if (self.data.optional()) .Skip else .Fail,
+                    }
+                },
                 else => return if (self.data.optional()) .Skip else .Fail,
             }
         }
@@ -789,6 +806,8 @@ test "command parse normal" {
     _ = try test_parse(alloc, &self, "k", .{ .repeat = 1, .kind = .{ .Move = .Up } });
     _ = try test_parse(alloc, &self, "l", .{ .repeat = 1, .kind = .{ .Move = .Right } });
     _ = try test_parse(alloc, &self, "20l", .{ .repeat = 20, .kind = .{ .Move = .Right } });
+    _ = try test_parse(alloc, &self, "gg", .{ .repeat = 1, .kind = .{ .Move = .Start } });
+    _ = try test_parse(alloc, &self, "G", .{ .repeat = 1, .kind = .{ .Move = .End } });
 
     // d/c/y
     _ = try test_parse(alloc, &self, "69d20l", .{ .repeat = 69, .kind = .{ .Delete = .{ .repeat = 20, .kind = .Right } } });

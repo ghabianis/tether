@@ -24,10 +24,16 @@ vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
 
+const ENABLE_TEST_TEXT = true;
+
 pub fn init(self: *Self) !void {
     try self.rope.init();
     try self.vim.init(std.heap.c_allocator, &Vim.DEFAULT_PARSERS);
     self.clipboard = Clipboard.init();
+    if (comptime ENABLE_TEST_TEXT) {
+        const str = @embedFile("./stress.txt");
+        self.cursor = try self.rope.insert_text(self.cursor, str);
+    }
 }
 
 pub fn keydown(self: *Self, key: Key) !void {
@@ -229,8 +235,16 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         },
         .ParagraphBegin => {},
         .ParagraphEnd => {},
-        .Start => {},
-        .End => {},
+        .Start => {
+            self.cursor = .{ .line = 0, .col = 0 };
+        },
+        .End => {
+            const last = self.rope.nodes.last orelse return;
+            self.cursor = .{
+                .line = @intCast(u32, self.rope.nodes.len - 1),
+                .col = @intCast(u32, last.data.items.len),
+            };
+        },
         .Word => |skip_punctuation| {
             self.forward_word(skip_punctuation);
         },

@@ -149,7 +149,7 @@ pub const Atlas = struct {
         var positions = [_]metal.CGPoint{metal.CGPoint.default()} ** max_positions;
         ct.CTRunGetPositions(glyph_run, .{ .location = 0, .length = 0 }, &positions);
 
-        print("GLYPHS: {any}\n", .{glyphs});
+        print("GLYPHSz: {any}\n", .{glyphs});
         print("GLYPHS RECTS: {any}\n\n {any}\n\n", .{ glyph_rects[0], glyph_rects[1] });
         print("RUN POSITIONS: {any}\n", .{positions});
         return glyphs;
