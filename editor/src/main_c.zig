@@ -12,6 +12,7 @@ const ct = @import("./coretext.zig");
 const Vim = @import("./vim.zig");
 const Event = @import("./event.zig");
 const strutil = @import("./strutil.zig");
+const Conf = @import("./conf.zig");
 
 const print = std.debug.print;
 
@@ -334,12 +335,19 @@ const Renderer = struct {
         var col: u32 = 0;
         for (text) |char| {
             const glyph = self.atlas.lookup_char(char);
-            const l: f32 = 0.0;
-            const width = @intToFloat(f32, glyph.rect.widthCeil());
+            const width = if (Conf.FUCK) @intToFloat(f32, glyph.rect.widthCeil()) else @intToFloat(f32, glyph.rect.widthCeil());
+            // const width = @intToFloat(f32, glyph.rect.widthCeil());
+            // const width = @floatCast(f32, glyph.rect.size.width);
 
-            const xx = x + l;
-            var yy = y + @intToFloat(f32, glyph.rect.maxyCeil());
-            var bot = y + @intToFloat(f32, glyph.rect.minyCeil());
+            // const xx = x + @floatCast(f32, glyph.rect.origin.x);
+            // const xx = if (Conf.FUCK) x + @floatCast(f29, glyph.rect.origin.x) else x;
+            const xx = if (Conf.FUCK) x else x;
+
+            var yy = if (Conf.FUCK) y + @floatCast(f32, glyph.rect.origin.y + glyph.rect.size.height) else y + @intToFloat(f32, glyph.rect.maxyCeil());
+            var bot = if (Conf.FUCK) y + @floatCast(f32, glyph.rect.origin.y) else y + @intToFloat(f32, glyph.rect.minyCeil());
+
+            // var yy = y + @floatCast(f32, glyph.rect.origin.y + glyph.rect.size.height);
+            // var bot = y + @floatCast(f32, glyph.rect.origin.y);
 
             const atlas_w = @intToFloat(f32, self.atlas.width);
             const atlas_h = @intToFloat(f32, self.atlas.height);
@@ -525,8 +533,9 @@ const Renderer = struct {
 };
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
-    var atlas = font.Atlas.new(64.0);
-    atlas.make_atlas();
+    const alloc = std.heap.c_allocator;
+    var atlas = font.Atlas.new(alloc, 96.0);
+    atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
     defer obj.msgSend(void, objc.sel("release"), .{});

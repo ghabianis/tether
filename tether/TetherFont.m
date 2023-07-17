@@ -28,6 +28,7 @@
 //    NSPasteboard *pb = NSPasteboard.generalPasteboard;
 //    [pb stringForType:]
     
+//    CTFontDrawGlyphs(<#CTFontRef  _Nonnull font#>, <#const CGGlyph * _Nonnull glyphs#>, <#const CGPoint * _Nonnull positions#>, <#size_t count#>, <#CGContextRef  _Nonnull context#>)
     printf("HOLY FUCKING SHIT IT WORKS!\n");
 }
 @end

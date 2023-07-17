@@ -61,6 +61,8 @@ pub extern "C" fn CFAttributedStringGetLength(string: CFAttributedStringRef) CFI
 
 pub extern "C" fn CFArrayGetValueAtIndex(array: CFArrayRef, index: CFIndex) CFTypeRef;
 
+pub extern "C" fn CFRelease(obj: CFTypeRef) void;
+
 // pub extern "C" const kCGImageAlphaPremultipliedLast: u32;
 pub extern "C" fn CGColorSpaceCreateWithName(name: objc.c.id) CGColorSpaceRef;
 pub extern "C" fn CGBitmapContextCreate(
@@ -75,6 +77,9 @@ pub extern "C" fn CGBitmapContextCreate(
 pub extern "C" fn CGColorCreateGenericRGB(r: metal.CGFloat, g: metal.CGFloat, b: metal.CGFloat, a: metal.CGFloat) CGColorRef;
 pub extern "C" fn CGContextSetFillColorWithColor(ctx: CGContextRef, color: CGColorRef) void;
 pub extern "C" fn CGContextFillRect(ctx: CGContextRef, rect: metal.CGRect) void;
+pub extern "C" fn CGContextStrokeRect(ctx: CGContextRef, rect: metal.CGRect) void;
+pub extern "C" fn CGContextStrokeRectWithWidth(ctx: CGContextRef, rect: metal.CGRect, width: metal.CGFloat) void;
+pub extern "C" fn CGContextSetStrokeColorWithColor(ctx: CGContextRef, color: CGColorRef) void;
 pub extern "C" fn CGContextSetFont(ctx: CGContextRef, font: CGFontRef) void;
 pub extern "C" fn CGContextSetFontSize(ctx: CGContextRef, size: metal.CGFloat) void;
 
