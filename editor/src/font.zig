@@ -6,23 +6,17 @@ const print = std.debug.print;
 
 pub const GlyphInfo = struct {
     const Self = @This();
-    glyph: metal.CGGlyph,
     rect: metal.CGRect,
     tx: f32,
     ty: f32,
     advance: f32,
-    ascent: metal.CGFloat,
-    descent: metal.CGFloat,
 
     fn default() Self {
         return Self{
-            .glyph = 0,
             .rect = metal.CGRect.default(),
             .tx = 0.0,
             .ty = 0.0,
             .advance = 0.0,
-            .ascent = 0.0,
-            .descent = 0.0,
         };
     }
 };
@@ -96,12 +90,12 @@ pub const Atlas = struct {
         };
     }
 
-    pub fn lookup_char(self: *const Self, char: u8) GlyphInfo {
+    pub fn lookup_char(self: *const Self, char: u8) *const GlyphInfo {
         std.debug.assert(char < self.glyph_info.len);
-        return self.glyph_info[@intCast(usize, char)];
+        return &self.glyph_info[@intCast(usize, char)];
     }
 
-    pub fn lookup_char_from_str(self: *const Self, str: []const u8) GlyphInfo {
+    pub fn lookup_char_from_str(self: *const Self, str: []const u8) *const GlyphInfo {
         return self.lookup_char(str[0]);
     }
 
@@ -293,13 +287,10 @@ pub const Atlas = struct {
                 new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
 
                 self.glyph_info[i] = .{
-                    .glyph = glyph,
                     .rect = new_rect,
                     .tx = tx,
                     .ty = @floatCast(f32, ty),
                     .advance = @intToFloat(f32, advance),
-                    .ascent = ct.CTFontGetAscent(self.font.value),
-                    .descent = ct.CTFontGetDescent(self.font.value),
                 };
 
                 ox += rectw + advance + 1;

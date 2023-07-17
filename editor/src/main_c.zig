@@ -385,22 +385,7 @@ const Renderer = struct {
                 },
             }
 
-            const tl = math.float2(xx, yy);
-            const tr = math.float2(xx + width, yy);
-            const br = math.float2(xx + width, bot);
-            const bl = math.float2(xx, bot);
-            const tx_tl = math.float2(glyph.tx, tyt);
-            const tx_tr = math.float2(glyph.tx + bitmap_w / atlas_w, tyt);
-            const tx_bl = math.float2(glyph.tx, tyb);
-            const tx_br = math.float2(glyph.tx + bitmap_w / atlas_w, tyb);
-
-            try vertices.append(alloc, .{ .pos = tl, .tex_coords = tx_tl, .color = color });
-            try vertices.append(alloc, .{ .pos = tr, .tex_coords = tx_tr, .color = color });
-            try vertices.append(alloc, .{ .pos = bl, .tex_coords = tx_bl, .color = color });
-
-            try vertices.append(alloc, .{ .pos = tr, .tex_coords = tx_tr, .color = color });
-            try vertices.append(alloc, .{ .pos = br, .tex_coords = tx_br, .color = color });
-            try vertices.append(alloc, .{ .pos = bl, .tex_coords = tx_bl, .color = color });
+            try vertices.appendSlice(alloc, &Vertex.square(.{ .t = yy, .b = bot, .l = xx, .r = xx + width }, .{ .t = tyt, .b = tyb, .l = glyph.tx, .r = glyph.tx + bitmap_w / atlas_w }, color));
         }
 
         const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;

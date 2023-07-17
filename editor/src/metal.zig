@@ -112,35 +112,35 @@ pub const CGRect = extern struct {
         return CGRect{ .origin = CGPoint.default(), .size = CGSize.default() };
     }
 
-    pub fn width(self: *const Self) CGFloat {
+    pub inline fn width(self: *const Self) CGFloat {
         return self.size.width;
     }
 
-    pub fn widthCeil(self: *const Self) i32 {
+    pub inline fn widthCeil(self: *const Self) i32 {
         return @floatToInt(i32, @ceil(self.width()));
     }
 
-    pub fn heightCeil(self: *const Self) i32 {
+    pub inline fn heightCeil(self: *const Self) i32 {
         return @floatToInt(i32, @ceil(self.height()));
     }
 
-    pub fn height(self: *const Self) CGFloat {
+    pub inline fn height(self: *const Self) CGFloat {
         return self.size.height;
     }
 
-    pub fn miny(self: *const Self) CGFloat {
+    pub inline fn miny(self: *const Self) CGFloat {
         return self.origin.y;
     }
 
-    pub fn maxy(self: *const Self) CGFloat {
+    pub inline fn maxy(self: *const Self) CGFloat {
         return self.origin.y + self.size.height;
     }
 
-    pub fn minyCeil(self: *const Self) i32 {
+    pub inline fn minyCeil(self: *const Self) i32 {
         return @floatToInt(i32, @ceil(self.miny()));
     }
 
-    pub fn maxyCeil(self: *const Self) i32 {
+    pub inline fn maxyCeil(self: *const Self) i32 {
         return @floatToInt(i32, @ceil(self.maxy()));
     }
 };

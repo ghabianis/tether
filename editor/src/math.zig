@@ -15,7 +15,7 @@ pub const Float4 = extern struct {
     z: f32,
     w: f32,
 
-    pub fn new(x: f32, y: f32, z: f32, w: f32) Float4 {
+    pub inline fn new(x: f32, y: f32, z: f32, w: f32) Float4 {
         return Float4{
             .x = x,
             .y = y,
@@ -40,11 +40,11 @@ pub const Float4 = extern struct {
         );
     }
 
-    pub fn dot(a: Float4, b: Float4) f32 {
+    pub inline fn dot(a: Float4, b: Float4) f32 {
         return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
     }
 
-    pub fn col(self: Float4, comptime col_idx: usize) f32 {
+    pub inline fn col(self: Float4, comptime col_idx: usize) f32 {
         switch (col_idx) {
             0 => return self.x,
             1 => return self.y,
@@ -55,15 +55,15 @@ pub const Float4 = extern struct {
     }
 };
 
-pub fn float2(x: f32, y: f32) Float2 {
+pub inline fn float2(x: f32, y: f32) Float2 {
     return .{ .x = x, .y = y };
 }
 
-pub fn float3(x: f32, y: f32, z: f32) Float3 {
+pub inline fn float3(x: f32, y: f32, z: f32) Float3 {
     return .{ .x = x, .y = y, .z = z };
 }
 
-pub fn float4(x: f32, y: f32, z: f32, w: f32) Float4 {
+pub inline fn float4(x: f32, y: f32, z: f32, w: f32) Float4 {
     return .{ .x = x, .y = y, .z = z, .w = w };
 }
 pub fn hex4(comptime hex: []const u8) Float4 {

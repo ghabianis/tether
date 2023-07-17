@@ -65,6 +65,14 @@ fn build_static_lib(b: *std.build.Builder, target: std.zig.CrossTarget, optimize
         },
         .optimize = optimize,
     });
+    const ENABLE_DEBUG_SYMBOLS = true;
+    if (comptime ENABLE_DEBUG_SYMBOLS) {
+        static_lib.dll_export_fns = true;
+        static_lib.strip = false;
+        static_lib.export_table = true;
+        static_lib.link_emit_relocs = true;
+        static_lib.bundle_compiler_rt = true;
+    }
     // static_lib.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
     // static_lib.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     // static_lib.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Devseloper/SDKs/MacOSX.sdk/usr/lib");
