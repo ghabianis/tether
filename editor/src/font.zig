@@ -64,6 +64,7 @@ pub const Atlas = struct {
         const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
         // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Light", .ascii);
         // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Italic", .ascii);
+        // const iosevka = metal.NSString.new_with_bytes("Fira Code", .ascii);
         const Class = objc.Class.getClass("NSFont").?;
         const font = Class.msgSend(objc.Object, objc.sel("fontWithName:size:"), .{ iosevka, font_size });
         const baseline_nsnumber = metal.NSNumber.from_id(ct.CTFontCopyAttribute(font.value, ct.kCTFontBaselineAdjustAttribute));
@@ -105,15 +106,58 @@ pub const Atlas = struct {
     }
 
     fn get_advance(self: *Self, cgfont: ct.CGFontRef, glyph: metal.CGGlyph) i32 {
+        _ = cgfont;
         var glyphs = [_]metal.CGGlyph{glyph};
-        var advances = [_]i32{0};
-        if (!ct.CGFontGetGlyphAdvances(cgfont, &glyphs, 1, &advances)) {
-            @panic("WTF");
-        }
-        return intCeil((@intToFloat(f32, advances[0]) / 1000.0) * self.font_size);
+        // var advances = [_]i32{0};
+        var advances = [_]metal.CGSize{metal.CGSize.default()};
+        _ = ct.CTFontGetAdvancesForGlyphs(self.font.value, .horizontal, &glyphs, &advances, 1);
+
+        print("advances: {}\n", .{advances[0]});
+        // return intCeil((advances[0].width / 1000.0) * self.font_size);
+        return intCeil(advances[0].width);
+        // if (!ct.CGFontGetGlyphAdvances(cgfont, &glyphs, 1, &advances)) {
+        //     @panic("WTF");
+        // }
+        // return intCeil((@intToFloat(f32, advances[0]) / 1000.0) * self.font_size);
+    }
+
+    fn ligature_test(self: *Self) [10]metal.CGGlyph {
+        // https://stackoverflow.com/questions/26770894/coretext-get-ligature-glyph
+        const chars_c = "++";
+        const chars = metal.NSString.new_with_bytes(chars_c, .ascii);
+        const two = metal.NSNumber.number_with_int(chars_c.len);
+        const len = @intCast(i64, chars.length());
+
+        const attributed_string = ct.CFAttributedStringCreateMutable(0, len);
+        ct.CFAttributedStringReplaceString(attributed_string, .{ .location = 0, .length = 0 }, chars.obj.value);
+        const attrib_len = ct.CFAttributedStringGetLength(attributed_string);
+        ct.CFAttributedStringSetAttribute(attributed_string, .{ .location = 0, .length = attrib_len }, ct.kCTLigatureAttributeName, two.obj.value);
+        ct.CFAttributedStringSetAttribute(attributed_string, .{ .location = 0, .length = attrib_len }, ct.kCTFontAttributeName, self.font.value);
+
+        const line = ct.CTLineCreateWithAttributedString(attributed_string);
+        const glyph_runs = ct.CTLineGetGlyphRuns(line);
+        const glyph_run = ct.CFArrayGetValueAtIndex(glyph_runs, 0);
+        const glyph_count = @intCast(usize, ct.CTRunGetGlyphCount(glyph_run));
+
+        var glyphs = [_]metal.CGGlyph{0} ** 10;
+        ct.CTRunGetGlyphs(glyph_run, .{ .location = 0, .length = @intCast(i64, glyph_count) }, &glyphs);
+
+        var glyph_rects = [_]metal.CGRect{metal.CGRect.default()} ** 4;
+        _ = ct.CTFontGetBoundingRectsForGlyphs(self.font.value, .horizontal, &glyphs, &glyph_rects, 2);
+
+        const max_positions = 8;
+        var positions = [_]metal.CGPoint{metal.CGPoint.default()} ** max_positions;
+        ct.CTRunGetPositions(glyph_run, .{ .location = 0, .length = 0 }, &positions);
+
+        print("GLYPHS: {any}\n", .{glyphs});
+        print("GLYPHS RECTS: {any}\n\n {any}\n\n", .{ glyph_rects[0], glyph_rects[1] });
+        print("RUN POSITIONS: {any}\n", .{positions});
+        return glyphs;
     }
 
     pub fn make_atlas(self: *Self) void {
+        const lig_glyphs = self.ligature_test();
+        _ = lig_glyphs;
         var chars_c = [_]u8{0} ** CHARS_LEN;
         {
             var i: u8 = 32;
@@ -276,6 +320,7 @@ pub const Atlas = struct {
             // print("CURSOR: tx={d} ty={d} ox={d} oy={d}\n", .{ tx, ty, ox, oy });
 
             ct.CGContextFillRect(ctx, cursor_rect);
+            // ct.CGContextShowGlyphsAtPoint(ctx, cursor_rect.origin.x, cursor_rect.origin.y, &lig_glyphs, 2);
             self.cursor_tx = tx;
             self.cursor_ty = ty;
             self.cursor_w = cursor_rect.size.width / @intToFloat(f32, tex_w);

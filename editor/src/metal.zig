@@ -204,6 +204,11 @@ pub const NSNumber = struct {
     pub fn float_value(self: Self) CGFloat {
         return self.obj.msgSend(CGFloat, objc.sel("floatValue"), .{});
     }
+
+    pub fn number_with_int(value: i32) Self {
+        const obj = Self.get_class().msgSend(objc.Object, objc.sel("numberWithInt:"), .{value});
+        return Self.from_obj(obj);
+    }
 };
 
 pub const NSDictionary = struct {

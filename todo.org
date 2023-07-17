@@ -1,6 +1,6 @@
 #+title: Todo
 
-* TODO Now [5/9]
+* TODO Now [5/12]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
 ** DONE Vim [0/0]
@@ -10,7 +10,41 @@
 **** DONE w/W
 **** DONE b/B
 **** DONE e/E
-** TODO LIGATURES!
+** TODO LIGATURES! [0/5]
+I want them juicy sexy ligatures
+
+Ideally, I get ligature info from the CoreText API, and I just need to modify existing code to detect when a sequence of chars is
+a ligature, and then render them.
+
+But I couldn't find anything in the CoreText API.
+
+I did find a way with =CTRun= (See the diagram [[https://developer.apple.com/library/archive/documentation/StringsTextFonts/Conceptual/CoreText_Programming/Overview/Overview.html#//apple_ref/doc/uid/TP40005533-CH3-SW1][here]] for the architecture of CoreText objects)
+
+CTRun is a "run" of glyphs, and =CTRunGetPositions= gives you the positions for each glyph, which includes ligature glyphs (I'm pretty sure).
+
+So instead of rendering glyphs one by one as we are now, we need to group them into CTRuns, probably line by line. This probably good anyway, because
+the set of glyphs the set of characters are not isomorphic.
+
+With my Iosevka font, I tried to output the glyph for the ligature "=>". It actually gave me two special ligature glyphs, one for each component (the two horizontal lines and the arrow).
+
+*** TODO first write a benchmark for current text geometry building to prevent regressions
+*** TODO add common font ligatures to atlas at beginning
+*** TODO refactor text geometry building to use CTRun [0/6]
+**** TODO iterate line by line
+**** TODO efficiently create attributed string for line [0/3]
+***** TODO create NSString zero-copy with =initWithBytesNoCopy:length:freeWhenDone:=
+***** TODO make the attributed string with =initWithString:attributes:=
+***** TODO make the attributes NSDictionary once, and cache it (probably at startup)
+**** TODO create line =ct.CTLineCreateWithAttributedString(attributed_string)=
+**** TODO get CTRun positions/glyphs
+**** TODO convert positions/glyphs -> Vertices
+*** TODO refactor cursor/selection geometry
+will this be performant enough?
+
+if not this might require using the full CoreText API (=CTLine=, =CTFrame=)
+*** TODO add new ligatures to atlas when encountered
+easiest to rebuild atlas from scratch again
+
 ** DONE bug: delete/change range broken
 cause I added `self.len -= node.data.items.len;` to Rope.remove_node() and this fucks up Rope.remove_text() because it is already doing the calculation
 need to make separate functions: one that subtracts len and one that doesn't
@@ -59,9 +93,26 @@ if cursor is at =s= in =start_of_line= (index 7)
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
 ** TODO bug: semicolon texture fucked up
 if you look at the atlas, the =)= glyph is intersecting with the =;= glyph.
+** TODO bug: delete/change move still not correct
+ex: de or ce on this text with cursor at 0:
+#+begin_src
+self nice
+#+end_src
+
+remainder should be:
+#+begin_src
+ nice
+#+end_src
+
+instead is:
+#+begin_src
+f nice
+#+end_src
+** TODO bug: =cc= (change line) should preserve line and not delete it entirely
 * TODO Later [0/4]
-** TODO Egui for debugging?
+** TODO event loop or some mechanism to do work without stalling frame
 ** TODO create deinit function for renderer/editor
+** TODO Egui for debugging?
 ** TODO curves svg etc
 * Archive
 ** DONE Fix cursor [0/0]

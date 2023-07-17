@@ -11,16 +11,28 @@ pub const CTFontOrientation = enum(u32) {
     vertical = 2,
 };
 
+pub const CFRange = extern struct {
+    location: CFIndex,
+    length: CFIndex,
+};
+
 pub const CFTypeRef = objc.c.id;
 pub const CFStringRef = objc.c.id;
+pub const CFAttributedStringRef = objc.c.id;
+pub const CFMutableAttributedStringRef = objc.c.id;
+pub const CFArrayRef = objc.c.id;
 pub const CGContextRef = objc.c.id;
 pub const CGColorSpaceRef = objc.c.id;
 pub const CGColorRef = objc.c.id;
 pub const CGFontRef = objc.c.id;
 pub const CGImageRef = objc.c.id;
+pub const CTLineRef = objc.c.id;
+pub const CTRunRef = objc.c.id;
 
 pub extern "C" const kCGColorSpaceSRGB: objc.c.id;
 pub extern "C" const kCTFontBaselineAdjustAttribute: objc.c.id;
+pub extern "C" const kCTLigatureAttributeName: objc.c.id;
+pub extern "C" const kCTFontAttributeName: objc.c.id;
 pub const kCGImageAlphaPremultipliedLast: u32 = 1;
 
 pub extern "C" fn CTFontGetAscent(font: CTFontRef) metal.CGFloat;
@@ -32,9 +44,23 @@ pub extern "C" fn CTFontGetBoundingRectsForGlyphs(font: CTFontRef, orientation: 
 pub extern "C" fn CTFontCopyGraphicsFont(font: CTFontRef, attributes: ?[*]const objc.c.id) objc.c.id;
 pub extern "C" fn CTFontGetAdvancesForGlyphs(font: CTFontRef, orientation: CTFontOrientation, glyphs: [*]const metal.CGGlyph, advances: [*]metal.CGSize, count: CFIndex) f64;
 pub extern "C" fn CTFontCopyAttribute(font: CTFontRef, attribute: CFStringRef) CFTypeRef;
+pub extern "C" fn CTFontGetLigatureCaretPositions(font: CTFontRef, glyph: metal.CGGlyph, positions: [*]metal.CGFloat, max_positions: CFIndex) CFIndex;
+pub extern "C" fn CTLineCreateWithAttributedString(string: CFAttributedStringRef) CTLineRef;
+pub extern "C" fn CTLineGetGlyphRuns(line: CTLineRef) CFArrayRef;
+pub extern "C" fn CTRunGetGlyphs(run: CTRunRef, range: CFRange, buffer: [*]metal.CGGlyph) void;
+pub extern "C" fn CTRunGetGlyphCount(run: CTRunRef) CFIndex;
+pub extern "C" fn CTRunGetPositions(run: CTRunRef, range: CFRange, buffer: [*]metal.CGPoint) void;
 
 pub extern "C" fn CGFontGetGlyphAdvances(font: CGFontRef, glyphs: [*]metal.CGGlyph, count: usize, advances: [*]i32) bool;
 pub extern "C" fn CGFontGetDescent(font: CGFontRef) i32;
+
+pub extern "C" fn CFAttributedStringCreateMutable(alloc: objc.c.id, max_length: CFIndex) CFMutableAttributedStringRef;
+pub extern "C" fn CFAttributedStringReplaceString(string: CFMutableAttributedStringRef, range: CFRange, replacement: CFStringRef) void;
+pub extern "C" fn CFAttributedStringSetAttribute(string: CFMutableAttributedStringRef, range: CFRange, attribute: CFStringRef, value: CFTypeRef) void;
+pub extern "C" fn CFAttributedStringGetLength(string: CFAttributedStringRef) CFIndex;
+
+pub extern "C" fn CFArrayGetValueAtIndex(array: CFArrayRef, index: CFIndex) CFTypeRef;
+
 // pub extern "C" const kCGImageAlphaPremultipliedLast: u32;
 pub extern "C" fn CGColorSpaceCreateWithName(name: objc.c.id) CGColorSpaceRef;
 pub extern "C" fn CGBitmapContextCreate(
