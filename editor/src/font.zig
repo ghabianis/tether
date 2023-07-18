@@ -56,6 +56,7 @@ pub const Atlas = struct {
 
     max_glyph_height: i32,
     max_glyph_width: i32,
+    max_glyph_width_before_ligatures: i32,
 
     atlas: ct.CGImageRef,
     width: i32,
@@ -91,6 +92,7 @@ pub const Atlas = struct {
             .glyph_info = glyph_info,
             .max_glyph_height = undefined,
             .max_glyph_width = undefined,
+            .max_glyph_width_before_ligatures = undefined,
 
             .atlas = undefined,
             .width = undefined,
@@ -283,7 +285,6 @@ pub const Atlas = struct {
                 max_advance = @max(max_advance, advance);
                 lowest_origin = @min(lowest_origin, @floatCast(f32, glyph_rect.origin.y));
 
-                print("WIDTH: {d}\n", .{glyph_rect.widthCeil()});
                 if (roww + glyph_rect.widthCeil() + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     w = @max(w, roww);
                     h += rowh;
@@ -314,6 +315,7 @@ pub const Atlas = struct {
         const max_h = rowh;
         self.max_glyph_height = max_h;
         self.max_glyph_width = max_w;
+        self.max_glyph_width_before_ligatures = max_w_before_ligatures;
         w = @max(w, roww);
         h += rowh;
         h += max_h;
@@ -391,14 +393,6 @@ pub const Atlas = struct {
                 // const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
                 var the_glyph = [_]metal.CGGlyph{glyph};
 
-                if (glyph == 4630) {
-                    print("LIGMA WIDTH: {d}\n", .{rect.size.width});
-                }
-
-                if (i < chars_c.len and chars_c[i] == 's') {
-                    print("{c} ty: {d} pix pos: {d} or {d}\n", .{ chars_c[i], ty, oy, ty * @intToFloat(f32, tex_h) });
-                    // @panic("DAMD\n");
-                }
                 // CGContext draws with the glyph's origin into account, for example x = -2 will be to the left
                 // we want to draw at ox & oy, so subtract the glyph's origin values to do this.
                 if (Conf.FUCK) {

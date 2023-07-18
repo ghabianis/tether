@@ -195,7 +195,7 @@ const Renderer = struct {
         const screenx = @floatCast(f32, self.screen_size.width);
         const screeny = @floatCast(f32, self.screen_size.height);
 
-        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny);
+        try self.build_text_geometry(alloc, &Arena, screenx, screeny);
         try self.build_selection_geometry(alloc, str, screenx, screeny);
 
         // Creating a buffer of length 0 causes a crash, so we need to check if we have any vertices
@@ -340,11 +340,11 @@ const Renderer = struct {
         return dict;
     }
 
-    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, text: []const u8, screenx: f32, screeny: f32) !void {
+    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, screenx: f32, screeny: f32) !void {
         _ = screenx;
-        _ = text;
 
-        var starting_x: f32 = 0.0;
+        var initial_x: f32 = 0.0;
+        var starting_x: f32 = initial_x;
         var starting_y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
 
         const atlas_w = @intToFloat(f32, self.atlas.width);
@@ -352,14 +352,32 @@ const Renderer = struct {
 
         self.vertices.clearRetainingCapacity();
 
-        // TODO: This can be created once
+        // TODO: This can be created once at startup
         const text_attributes = self.text_attributed_string_dict();
         defer text_attributes.msgSend(void, objc.sel("release"), .{});
 
         var iter = Rope.iter_lines(self.editor.rope.nodes.first orelse return);
 
-        while (iter.next()) |line| {
+        var cursor_line: u32 = 0;
+        var cursor_col: u32 = 0;
+        while (iter.next()) |the_line| {
+            if (the_line.len == 0 or the_line.len == 1 and strutil.is_newline(the_line[0])) {
+                if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
+                    const cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
+                    try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
+                }
+
+                starting_y -= self.atlas.descent + self.atlas.ascent;
+                cursor_line += 1;
+                cursor_col = 0;
+                continue;
+            }
+            var line = if (strutil.is_newline(the_line[the_line.len - 1])) the_line[0 .. the_line.len - 1] else the_line;
+
+            // TODO: I think this can be created once before this loop, then
+            //       reused by calling init_with_bytes_no_copy
             const nstring = metal.NSString.new_with_bytes_no_copy(line, .ascii);
+            // TODO: Same as above
             const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
             defer attributed_string.release();
 
@@ -386,14 +404,22 @@ const Renderer = struct {
             ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
             self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
 
-            print("LINE: {s}\nPOS: {any}\nGLYPHS: {any}\n", .{ line, positions.items, glyphs.items });
             var i: usize = 0;
+            var last_x: f32 = 0.0;
             while (i < glyphs.items.len) : (i += 1) {
+                defer {
+                    cursor_col += 1;
+                }
+
+                const has_cursor = cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col;
+                const color = if (has_cursor) math.float4(0.0, 0.0, 0.0, 1.0) else TEXT_COLOR;
+
                 const glyph = glyphs.items[i];
                 const glyph_info = self.atlas.lookup(glyph);
                 const rect = glyph_rects.items[i];
                 var pos = positions.items[i];
 
+                const width = @intToFloat(f32, glyph_info.rect.widthCeil());
                 const b = @floatCast(f32, pos.y) + starting_y + @floatCast(f32, rect.origin.y);
                 const t = b + @floatCast(f32, rect.size.height);
                 const l = @floatCast(f32, pos.x) + starting_x + @floatCast(f32, rect.origin.x);
@@ -402,139 +428,29 @@ const Renderer = struct {
                 const txt = glyph_info.ty - @intToFloat(f32, glyph_info.rect.heightCeil()) / atlas_h;
                 const txb = glyph_info.ty;
                 const txl = glyph_info.tx;
-                const txr = glyph_info.tx + @intToFloat(f32, glyph_info.rect.widthCeil()) / atlas_w;
-                if (glyph == 4630) {
-                    print("LIGMA GLYPH IN HERE: {d}\n", .{glyph_info.rect.size.width});
+                const txr = glyph_info.tx + width / atlas_w;
+
+                if (has_cursor) {
+                    const cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), starting_x + @floatCast(f32, pos.x), if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance);
+                    try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
                 }
 
-                const vertices = Vertex.square(.{ .t = t, .b = b, .l = l, .r = r }, .{ .t = txt, .b = txb, .l = txl, .r = txr }, TEXT_COLOR);
+                const vertices = Vertex.square(.{ .t = t, .b = b, .l = l, .r = r }, .{ .t = txt, .b = txb, .l = txl, .r = txr }, color);
                 try self.vertices.appendSlice(alloc, &vertices);
+                last_x = l + glyph_info.advance;
             }
 
-            // var i: usize = 0;
-            // while (i < glyphs.items.len) : (i += 1) {
-            //     const glyph = glyphs.items[i];
-            //     _ = glyph;
-            //     const rect = glyph_rects.items[i];
-            //     const pos = positions.items[i];
+            if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
+                const pos = positions.items[positions.items.len - 1];
+                const cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), last_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
+                try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
+            }
 
-            //     const x = pos.x + screenx;
-            //     const y = pos.y + screeny;
-
-            //     const xx = @floatCast(f32, x + rect.origin.x);
-            //     const yy = @floatCast(f32, y - rect.origin.y);
-
-            //     const w = @floatCast(f32, rect.size.width);
-            //     const h = @floatCast(f32, rect.size.height);
-
-            //     const txt = @floatCast(f32, self.atlas.ascent - rect.origin.y);
-            //     const txbb = @floatCast(f32, txt - h);
-            //     const txl = @floatCast(f32, rect.origin.x);
-            //     const txr = @floatCast(f32, txl + w);
-
-            //     const tx_tl = math.float2(txl, txt);
-            //     const tx_tr = math.float2(txr, txt);
-            //     const tx_bl = math.float2(txl, txbb);
-            //     const tx_br = math.float2(txr, txbb);
-
-            //     var bg = math.hex4("#b4f9f8");
-
-            //     var vertices = &self.vertices;
-            //     try vertices.appendSlice(alloc, &[_]Vertex{
-            //         .{ .pos = math.float2(xx, yy), .tex_coords = tx_tl, .color = bg },
-            //         .{ .pos = math.float2(xx + w, yy), .tex_coords = tx_tr, .color = bg },
-            //         .{ .pos = math.float2(xx, yy - h), .tex_coords = tx_bl, .color = bg },
-
-            //         .{ .pos = math.float2(xx + w, yy), .tex_coords = tx_tr, .color = bg },
-            //         .{ .pos = math.float2(xx + w, yy - h), .tex_coords = tx_br, .color = bg },
-            //         .{ .pos = math.float2(xx, yy - h), .tex_coords = tx_bl, .color = bg },
-            //     });
-            // }
+            starting_y -= self.atlas.descent + self.atlas.ascent;
+            cursor_line += 1;
+            cursor_col = 0;
 
             _ = frame_arena.reset(.retain_capacity);
-        }
-    }
-
-    /// TODO: Iterate rope text instead of passing string
-    pub fn build_text_geometry_old(self: *Self, alloc: Allocator, text: []const u8, screenx: f32, screeny: f32) !void {
-        _ = screenx;
-        self.vertices.clearRetainingCapacity();
-        var vertices = &self.vertices;
-
-        var x: f32 = 0.0;
-        var y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
-
-        var starting_x = x;
-
-        var line: u32 = 0;
-        var col: u32 = 0;
-        for (text) |char| {
-            const glyph = self.atlas.lookup_char(char);
-            const width = if (Conf.FUCK) @intToFloat(f32, glyph.rect.widthCeil()) else @intToFloat(f32, glyph.rect.widthCeil());
-            // const width = @intToFloat(f32, glyph.rect.widthCeil());
-            // const width = @floatCast(f32, glyph.rect.size.width);
-
-            // const xx = x + @floatCast(f32, glyph.rect.origin.x);
-            // const xx = if (Conf.FUCK) x + @floatCast(f29, glyph.rect.origin.x) else x;
-            const xx = if (Conf.FUCK) x else x;
-
-            var yy = if (Conf.FUCK) y + @floatCast(f32, glyph.rect.origin.y + glyph.rect.size.height) else y + @intToFloat(f32, glyph.rect.maxyCeil());
-            var bot = if (Conf.FUCK) y + @floatCast(f32, glyph.rect.origin.y) else y + @intToFloat(f32, glyph.rect.minyCeil());
-
-            // var yy = y + @floatCast(f32, glyph.rect.origin.y + glyph.rect.size.height);
-            // var bot = y + @floatCast(f32, glyph.rect.origin.y);
-
-            const atlas_w = @intToFloat(f32, self.atlas.width);
-            const atlas_h = @intToFloat(f32, self.atlas.height);
-
-            const bitmap_w = @intToFloat(f32, glyph.rect.widthCeil());
-
-            const tyt = glyph.ty - @intToFloat(f32, glyph.rect.heightCeil()) / atlas_h;
-            const tyb = glyph.ty;
-
-            const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;
-            const color = color: {
-                break :color if (has_cursor) math.float4(0.0, 0.0, 0.0, 1.0) else TEXT_COLOR;
-            };
-
-            if (has_cursor) {
-                const cursor_vertices = self.build_cursor_geometry(y, xx, if (width == 0.0) @intToFloat(f32, self.atlas.max_glyph_width) else width);
-                try vertices.appendSlice(alloc, cursor_vertices[0..]);
-            }
-
-            switch (char) {
-                // tab
-                9 => {
-                    x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
-                    col += 4;
-                },
-                // newline, carriage return
-                10, 13 => {
-                    x = starting_x;
-                    // y += -@intToFloat(f32, self.atlas.max_glyph_height);
-                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                    y -= self.atlas.descent + self.atlas.ascent;
-                    line += 1;
-                    col = 0;
-                },
-                else => {
-                    x += glyph.advance;
-                    col += 1;
-
-                    // don't add vertices for glyphs that are whitespace
-                    if (glyph.rect.width() == 0.0 or glyph.rect.height() == 0.0) {
-                        continue;
-                    }
-                },
-            }
-
-            try vertices.appendSlice(alloc, &Vertex.square(.{ .t = yy, .b = bot, .l = xx, .r = xx + width }, .{ .t = tyt, .b = tyb, .l = glyph.tx, .r = glyph.tx + bitmap_w / atlas_w }, color));
-        }
-
-        const has_cursor = line == self.editor.cursor.line and col == self.editor.cursor.col;
-        if (has_cursor) {
-            const cursor_vertices = self.build_cursor_geometry(y, x, @intToFloat(f32, self.atlas.max_glyph_width));
-            try vertices.appendSlice(alloc, cursor_vertices[0..]);
         }
     }
 

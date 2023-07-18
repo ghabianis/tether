@@ -38,6 +38,5 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]],
 fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]],
                               texture2d<float> tex [[texture(0)]],
                               sampler smp [[sampler(0)]]) {
-    // return float4(1, 1, 1, tex.sample(smp, fragmentIn.texCoords.xy).a) * fragmentIn.color;
-    return float4(fragmentIn.color.xyz, tex.sample(smp, fragmentIn.texCoords.xy).a);
+    return float4(1, 1, 1, tex.sample(smp, fragmentIn.texCoords.xy).a) * fragmentIn.color;
 }

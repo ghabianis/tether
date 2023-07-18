@@ -10,7 +10,7 @@
 **** DONE w/W
 **** DONE b/B
 **** DONE e/E
-** TODO LIGATURES! [3/5]
+** TODO LIGATURES! [4/5]
 I want them juicy sexy ligatures
 
 Ideally, I get ligature info from the CoreText API, and I just need to modify existing code to detect when a sequence of chars is
@@ -38,7 +38,7 @@ With my Iosevka font, I tried to output the glyph for the ligature "=>". It actu
 **** DONE create line =ct.CTLineCreateWithAttributedString(attributed_string)=
 **** DONE get CTRun positions/glyphs
 **** DONE convert positions/glyphs -> Vertices
-*** TODO refactor cursor/selection geometry
+*** DONE refactor cursor/selection geometry
 will this be performant enough?
 
 if not this might require using the full CoreText API (=CTLine=, =CTFrame=)
@@ -110,6 +110,7 @@ f nice
 #+end_src
 ** TODO bug: =cc= (change line) should preserve line and not delete it entirely
 * TODO Later [0/4]
+** TODO cursor on ligature glyph should render the regular glyph on top of cursor
 ** TODO event loop or some mechanism to do work without stalling frame
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?
