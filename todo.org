@@ -1,6 +1,6 @@
 #+title: Todo
 
-* TODO Now [5/12]
+* TODO Now [6/11]
 ** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
 ** DONE fix backspace on newline
 ** DONE Vim [0/0]
@@ -10,7 +10,7 @@
 **** DONE w/W
 **** DONE b/B
 **** DONE e/E
-** TODO LIGATURES! [4/5]
+** DONE LIGATURES! [0/0]
 I want them juicy sexy ligatures
 
 Ideally, I get ligature info from the CoreText API, and I just need to modify existing code to detect when a sequence of chars is
@@ -42,9 +42,6 @@ With my Iosevka font, I tried to output the glyph for the ligature "=>". It actu
 will this be performant enough?
 
 if not this might require using the full CoreText API (=CTLine=, =CTFrame=)
-*** TODO add new ligatures to atlas when encountered
-easiest to rebuild atlas from scratch again
-
 ** DONE bug: delete/change range broken
 cause I added `self.len -= node.data.items.len;` to Rope.remove_node() and this fucks up Rope.remove_text() because it is already doing the calculation
 need to make separate functions: one that subtracts len and one that doesn't
@@ -111,6 +108,11 @@ f nice
 ** TODO bug: =cc= (change line) should preserve line and not delete it entirely
 * TODO Later [0/4]
 ** TODO cursor on ligature glyph should render the regular glyph on top of cursor
+** TODO add new ligatures to atlas when encountered
+easiest to rebuild atlas from scratch again
+
+later can do this off main thread so rendering isn't interrupted
+
 ** TODO event loop or some mechanism to do work without stalling frame
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?

@@ -113,7 +113,7 @@ pub const Atlas = struct {
     pub fn get_glyph_rects(self: *Self, glyphs: []const metal.CGGlyph, glyph_rects: []metal.CGRect) void {
         var i: usize = 0;
         for (glyphs) |glyph| {
-            const glyph_info = self.glyph_info.getPtr(glyph) orelse @panic("TODO: Handle missing glyph");
+            const glyph_info = self.lookup(glyph);
             glyph_rects[i] = glyph_info.rect;
             i += 1;
         }
@@ -127,7 +127,7 @@ pub const Atlas = struct {
         if (char < CHAR_START) return &GlyphInfo.DEFAULT;
         std.debug.assert(char < CHAR_END);
         const key = self.char_to_glyph[char];
-        return self.glyph_info.getPtr(key) orelse unreachable;
+        return self.lookup(key);
     }
 
     pub fn lookup_char_from_str(self: *const Self, str: []const u8) *const GlyphInfo {
@@ -137,19 +137,10 @@ pub const Atlas = struct {
     fn get_advance(self: *Self, cgfont: ct.CGFontRef, glyph: metal.CGGlyph) i32 {
         _ = cgfont;
         var glyphs = [_]metal.CGGlyph{glyph};
-        // var advances = [_]i32{0};
         var advances = [_]metal.CGSize{metal.CGSize.default()};
         _ = ct.CTFontGetAdvancesForGlyphs(self.font.value, .horizontal, &glyphs, &advances, 1);
 
-        if (glyph == 4637) {
-            print("ADDVANCE FOR GLYPH: {d}\n", .{advances[0].width});
-        }
-        // return intCeil((advances[0].width / 1000.0) * self.font_size);
         return intCeil(advances[0].width);
-        // if (!ct.CGFontGetGlyphAdvances(cgfont, &glyphs, 1, &advances)) {
-        //     @panic("WTF");
-        // }
-        // return intCeil((@intToFloat(f32, advances[0]) / 1000.0) * self.font_size);
     }
 
     /// To get ligatures you need to create an attributed string with kCTLigatureAttributeName set to 1 or 2,
@@ -385,81 +376,23 @@ pub const Atlas = struct {
                 }
 
                 const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
-                const ty = if (Conf.FUCK)
-                    (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h)
-                else
-                    (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy) + rect.origin.y)) / @intToFloat(f32, tex_h);
-                // const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
-                // const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
+                const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
                 var the_glyph = [_]metal.CGGlyph{glyph};
+                _ = the_glyph;
 
-                // CGContext draws with the glyph's origin into account, for example x = -2 will be to the left
-                // we want to draw at ox & oy, so subtract the glyph's origin values to do this.
-                if (Conf.FUCK) {
-                    // idk why weird off by 1 bugs
-                    // ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox + 1) - rect.origin.x, @intToFloat(f64, oy + 1) - rect.origin.y, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
-                    // ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox) - rect.origin.x, @intToFloat(f64, oy) - rect.origin.y, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
-                    // ct.CGContextShowGlyphsAtPoint(ctx, @ceil(@intToFloat(f64, ox) - rect.origin.x), round(@intToFloat(f64, oy) - rect.origin.y), @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
-
-                    const transform = ct.CGAffineTransform{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .tx = @intToFloat(f64, ox) - rect.origin.x, .ty = @intToFloat(f64, oy) - rect.origin.y };
-                    const path = ct.CTFontCreatePathForGlyph(self.font.value, glyph, &transform);
-                    defer ct.CGPathRelease(path);
-                    ct.CGContextAddPath(ctx, path);
-                    ct.CGContextFillPath(ctx);
-
-                    // ct.CGContextSetTextMatrix(ctx, transform);
-                    // ct.CGContextSetTextPosition(ctx, @intToFloat(f64, ox), @intToFloat(f64, oy));
-                    // ct.CGContextShowGlyphs(ctx, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
-                } else {
-                    ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox), @intToFloat(f64, oy), @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
-                }
-
-                if (comptime Conf.DRAW_DEBUG_GLYPH_BOXES) {
-                    const actual_stroke_color = ct.CGColorCreateGenericRGB(0.0, 1.0, 0.0, 1.0);
-                    const other_stroke_color = ct.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 1.0);
-                    defer ct.CGColorRelease(actual_stroke_color);
-                    defer ct.CGColorRelease(other_stroke_color);
-
-                    var actual_origin = metal.CGRect.new(@intToFloat(f64, ox), @intToFloat(f64, oy), 10.0, 10.0);
-                    ct.CGContextSetStrokeColorWithColor(ctx, actual_stroke_color);
-                    ct.CGContextStrokeRectWithWidth(ctx, actual_origin, 1.0);
-
-                    const color2 = ct.CGColorCreateGenericRGB(1.0, 1.0, 1.0, 1.0);
-                    defer ct.CGColorRelease(color2);
-                    var rect2 = rect;
-                    rect2.origin.x = @intToFloat(f64, ox);
-                    rect2.origin.y = @intToFloat(f64, oy);
-                    ct.CGContextSetStrokeColorWithColor(ctx, color2);
-                    ct.CGContextStrokeRectWithWidth(ctx, rect2, 1.0);
-
-                    ct.CGContextSetStrokeColorWithColor(ctx, other_stroke_color);
-                    var new_rect2 = rect;
-                    new_rect2.origin.x += @intToFloat(f64, ox);
-                    new_rect2.origin.y += @intToFloat(f64, oy);
-                    ct.CGContextStrokeRectWithWidth(ctx, new_rect2, 1.0);
-
-                    // const origin_color = ct.CGColorCreateGenericRGB(1.0, 1.0, 1.0, 1.0);
-                    // defer ct.CGColorRelease(origin_color);
-                    // ct.CGContextSetStrokeColorWithColor(ctx, origin_color);
-                    // var origin_rect = new_rect2;
-                    // origin_rect.size.width = 10.0;
-                    // origin_rect.size.height = 10.0;
-                    // ct.CGContextStrokeRectWithWidth(ctx, origin_rect, 1.0);
-                }
+                // CGContext draws with the glyph's origin into account, for
+                // example x = -2 will be to the left we want to draw at ox & oy,
+                // so subtract the glyph's origin values to do this.
+                //
+                // We use CGPath because CGContextShowGlyphs* caused off-by-one
+                // problems causing the glyphs to be rendered incorrectly.
+                const transform = ct.CGAffineTransform{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .tx = @intToFloat(f64, ox) - rect.origin.x, .ty = @intToFloat(f64, oy) - rect.origin.y };
+                const path = ct.CTFontCreatePathForGlyph(self.font.value, glyph, &transform);
+                defer ct.CGPathRelease(path);
+                ct.CGContextAddPath(ctx, path);
+                ct.CGContextFillPath(ctx);
 
                 var new_rect = rect;
-                // new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
-                // new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
-                // new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, new_rect.width(), new_rect.height());
-                // if (comptime DRAW_DEBUG_GLYPH_BOXES) {
-                //     var lmao = new_rect;
-                //     lmao.origin.x = @intToFloat(f32, ox) - rect.origin.x;
-                //     lmao.origin.y = @intToFloat(f32, oy) - rect.origin.y;
-                //     const lmao_stroke_color = ct.CGColorCreateGenericRGB(0.0, 1.0, 1.0, 1.0);
-                //     defer ct.CGColorRelease(lmao_stroke_color);
-                //     ct.CGContextSetStrokeColorWithColor(ctx, lmao_stroke_color);
-                //     ct.CGContextStrokeRectWithWidth(ctx, lmao, 1.0);
-                // }
 
                 if (i < chars_c.len) {
                     const char = chars_c[i];
@@ -488,10 +421,7 @@ pub const Atlas = struct {
             const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
             const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
 
-            // print("CURSOR: tx={d} ty={d} ox={d} oy={d}\n", .{ tx, ty, ox, oy });
-
             ct.CGContextFillRect(ctx, cursor_rect);
-            // ct.CGContextShowGlyphsAtPoint(ctx, cursor_rect.origin.x, cursor_rect.origin.y, &lig_glyphs, 2);
             self.cursor_tx = tx;
             self.cursor_ty = ty;
             self.cursor_w = cursor_rect.size.width / @intToFloat(f32, tex_w);
