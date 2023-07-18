@@ -14,6 +14,8 @@ const Clipboard = @import("./clipboard.zig");
 const Event = @import("./event.zig");
 const Key = Event.Key;
 
+const Conf = @import("./conf.zig");
+
 const Self = @This();
 
 rope: Rope = Rope{},
@@ -24,13 +26,11 @@ vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
 
-const ENABLE_TEST_TEXT = true;
-
 pub fn init(self: *Self) !void {
     try self.rope.init();
     try self.vim.init(std.heap.c_allocator, &Vim.DEFAULT_PARSERS);
     self.clipboard = Clipboard.init();
-    if (comptime ENABLE_TEST_TEXT) {
+    if (comptime Conf.ENABLE_TEST_TEXT) {
         const str = @embedFile("./stress.txt");
         self.cursor = try self.rope.insert_text(self.cursor, str);
     }

@@ -10,7 +10,7 @@
 **** DONE w/W
 **** DONE b/B
 **** DONE e/E
-** TODO LIGATURES! [0/5]
+** TODO LIGATURES! [3/5]
 I want them juicy sexy ligatures
 
 Ideally, I get ligature info from the CoreText API, and I just need to modify existing code to detect when a sequence of chars is
@@ -27,17 +27,17 @@ the set of glyphs the set of characters are not isomorphic.
 
 With my Iosevka font, I tried to output the glyph for the ligature "=>". It actually gave me two special ligature glyphs, one for each component (the two horizontal lines and the arrow).
 
-*** TODO first write a benchmark for current text geometry building to prevent regressions
-*** TODO add common font ligatures to atlas at beginning
-*** TODO refactor text geometry building to use CTRun [0/6]
-**** TODO iterate line by line
-**** TODO efficiently create attributed string for line [0/3]
-***** TODO create NSString zero-copy with =initWithBytesNoCopy:length:freeWhenDone:=
-***** TODO make the attributed string with =initWithString:attributes:=
-***** TODO make the attributes NSDictionary once, and cache it (probably at startup)
-**** TODO create line =ct.CTLineCreateWithAttributedString(attributed_string)=
-**** TODO get CTRun positions/glyphs
-**** TODO convert positions/glyphs -> Vertices
+*** DONE first write a benchmark for current text geometry building to prevent regressions
+*** DONE add common font ligatures to atlas at beginning
+*** DONE refactor text geometry building to use CTRun [0/0]
+**** DONE iterate line by line
+**** DONE efficiently create attributed string for line [0/0]
+***** DONE create NSString zero-copy with =initWithBytesNoCopy:length:freeWhenDone:=
+***** DONE make the attributed string with =initWithString:attributes:=
+***** DONE make the attributes NSDictionary once, and cache it (probably at startup)
+**** DONE create line =ct.CTLineCreateWithAttributedString(attributed_string)=
+**** DONE get CTRun positions/glyphs
+**** DONE convert positions/glyphs -> Vertices
 *** TODO refactor cursor/selection geometry
 will this be performant enough?
 

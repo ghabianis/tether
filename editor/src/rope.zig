@@ -308,6 +308,12 @@ pub const Rope = struct {
         return null;
     }
 
+    pub fn iter_lines(starting_node: *Node) RopeLineIterator {
+        return .{
+            .node = starting_node,
+        };
+    }
+
     pub fn iter_chars(starting_node: *Node, cursor: TextPos) RopeCharIterator {
         return .{
             .node = starting_node,
@@ -320,6 +326,19 @@ pub const Rope = struct {
             .node = starting_node,
             .cursor = cursor,
         };
+    }
+};
+
+pub const RopeLineIterator = struct {
+    node: ?*const Rope.Node,
+
+    pub fn next(self: *@This()) ?[]const u8 {
+        if (self.node) |n| {
+            self.node = n.next;
+            return n.data.items;
+        } else {
+            return null;
+        }
     }
 };
 

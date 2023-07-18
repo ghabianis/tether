@@ -35,6 +35,11 @@ pub fn intCeil(float: f64) i32 {
     return @floatToInt(i32, @ceil(float));
 }
 
+/// rounding down the number plus half is the same of rounding to the nearest integer
+fn round(float: anytype) @TypeOf(float) {
+    return @trunc(float + 0.5);
+}
+
 pub const Atlas = struct {
     const Self = @This();
     const MAX_WIDTH: f64 = 1024.0;
@@ -101,6 +106,19 @@ pub const Atlas = struct {
             .cursor_w = undefined,
             .cursor_h = undefined,
         };
+    }
+
+    pub fn get_glyph_rects(self: *Self, glyphs: []const metal.CGGlyph, glyph_rects: []metal.CGRect) void {
+        var i: usize = 0;
+        for (glyphs) |glyph| {
+            const glyph_info = self.glyph_info.getPtr(glyph) orelse @panic("TODO: Handle missing glyph");
+            glyph_rects[i] = glyph_info.rect;
+            i += 1;
+        }
+    }
+
+    pub fn lookup(self: *const Self, g: metal.CGGlyph) *const GlyphInfo {
+        return self.glyph_info.getPtr(g) orelse @panic("TODO: Handle missing glyph");
     }
 
     pub fn lookup_char(self: *const Self, char: u8) *const GlyphInfo {
@@ -277,7 +295,7 @@ pub const Atlas = struct {
                     max_w_before_ligatures = @max(max_w, glyph_rect.widthCeil());
                     max_w = @max(max_w_before_ligatures, glyph_rect.widthCeil());
                 } else {
-                    max_w_before_ligatures = @max(max_w, glyph_rect.widthCeil());
+                    max_w = @max(max_w, glyph_rect.widthCeil());
                 }
 
                 roww += glyph_rect.widthCeil() + advance + 1;
@@ -373,14 +391,31 @@ pub const Atlas = struct {
                 // const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
                 var the_glyph = [_]metal.CGGlyph{glyph};
 
+                if (glyph == 4630) {
+                    print("LIGMA WIDTH: {d}\n", .{rect.size.width});
+                }
+
                 if (i < chars_c.len and chars_c[i] == 's') {
-                    print("{c} ty: {d} pix pos: {d} or {d}\n", .{ chars_c[i], ty, oy, ty * @intToFloat(f32, tex_h)  });
+                    print("{c} ty: {d} pix pos: {d} or {d}\n", .{ chars_c[i], ty, oy, ty * @intToFloat(f32, tex_h) });
                     // @panic("DAMD\n");
                 }
                 // CGContext draws with the glyph's origin into account, for example x = -2 will be to the left
                 // we want to draw at ox & oy, so subtract the glyph's origin values to do this.
                 if (Conf.FUCK) {
-                    ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox + 1) - rect.origin.x, @intToFloat(f64, oy + 1) - rect.origin.y, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
+                    // idk why weird off by 1 bugs
+                    // ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox + 1) - rect.origin.x, @intToFloat(f64, oy + 1) - rect.origin.y, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
+                    // ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox) - rect.origin.x, @intToFloat(f64, oy) - rect.origin.y, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
+                    // ct.CGContextShowGlyphsAtPoint(ctx, @ceil(@intToFloat(f64, ox) - rect.origin.x), round(@intToFloat(f64, oy) - rect.origin.y), @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
+
+                    const transform = ct.CGAffineTransform{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .tx = @intToFloat(f64, ox) - rect.origin.x, .ty = @intToFloat(f64, oy) - rect.origin.y };
+                    const path = ct.CTFontCreatePathForGlyph(self.font.value, glyph, &transform);
+                    defer ct.CGPathRelease(path);
+                    ct.CGContextAddPath(ctx, path);
+                    ct.CGContextFillPath(ctx);
+
+                    // ct.CGContextSetTextMatrix(ctx, transform);
+                    // ct.CGContextSetTextPosition(ctx, @intToFloat(f64, ox), @intToFloat(f64, oy));
+                    // ct.CGContextShowGlyphs(ctx, @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
                 } else {
                     ct.CGContextShowGlyphsAtPoint(ctx, @intToFloat(f64, ox), @intToFloat(f64, oy), @ptrCast([*]const metal.CGGlyph, &the_glyph), 1);
                 }
@@ -419,7 +454,8 @@ pub const Atlas = struct {
                 }
 
                 var new_rect = rect;
-                new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
+                // new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
+                // new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, @intToFloat(f64, advance), new_rect.height());
                 // new_rect = metal.CGRect.new(new_rect.origin.x, new_rect.origin.y, new_rect.width(), new_rect.height());
                 // if (comptime DRAW_DEBUG_GLYPH_BOXES) {
                 //     var lmao = new_rect;

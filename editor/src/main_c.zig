@@ -15,11 +15,13 @@ const strutil = @import("./strutil.zig");
 const Conf = @import("./conf.zig");
 
 const print = std.debug.print;
+const ArrayList = std.ArrayListUnmanaged;
+const ArenaAllocator = std.heap.ArenaAllocator;
 
 const TextPos = rope.TextPos;
 const Rope = rope.Rope;
 
-const ArrayList = std.ArrayListUnmanaged;
+var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 
 pub const Vertex = extern struct {
     pos: math.Float2,
@@ -185,6 +187,7 @@ const Renderer = struct {
 
     fn update_text(self: *Self, alloc: Allocator) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
+        print("STR: {s}\n", .{str});
         // TODO: should deallocate, but if string is length 0 than dont deallocate
         // because it will be null pointer
         // defer std.heap.c_allocator.destroy(str);
@@ -192,7 +195,7 @@ const Renderer = struct {
         const screenx = @floatCast(f32, self.screen_size.width);
         const screeny = @floatCast(f32, self.screen_size.height);
 
-        try self.build_text_geometry(alloc, str, screenx, screeny);
+        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny);
         try self.build_selection_geometry(alloc, str, screenx, screeny);
 
         // Creating a buffer of length 0 causes a crash, so we need to check if we have any vertices
@@ -320,8 +323,140 @@ const Renderer = struct {
         return ret;
     }
 
+    fn text_attributed_string_dict(self: *Self) objc.Object {
+        const dict = metal.NSDictionary.new_mutable();
+        const two = metal.NSNumber.number_with_int(2);
+        defer two.release();
+
+        dict.msgSend(void, objc.sel("setObject:forKey:"), .{
+            two.obj.value,
+            ct.kCTLigatureAttributeName,
+        });
+        dict.msgSend(void, objc.sel("setObject:forKey:"), .{
+            self.atlas.font.value,
+            ct.kCTFontAttributeName,
+        });
+
+        return dict;
+    }
+
+    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, text: []const u8, screenx: f32, screeny: f32) !void {
+        _ = screenx;
+        _ = text;
+
+        var starting_x: f32 = 0.0;
+        var starting_y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
+
+        const atlas_w = @intToFloat(f32, self.atlas.width);
+        const atlas_h = @intToFloat(f32, self.atlas.height);
+
+        self.vertices.clearRetainingCapacity();
+
+        // TODO: This can be created once
+        const text_attributes = self.text_attributed_string_dict();
+        defer text_attributes.msgSend(void, objc.sel("release"), .{});
+
+        var iter = Rope.iter_lines(self.editor.rope.nodes.first orelse return);
+
+        while (iter.next()) |line| {
+            const nstring = metal.NSString.new_with_bytes_no_copy(line, .ascii);
+            const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
+            defer attributed_string.release();
+
+            const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
+            const runs = ct.CTLineGetGlyphRuns(ctline);
+            const run_count = ct.CFArrayGetCount(runs);
+            std.debug.assert(run_count <= 1);
+            if (run_count == 0) {
+                continue;
+            }
+
+            const run = ct.CFArrayGetValueAtIndex(runs, 0);
+            const glyph_count = @intCast(usize, ct.CTRunGetGlyphCount(run));
+
+            var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), glyph_count);
+            var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), glyph_count);
+            var positions = try ArrayList(metal.CGPoint).initCapacity(frame_arena.allocator(), glyph_count);
+
+            glyphs.items.len = glyph_count;
+            glyph_rects.items.len = glyph_count;
+            positions.items.len = glyph_count;
+
+            ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @intCast(i64, glyph_count) }, glyphs.items.ptr);
+            ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
+            self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
+
+            print("LINE: {s}\nPOS: {any}\nGLYPHS: {any}\n", .{ line, positions.items, glyphs.items });
+            var i: usize = 0;
+            while (i < glyphs.items.len) : (i += 1) {
+                const glyph = glyphs.items[i];
+                const glyph_info = self.atlas.lookup(glyph);
+                const rect = glyph_rects.items[i];
+                var pos = positions.items[i];
+
+                const b = @floatCast(f32, pos.y) + starting_y + @floatCast(f32, rect.origin.y);
+                const t = b + @floatCast(f32, rect.size.height);
+                const l = @floatCast(f32, pos.x) + starting_x + @floatCast(f32, rect.origin.x);
+                const r = l + @floatCast(f32, rect.size.width);
+
+                const txt = glyph_info.ty - @intToFloat(f32, glyph_info.rect.heightCeil()) / atlas_h;
+                const txb = glyph_info.ty;
+                const txl = glyph_info.tx;
+                const txr = glyph_info.tx + @intToFloat(f32, glyph_info.rect.widthCeil()) / atlas_w;
+                if (glyph == 4630) {
+                    print("LIGMA GLYPH IN HERE: {d}\n", .{glyph_info.rect.size.width});
+                }
+
+                const vertices = Vertex.square(.{ .t = t, .b = b, .l = l, .r = r }, .{ .t = txt, .b = txb, .l = txl, .r = txr }, TEXT_COLOR);
+                try self.vertices.appendSlice(alloc, &vertices);
+            }
+
+            // var i: usize = 0;
+            // while (i < glyphs.items.len) : (i += 1) {
+            //     const glyph = glyphs.items[i];
+            //     _ = glyph;
+            //     const rect = glyph_rects.items[i];
+            //     const pos = positions.items[i];
+
+            //     const x = pos.x + screenx;
+            //     const y = pos.y + screeny;
+
+            //     const xx = @floatCast(f32, x + rect.origin.x);
+            //     const yy = @floatCast(f32, y - rect.origin.y);
+
+            //     const w = @floatCast(f32, rect.size.width);
+            //     const h = @floatCast(f32, rect.size.height);
+
+            //     const txt = @floatCast(f32, self.atlas.ascent - rect.origin.y);
+            //     const txbb = @floatCast(f32, txt - h);
+            //     const txl = @floatCast(f32, rect.origin.x);
+            //     const txr = @floatCast(f32, txl + w);
+
+            //     const tx_tl = math.float2(txl, txt);
+            //     const tx_tr = math.float2(txr, txt);
+            //     const tx_bl = math.float2(txl, txbb);
+            //     const tx_br = math.float2(txr, txbb);
+
+            //     var bg = math.hex4("#b4f9f8");
+
+            //     var vertices = &self.vertices;
+            //     try vertices.appendSlice(alloc, &[_]Vertex{
+            //         .{ .pos = math.float2(xx, yy), .tex_coords = tx_tl, .color = bg },
+            //         .{ .pos = math.float2(xx + w, yy), .tex_coords = tx_tr, .color = bg },
+            //         .{ .pos = math.float2(xx, yy - h), .tex_coords = tx_bl, .color = bg },
+
+            //         .{ .pos = math.float2(xx + w, yy), .tex_coords = tx_tr, .color = bg },
+            //         .{ .pos = math.float2(xx + w, yy - h), .tex_coords = tx_br, .color = bg },
+            //         .{ .pos = math.float2(xx, yy - h), .tex_coords = tx_bl, .color = bg },
+            //     });
+            // }
+
+            _ = frame_arena.reset(.retain_capacity);
+        }
+    }
+
     /// TODO: Iterate rope text instead of passing string
-    pub fn build_text_geometry(self: *Self, alloc: Allocator, text: []const u8, screenx: f32, screeny: f32) !void {
+    pub fn build_text_geometry_old(self: *Self, alloc: Allocator, text: []const u8, screenx: f32, screeny: f32) !void {
         _ = screenx;
         self.vertices.clearRetainingCapacity();
         var vertices = &self.vertices;
@@ -534,7 +669,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 96.0);
+    var atlas = font.Atlas.new(alloc, 64.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

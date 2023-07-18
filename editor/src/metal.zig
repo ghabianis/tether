@@ -169,8 +169,19 @@ pub const NSString = struct {
         return object;
     }
 
+    pub fn new_with_bytes_no_copy(bytes: []const u8, encoding: NSStringEncoding) NSString {
+        var object = @This().alloc();
+        object = object.init_with_bytes_no_copy(bytes, encoding, false);
+        return object;
+    }
+
     pub fn init_with_bytes(self: NSString, bytes: []const u8, encoding: NSStringEncoding) Self {
         const new = self.obj.msgSend(Self, objc.sel("initWithBytes:length:encoding:"), .{ bytes.ptr, bytes.len, encoding });
+        return new;
+    }
+
+    pub fn init_with_bytes_no_copy(self: NSString, bytes: []const u8, encoding: NSStringEncoding, free_when_done: bool) Self {
+        const new = self.obj.msgSend(Self, objc.sel("initWithBytesNoCopy:length:encoding:freeWhenDone:"), .{ bytes.ptr, bytes.len, encoding, free_when_done });
         return new;
     }
 
@@ -184,6 +195,23 @@ pub const NSString = struct {
 
     pub fn get_characters(self: NSString, buf: []u16) void {
         self.obj.msgSend(void, objc.sel("getCharacters:"), .{buf.ptr});
+    }
+};
+
+pub const NSAttributedString = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn new_with_string(string: NSString, attributes: objc.Object) NSAttributedString {
+        var object = @This().alloc();
+        object = object.init_with_string(string, attributes);
+        return object;
+    }
+
+    pub fn init_with_string(self: NSAttributedString, string: NSString, attributes: objc.Object) Self {
+        const new = self.obj.msgSend(Self, objc.sel("initWithString:attributes:"), .{ string, attributes });
+        return new;
     }
 };
 
@@ -221,6 +249,10 @@ pub const NSDictionary = struct {
         var dict = Class.msgSend(objc.Object, objc.sel("alloc"), .{});
         dict = dict.msgSend(objc.Object, objc.sel("init"), .{});
         return dict;
+    }
+
+    fn set(self: NSDictionary, key: objc.Object, value: objc.Object) void {
+        self.obj.msgSend(void, objc.sel("setObject:forKey:"), .{ value, key });
     }
 };
 

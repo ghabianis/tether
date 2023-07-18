@@ -16,6 +16,17 @@ pub const CFRange = extern struct {
     length: CFIndex,
 };
 
+pub const CGAffineTransform = extern struct {
+    a: metal.CGFloat,
+    b: metal.CGFloat,
+    c: metal.CGFloat,
+    d: metal.CGFloat,
+    tx: metal.CGFloat,
+    ty: metal.CGFloat,
+};
+
+pub extern "C" const CGAffineTransformIdentity: CGAffineTransform;
+
 pub const CFTypeRef = objc.c.id;
 pub const CFStringRef = objc.c.id;
 pub const CFAttributedStringRef = objc.c.id;
@@ -28,6 +39,7 @@ pub const CGFontRef = objc.c.id;
 pub const CGImageRef = objc.c.id;
 pub const CTLineRef = objc.c.id;
 pub const CTRunRef = objc.c.id;
+pub const CGPathRef = objc.c.id;
 
 pub extern "C" const kCGColorSpaceSRGB: objc.c.id;
 pub extern "C" const kCTFontBaselineAdjustAttribute: objc.c.id;
@@ -45,6 +57,7 @@ pub extern "C" fn CTFontCopyGraphicsFont(font: CTFontRef, attributes: ?[*]const 
 pub extern "C" fn CTFontGetAdvancesForGlyphs(font: CTFontRef, orientation: CTFontOrientation, glyphs: [*]const metal.CGGlyph, advances: [*]metal.CGSize, count: CFIndex) f64;
 pub extern "C" fn CTFontCopyAttribute(font: CTFontRef, attribute: CFStringRef) CFTypeRef;
 pub extern "C" fn CTFontGetLigatureCaretPositions(font: CTFontRef, glyph: metal.CGGlyph, positions: [*]metal.CGFloat, max_positions: CFIndex) CFIndex;
+pub extern "C" fn CTFontCreatePathForGlyph(font: CTFontRef, glyph: metal.CGGlyph, transform: ?*const CGAffineTransform) CGPathRef;
 pub extern "C" fn CTLineCreateWithAttributedString(string: CFAttributedStringRef) CTLineRef;
 pub extern "C" fn CTLineGetGlyphRuns(line: CTLineRef) CFArrayRef;
 pub extern "C" fn CTRunGetGlyphs(run: CTRunRef, range: CFRange, buffer: [*]metal.CGGlyph) void;
@@ -60,6 +73,7 @@ pub extern "C" fn CFAttributedStringSetAttribute(string: CFMutableAttributedStri
 pub extern "C" fn CFAttributedStringGetLength(string: CFAttributedStringRef) CFIndex;
 
 pub extern "C" fn CFArrayGetValueAtIndex(array: CFArrayRef, index: CFIndex) CFTypeRef;
+pub extern "C" fn CFArrayGetCount(array: CFArrayRef) CFIndex;
 
 pub extern "C" fn CFRelease(obj: CFTypeRef) void;
 
@@ -75,6 +89,8 @@ pub extern "C" fn CGBitmapContextCreate(
     bitmap_info: usize,
 ) CGContextRef;
 pub extern "C" fn CGColorCreateGenericRGB(r: metal.CGFloat, g: metal.CGFloat, b: metal.CGFloat, a: metal.CGFloat) CGColorRef;
+pub extern "C" fn CGContextAddPath(ctx: CGContextRef, path: CGPathRef) void;
+pub extern "C" fn CGContextFillPath(ctx: CGContextRef) void;
 pub extern "C" fn CGContextSetFillColorWithColor(ctx: CGContextRef, color: CGColorRef) void;
 pub extern "C" fn CGContextFillRect(ctx: CGContextRef, rect: metal.CGRect) void;
 pub extern "C" fn CGContextStrokeRect(ctx: CGContextRef, rect: metal.CGRect) void;
@@ -82,6 +98,9 @@ pub extern "C" fn CGContextStrokeRectWithWidth(ctx: CGContextRef, rect: metal.CG
 pub extern "C" fn CGContextSetStrokeColorWithColor(ctx: CGContextRef, color: CGColorRef) void;
 pub extern "C" fn CGContextSetFont(ctx: CGContextRef, font: CGFontRef) void;
 pub extern "C" fn CGContextSetFontSize(ctx: CGContextRef, size: metal.CGFloat) void;
+pub extern "C" fn CGContextSetTextMatrix(ctx: CGContextRef, t: CGAffineTransform) void;
+pub extern "C" fn CGContextSetTextPosition(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat) void;
+pub extern "C" fn CGContextMoveToPoint(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat) void;
 
 pub extern "C" fn CGContextSetShouldAntialias(ctx: CGContextRef, val: bool) void;
 pub extern "C" fn CGContextSetAllowsAntialiasing(ctx: CGContextRef, val: bool) void;
@@ -93,10 +112,12 @@ pub extern "C" fn CGContextSetAllowsFontSubpixelPositioning(ctx: CGContextRef, v
 pub extern "C" fn CGContextSetAllowsFontSubpixelQuantization(ctx: CGContextRef, val: bool) void;
 
 pub extern "C" fn CGContextShowGlyphsAtPoint(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat, glyphs: [*]const metal.CGGlyph, count: usize) void;
+pub extern "C" fn CGContextShowGlyphs(ctx: CGContextRef, glyphs: [*]const metal.CGGlyph, count: usize) void;
 pub extern "C" fn CGBitmapContextCreateImage(ctx: CGContextRef) CGImageRef;
 
 pub extern "C" fn CGColorRelease(color: CGColorRef) void;
 pub extern "C" fn CGColorSpaceRelease(space: CGColorSpaceRef) void;
 pub extern "C" fn CGContextRelease(ctx: CGContextRef) void;
+pub extern "C" fn CGPathRelease(path: CGPathRef) void;
 
 pub extern "C" fn CFRetain(val: objc.c.id) objc.c.id;
