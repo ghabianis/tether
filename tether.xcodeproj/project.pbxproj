@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		9E10DE912A3292460014524F /* TetherFont.m in Sources */ = {isa = PBXBuildFile; fileRef = 9E10DE902A3292460014524F /* TetherFont.m */; };
-		9E54C73B2A642D66005FDFF7 /* EditorKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E54C73A2A642D66005FDFF7 /* EditorKit.xcframework */; };
 		9E9D5AD32A473330007367FF /* src in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5AD22A473330007367FF /* src */; };
 		9E9D5B8E2A3408AD00A7E3BB /* shrek.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B8D2A3408AD00A7E3BB /* shrek.png */; };
 		9E9D5B902A340E3300A7E3BB /* atlas.png in Resources */ = {isa = PBXBuildFile; fileRef = 9E9D5B8F2A340E3300A7E3BB /* atlas.png */; };
@@ -25,12 +24,12 @@
 		9EB504422A2FDDDE0062BAE7 /* MathUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB504412A2FDDDE0062BAE7 /* MathUtilities.swift */; };
 		9EB504462A2FDE1B0062BAE7 /* teapot.obj in Resources */ = {isa = PBXBuildFile; fileRef = 9EB504452A2FDE1B0062BAE7 /* teapot.obj */; };
 		9EB5044B2A2FF13F0062BAE7 /* ZigTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EB5044A2A2FF13F0062BAE7 /* ZigTestView.swift */; };
+		9EF50ED22A672CA3002B759D /* EditorKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9EF50ED12A672CA3002B759D /* EditorKit.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		9E10DE8F2A3292460014524F /* TetherFont.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TetherFont.h; sourceTree = "<group>"; };
 		9E10DE902A3292460014524F /* TetherFont.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = TetherFont.m; sourceTree = "<group>"; };
-		9E54C73A2A642D66005FDFF7 /* EditorKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EditorKit.xcframework; path = editor/macos/EditorKit.xcframework; sourceTree = "<group>"; };
 		9E9D5AD22A473330007367FF /* src */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = src; path = editor/src; sourceTree = SOURCE_ROOT; };
 		9E9D5B8D2A3408AD00A7E3BB /* shrek.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = shrek.png; sourceTree = "<group>"; };
 		9E9D5B8F2A340E3300A7E3BB /* atlas.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; name = atlas.png; path = tether/atlas.png; sourceTree = SOURCE_ROOT; };
@@ -50,6 +49,7 @@
 		9EB504452A2FDE1B0062BAE7 /* teapot.obj */ = {isa = PBXFileReference; lastKnownFileType = text; path = teapot.obj; sourceTree = "<group>"; };
 		9EB5044A2A2FF13F0062BAE7 /* ZigTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZigTestView.swift; sourceTree = "<group>"; };
 		9EB5044C2A2FF1A30062BAE7 /* tether-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "tether-Bridging-Header.h"; sourceTree = "<group>"; };
+		9EF50ED12A672CA3002B759D /* EditorKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = EditorKit.xcframework; path = editor/macos/EditorKit.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,7 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9E54C73B2A642D66005FDFF7 /* EditorKit.xcframework in Frameworks */,
+				9EF50ED22A672CA3002B759D /* EditorKit.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,7 +127,7 @@
 		9EB504472A2FEB300062BAE7 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				9E54C73A2A642D66005FDFF7 /* EditorKit.xcframework */,
+				9EF50ED12A672CA3002B759D /* EditorKit.xcframework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

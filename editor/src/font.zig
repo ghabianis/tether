@@ -338,15 +338,15 @@ pub const Atlas = struct {
         ct.CGContextSetShouldSmoothFonts(ctx, true);
         ct.CGContextSetAllowsFontSmoothing(ctx, true);
 
-        ct.CGContextSetShouldSubpixelPositionFonts(ctx, true);
-        ct.CGContextSetShouldSubpixelQuantizeFonts(ctx, true);
-        ct.CGContextSetAllowsFontSubpixelPositioning(ctx, true);
-        ct.CGContextSetAllowsFontSubpixelQuantization(ctx, true);
+        // ct.CGContextSetShouldSubpixelPositionFonts(ctx, true);
+        // ct.CGContextSetShouldSubpixelQuantizeFonts(ctx, true);
+        // ct.CGContextSetAllowsFontSubpixelPositioning(ctx, true);
+        // ct.CGContextSetAllowsFontSubpixelQuantization(ctx, true);
 
-        // ct.CGContextSetShouldSubpixelPositionFonts(ctx, false);
-        // ct.CGContextSetShouldSubpixelQuantizeFonts(ctx, false);
-        // ct.CGContextSetAllowsFontSubpixelPositioning(ctx, false);
-        // ct.CGContextSetAllowsFontSubpixelQuantization(ctx, false);
+        ct.CGContextSetShouldSubpixelPositionFonts(ctx, false);
+        ct.CGContextSetShouldSubpixelQuantizeFonts(ctx, false);
+        ct.CGContextSetAllowsFontSubpixelPositioning(ctx, false);
+        ct.CGContextSetAllowsFontSubpixelQuantization(ctx, false);
 
         const text_color = ct.CGColorCreateGenericRGB(1.0, 0.0, 0.0, 1.0);
         const other_text_color = ct.CGColorCreateGenericRGB(0.0, 0.0, 1.0, 0.2);

@@ -21,6 +21,8 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const TextPos = rope.TextPos;
 const Rope = rope.Rope;
 
+const ts = @import("./treesitter.zig");
+
 var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 
 pub const Vertex = extern struct {
@@ -116,6 +118,17 @@ const Renderer = struct {
     editor: Editor,
 
     pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
+        const names = [_][*:0]const u8{
+            "HI",
+            "NAH",
+        };
+        const strings = [_][*:0]const u8{
+            "HI",
+            "NAH",
+        };
+
+        const val = ts.ts_highlighter_new(&names, &strings, 2);
+        print("VAL: {any}\n", .{val});
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
@@ -585,7 +598,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 64.0);
+    var atlas = font.Atlas.new(alloc, 32.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

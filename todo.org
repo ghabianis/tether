@@ -1,57 +1,7 @@
 #+title: Todo
 
-* TODO Now [6/11]
-** DONE don't render spaces/tabs/newlines (any empty height or width glyphs)
-** DONE fix backspace on newline
-** DONE Vim [0/0]
-*** DONE support =Key= and not just chars (change CharParser to KeyParser)
-*** DONE support delete/change/yank + movement
-*** DONE support w/W/b/B/e/E [0/0]
-**** DONE w/W
-**** DONE b/B
-**** DONE e/E
-** DONE LIGATURES! [0/0]
-I want them juicy sexy ligatures
-
-Ideally, I get ligature info from the CoreText API, and I just need to modify existing code to detect when a sequence of chars is
-a ligature, and then render them.
-
-But I couldn't find anything in the CoreText API.
-
-I did find a way with =CTRun= (See the diagram [[https://developer.apple.com/library/archive/documentation/StringsTextFonts/Conceptual/CoreText_Programming/Overview/Overview.html#//apple_ref/doc/uid/TP40005533-CH3-SW1][here]] for the architecture of CoreText objects)
-
-CTRun is a "run" of glyphs, and =CTRunGetPositions= gives you the positions for each glyph, which includes ligature glyphs (I'm pretty sure).
-
-So instead of rendering glyphs one by one as we are now, we need to group them into CTRuns, probably line by line. This probably good anyway, because
-the set of glyphs the set of characters are not isomorphic.
-
-With my Iosevka font, I tried to output the glyph for the ligature "=>". It actually gave me two special ligature glyphs, one for each component (the two horizontal lines and the arrow).
-
-*** DONE first write a benchmark for current text geometry building to prevent regressions
-*** DONE add common font ligatures to atlas at beginning
-*** DONE refactor text geometry building to use CTRun [0/0]
-**** DONE iterate line by line
-**** DONE efficiently create attributed string for line [0/0]
-***** DONE create NSString zero-copy with =initWithBytesNoCopy:length:freeWhenDone:=
-***** DONE make the attributed string with =initWithString:attributes:=
-***** DONE make the attributes NSDictionary once, and cache it (probably at startup)
-**** DONE create line =ct.CTLineCreateWithAttributedString(attributed_string)=
-**** DONE get CTRun positions/glyphs
-**** DONE convert positions/glyphs -> Vertices
-*** DONE refactor cursor/selection geometry
-will this be performant enough?
-
-if not this might require using the full CoreText API (=CTLine=, =CTFrame=)
-** DONE bug: delete/change range broken
-cause I added `self.len -= node.data.items.len;` to Rope.remove_node() and this fucks up Rope.remove_text() because it is already doing the calculation
-need to make separate functions: one that subtracts len and one that doesn't
-** DONE bug: paste broken
-try pasting this into empty editor:
-#+begin_src zig
-fn fuck(self: *Self) void {
-    _ = self;
-}
-#+end_src
+* TODO Now [0/6]
+** TODO Syntax Highlighting!
 ** TODO bug: word breaking with punctuation detection for w/W/e/E/b/B
 Word breaking rules are fucked.
 
