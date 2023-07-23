@@ -120,7 +120,10 @@ pub const Atlas = struct {
     }
 
     pub fn lookup(self: *const Self, g: metal.CGGlyph) *const GlyphInfo {
-        return self.glyph_info.getPtr(g) orelse @panic("TODO: Handle missing glyph");
+        return self.glyph_info.getPtr(g) orelse {
+            print("Unhandled glyph: {d}\n", .{g});
+            @panic("TODO: Handle missing glyph");
+        };
     }
 
     pub fn lookup_char(self: *const Self, char: u8) *const GlyphInfo {
@@ -221,21 +224,8 @@ pub const Atlas = struct {
         var glyphs = ArrayList(metal.CGGlyph){};
         var glyph_rects = ArrayList(metal.CGRect){};
 
-        const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
-        const COMMON_LIGATURES = [_][]const u8{
-            "=>",
-            "++",
-            "->",
-            "==",
-            "===",
-            "!=",
-            "!==",
-            "<=",
-            ">=",
-            "::",
-            "*=",
-            ":=",
-        };
+        const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n";
+        const COMMON_LIGATURES = [_][]const u8{ "=>", "++", "->", "==", "===", "!=", "!==", "<=", ">=", "::", "*=", ":=", "//" };
 
         // For some reason this will always put ligatures even when kCTLigatureAttributeName is set to 0,
         // so we build the glyphs manually here.

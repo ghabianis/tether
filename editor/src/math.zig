@@ -1,3 +1,72 @@
+const std = @import("std");
+
+pub const Vertex = extern struct {
+    pos: Float2,
+    tex_coords: Float2,
+    color: Float4,
+
+    pub fn default() Vertex {
+        return .{ .pos = .{ .x = 0.0, .y = 0.0 }, .tex_coords = .{ .x = 0.0, .y = 0.0 }, .color = .{ .x = 0.0, .y = 0.0, .w = 0.0, .z = 0.0 } };
+    }
+
+    pub fn square(coords: struct { t: f32, b: f32, l: f32, r: f32 }, tex_coords: struct { t: f32, b: f32, l: f32, r: f32 }, color: Float4) [6]Vertex {
+        const t = coords.t;
+        const b = coords.b;
+        const l = coords.l;
+        const r = coords.r;
+
+        const tl = float2(l, t);
+        const tr = float2(r, t);
+        const bl = float2(l, b);
+        const br = float2(r, b);
+
+        const txt = tex_coords.t;
+        const txb = tex_coords.b;
+        const txl = tex_coords.l;
+        const txr = tex_coords.r;
+        const tx_tl = float2(txl, txt);
+        const tx_tr = float2(txr, txt);
+        const tx_bl = float2(txl, txb);
+        const tx_br = float2(txr, txb);
+
+        return [_]Vertex{
+            // triangle 1
+            .{
+                .pos = tl,
+                .tex_coords = tx_tl,
+                .color = color,
+            },
+            .{
+                .pos = tr,
+                .tex_coords = tx_tr,
+                .color = color,
+            },
+            .{
+                .pos = bl,
+                .tex_coords = tx_bl,
+                .color = color,
+            },
+
+            // triangle 2
+            .{
+                .pos = tr,
+                .tex_coords = tx_tr,
+                .color = color,
+            },
+            .{
+                .pos = br,
+                .tex_coords = tx_br,
+                .color = color,
+            },
+            .{
+                .pos = bl,
+                .tex_coords = tx_bl,
+                .color = color,
+            },
+        };
+    }
+};
+
 pub const Float2 = extern struct {
     x: f32,
     y: f32,
@@ -38,6 +107,30 @@ pub const Float4 = extern struct {
             (hex_to_decimal(hex_str[4]) * 16.0 + hex_to_decimal(hex_str[5])) / 255.0,
             1.0,
         );
+    }
+
+    pub fn to_hex(self: Float4) [7]u8 {
+        var ret = [_]u8{ '#', 0, 0, 0, 0, 0, 0 };
+        // ret[1] = (self.x * 255.0)
+        const digit12temp = @floor(self.x * 255.0);
+        const digit1 = @floatToInt(u8, @floor(digit12temp / 16.0));
+        const digit2 = @floatToInt(u8, digit12temp - @intToFloat(f32, digit1 * 16));
+
+        const digit34temp = @floor(self.y * 255.0);
+        const digit3 = @floatToInt(u8, @floor(digit34temp / 16.0));
+        const digit4 = @floatToInt(u8, digit34temp - @intToFloat(f32, digit3 * 16));
+        
+        const digit56temp = @floor(self.z * 255.0);
+        const digit5 = @floatToInt(u8, @floor(digit56temp / 16.0));
+        const digit6 = @floatToInt(u8, digit56temp - @intToFloat(f32, digit5 * 16));
+        
+        ret[1] = decimal_to_hex(digit1);
+        ret[2] = decimal_to_hex(digit2);
+        ret[3] = decimal_to_hex(digit3);
+        ret[4] = decimal_to_hex(digit4);
+        ret[5] = decimal_to_hex(digit5);
+        ret[6] = decimal_to_hex(digit6);
+        return ret;
     }
 
     pub inline fn dot(a: Float4, b: Float4) f32 {
@@ -199,4 +292,33 @@ fn hex_to_decimal(hex: u8) f32 {
         'F', 'f' => return 15.0,
         else => unreachable,
     }
+}
+
+fn decimal_to_hex(dec: u8) u8 {
+    switch (dec) {
+        0 => return '0',
+        1 => return '1',
+        2 => return '2',
+        3 => return '3',
+        4 => return '4',
+        5 => return '5',
+        6 => return '6',
+        7 => return '7',
+        8 => return '8',
+        9 => return '9',
+        10 => return 'A',
+        11 => return 'B',
+        12 => return 'C',
+        13 => return 'D',
+        14 => return 'E',
+        15 => return 'F',
+        else => unreachable,
+    }
+}
+
+test "conversion" {
+    const hex_str = "#BB9AF7";
+    const color = hex4(hex_str);
+    const backToHex = color.to_hex();
+    try std.testing.expectEqualStrings(hex_str, &backToHex);
 }

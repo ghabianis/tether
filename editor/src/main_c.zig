@@ -13,6 +13,8 @@ const Vim = @import("./vim.zig");
 const Event = @import("./event.zig");
 const strutil = @import("./strutil.zig");
 const Conf = @import("./conf.zig");
+const ts = @import("./treesitter.zig");
+const Highlight = @import("./highlight.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -21,76 +23,9 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 const TextPos = rope.TextPos;
 const Rope = rope.Rope;
 
-const ts = @import("./treesitter.zig");
+const Vertex = math.Vertex;
 
 var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
-
-pub const Vertex = extern struct {
-    pos: math.Float2,
-    tex_coords: math.Float2,
-    color: math.Float4,
-
-    pub fn default() Vertex {
-        return .{ .pos = .{ .x = 0.0, .y = 0.0 }, .tex_coords = .{ .x = 0.0, .y = 0.0 }, .color = .{ .x = 0.0, .y = 0.0, .w = 0.0, .z = 0.0 } };
-    }
-
-    pub fn square(coords: struct { t: f32, b: f32, l: f32, r: f32 }, tex_coords: struct { t: f32, b: f32, l: f32, r: f32 }, color: math.Float4) [6]Vertex {
-        const t = coords.t;
-        const b = coords.b;
-        const l = coords.l;
-        const r = coords.r;
-
-        const tl = math.float2(l, t);
-        const tr = math.float2(r, t);
-        const bl = math.float2(l, b);
-        const br = math.float2(r, b);
-
-        const txt = tex_coords.t;
-        const txb = tex_coords.b;
-        const txl = tex_coords.l;
-        const txr = tex_coords.r;
-        const tx_tl = math.float2(txl, txt);
-        const tx_tr = math.float2(txr, txt);
-        const tx_bl = math.float2(txl, txb);
-        const tx_br = math.float2(txr, txb);
-
-        return [_]Vertex{
-            // triangle 1
-            .{
-                .pos = tl,
-                .tex_coords = tx_tl,
-                .color = color,
-            },
-            .{
-                .pos = tr,
-                .tex_coords = tx_tr,
-                .color = color,
-            },
-            .{
-                .pos = bl,
-                .tex_coords = tx_bl,
-                .color = color,
-            },
-
-            // triangle 2
-            .{
-                .pos = tr,
-                .tex_coords = tx_tr,
-                .color = color,
-            },
-            .{
-                .pos = br,
-                .tex_coords = tx_br,
-                .color = color,
-            },
-            .{
-                .pos = bl,
-                .tex_coords = tx_bl,
-                .color = color,
-            },
-        };
-    }
-};
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
 
@@ -116,22 +51,31 @@ const Renderer = struct {
     atlas: font.Atlas,
     frame_arena: std.heap.ArenaAllocator,
     editor: Editor,
+    highlight: ?Highlight = null,
 
+    // fucck this
     pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
-        const names = [_][*:0]const u8{
-            "HI",
-            "NAH",
-        };
-        const strings = [_][*:0]const u8{
-            "HI",
-            "NAH",
-        };
-
-        const val = ts.ts_highlighter_new(&names, &strings, 2);
-        print("VAL: {any}\n", .{val});
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
+        // const highlight = Highlight.init(alloc, &ts.ZIG, &.{
+        //     .{ .name = "function", .color = math.hex4("#7AA2F7") },
+        //     .{ .name = "function.builtin", .color = math.hex4("#0BB9D7") },
+
+        //     .{ .name = "keyword", .color = math.hex4("#BB9AF7") },
+        //     // .{ .name = "keyword.function", .color = math.hex4("#BB9AF7") },
+        //     .{ .name = "conditional", .color = math.hex4("#BB9AF7") },
+        //     // .{ .name = "keyword.operator", .color = math.hex4("#BB9AF7") },
+        //     // .{ .name = "keyword.return", .color = math.hex4("#BB9AF7") },
+        //     .{ .name = "type.qualifier", .color = math.hex4("#BB9AF7") },
+
+        //     .{ .name = "comment", .color = math.hex4("#444B6A") },
+        //     .{ .name = "spell", .color = math.hex4("#444B6A") },
+
+        //     .{ .name = "operator", .color = math.hex4("#88ddff") },
+        // }) catch @panic("SHIT");
+        const highlight = Highlight.init(alloc, &ts.ZIG, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
+
         var renderer: Renderer = .{
             .view = view,
             .device = device,
@@ -147,6 +91,7 @@ const Renderer = struct {
             // frame arena
             .frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .editor = Editor{},
+            .highlight = highlight,
         };
         renderer.editor.init() catch @panic("oops");
 
@@ -201,14 +146,16 @@ const Renderer = struct {
     fn update_text(self: *Self, alloc: Allocator) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
         print("STR: {s}\n", .{str});
-        // TODO: should deallocate, but if string is length 0 than dont deallocate
-        // because it will be null pointer
-        // defer std.heap.c_allocator.destroy(str);
+        defer {
+            if (str.len > 0) {
+                std.heap.c_allocator.destroy(str);
+            }
+        }
 
         const screenx = @floatCast(f32, self.screen_size.width);
         const screeny = @floatCast(f32, self.screen_size.height);
 
-        try self.build_text_geometry(alloc, &Arena, screenx, screeny);
+        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny);
         try self.build_selection_geometry(alloc, str, screenx, screeny);
 
         // Creating a buffer of length 0 causes a crash, so we need to check if we have any vertices
@@ -353,8 +300,14 @@ const Renderer = struct {
         return dict;
     }
 
-    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, screenx: f32, screeny: f32) !void {
+    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32) !void {
         _ = screenx;
+        var charIdxToVertexIdx = try ArrayList(u32).initCapacity(frame_arena.allocator(), str.len);
+        charIdxToVertexIdx.items.len = str.len;
+        for (charIdxToVertexIdx.items[0..charIdxToVertexIdx.items.len]) |*b| b.* = std.math.maxInt(u32);
+
+        var cursor_vertices: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
+        var cursor_vert_index: ?u32 = null;
 
         var initial_x: f32 = 0.0;
         var starting_x: f32 = initial_x;
@@ -365,24 +318,30 @@ const Renderer = struct {
 
         self.vertices.clearRetainingCapacity();
 
+        try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
+
         // TODO: This can be created once at startup
         const text_attributes = self.text_attributed_string_dict();
         defer text_attributes.msgSend(void, objc.sel("release"), .{});
 
-        var iter = Rope.iter_lines(self.editor.rope.nodes.first orelse return);
+        var iter = self.editor.rope.iter_lines(self.editor.rope.nodes.first orelse return);
 
         var cursor_line: u32 = 0;
         var cursor_col: u32 = 0;
+        var index: u32 = 0;
         while (iter.next()) |the_line| {
             if (the_line.len == 0 or the_line.len == 1 and strutil.is_newline(the_line[0])) {
                 if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
-                    const cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
-                    try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
+                    cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
                 }
+                self.editor.rope.print_nodes();
+                charIdxToVertexIdx.items[index] = @intCast(u32, self.vertices.items.len);
+                try self.vertices.appendSlice(alloc, &[_]Vertex{Vertex.default()} ** 6);
 
                 starting_y -= self.atlas.descent + self.atlas.ascent;
                 cursor_line += 1;
                 cursor_col = 0;
+                index += 1;
                 continue;
             }
             var line = if (strutil.is_newline(the_line[the_line.len - 1])) the_line[0 .. the_line.len - 1] else the_line;
@@ -422,10 +381,11 @@ const Renderer = struct {
             while (i < glyphs.items.len) : (i += 1) {
                 defer {
                     cursor_col += 1;
+                    index += 1;
                 }
 
                 const has_cursor = cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col;
-                const color = if (has_cursor) math.float4(0.0, 0.0, 0.0, 1.0) else TEXT_COLOR;
+                const color = TEXT_COLOR;
 
                 const glyph = glyphs.items[i];
                 const glyph_info = self.atlas.lookup(glyph);
@@ -443,28 +403,43 @@ const Renderer = struct {
                 const txl = glyph_info.tx;
                 const txr = glyph_info.tx + width / atlas_w;
 
-                if (has_cursor) {
-                    const cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), starting_x + @floatCast(f32, pos.x), if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance);
-                    try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
-                }
-
                 const vertices = Vertex.square(.{ .t = t, .b = b, .l = l, .r = r }, .{ .t = txt, .b = txb, .l = txl, .r = txr }, color);
+                charIdxToVertexIdx.items[index] = @intCast(u32, self.vertices.items.len);
+                if (has_cursor) {
+                    cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), starting_x + @floatCast(f32, pos.x), if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance);
+                    cursor_vert_index = @intCast(u32, self.vertices.items.len);
+                }
                 try self.vertices.appendSlice(alloc, &vertices);
                 last_x = l + glyph_info.advance;
             }
 
             if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
                 const pos = positions.items[positions.items.len - 1];
-                const cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), last_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
-                try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
+                cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), last_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
             }
-
             starting_y -= self.atlas.descent + self.atlas.ascent;
             cursor_line += 1;
             cursor_col = 0;
-
-            _ = frame_arena.reset(.retain_capacity);
+            index += 1;
+            // _ = frame_arena.reset(.retain_capacity);
         }
+
+        if (self.highlight) |*highlight| {
+            try highlight.highlight(str, charIdxToVertexIdx.items, self.vertices.items);
+        }
+
+        if (cursor_vert_index) |vi| {
+            const black = math.Float4.new(0.0, 0.0, 0.0, 1.0);
+            self.vertices.items[vi].color = black;
+            self.vertices.items[vi + 1].color = black;
+            self.vertices.items[vi + 2].color = black;
+            self.vertices.items[vi + 3].color = black;
+            self.vertices.items[vi + 4].color = black;
+            self.vertices.items[vi + 5].color = black;
+        }
+        @memcpy(self.vertices.items[0..6], cursor_vertices[0..6]);
+
+        _ = frame_arena.reset(.retain_capacity);
     }
 
     pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32) !void {
@@ -598,7 +573,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 32.0);
+    var atlas = font.Atlas.new(alloc, 48.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

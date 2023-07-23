@@ -1,7 +1,39 @@
 #+title: Todo
 
-* TODO Now [0/6]
-** TODO Syntax Highlighting!
+* TODO Now [1/6]
+** DONE Syntax Highlighting!
+Will do it manually using tree-sitter library.
+
+Need to replicate this configure code here: https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
+
+This allows to basically filter recognized queries (see the make_highlights! call in glyph source code in syntax/src/lib.rs)
+*** DONE fix cursor
+black letter glyph no longer rendering on top bc we switched order
+*** DONE handle scoped recognized names
+e.g. a theme might only recognize =@keyword=, but query might match on =@keyword.function= (this happens in zig grammar currently)
+
+currently theme is an array indexed by capture name index (e.g. @keyword.function => 0, @punctuation => 1, etc.)
+
+the code to do this is here:
+https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
+*** DONE newline/whitespace (any glyph we dont have vertices for) fuck up syntax highlighting
+cause we assume 1 char => 6 vertices
+on whitespace we dont add any vertices
+fucks up indexing into the vertices buffer
+
+two solutions:
+1. store mapping from CharIndex -> VertexIndex
+2. simply add vertices for whitespace ::
+   if we switch to instanced rendering this may not be thaaat bad
+   right now we need 6 vertex for each char and  color and tex coord for each vertex
+   instead 6 vertices upfront
+   & top left and bot right pos (2 x Float2)
+   & color (1 x Float4)
+   & top left and bot right tex coord (2 x Float 2)
+   => 3 x Float4
+   => 12 bytes per char
+3. do syntax higlighting first, store color for each char
+
 ** TODO bug: word breaking with punctuation detection for w/W/e/E/b/B
 Word breaking rules are fucked.
 

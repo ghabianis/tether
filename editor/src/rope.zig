@@ -308,8 +308,9 @@ pub const Rope = struct {
         return null;
     }
 
-    pub fn iter_lines(starting_node: *Node) RopeLineIterator {
+    pub fn iter_lines(self: *const Rope, starting_node: *const Node) RopeLineIterator {
         return .{
+            .rope = self,
             .node = starting_node,
         };
     }
@@ -330,9 +331,11 @@ pub const Rope = struct {
 };
 
 pub const RopeLineIterator = struct {
+    rope: *const Rope,
     node: ?*const Rope.Node,
 
     pub fn next(self: *@This()) ?[]const u8 {
+        if (self.rope.len == 0) return null;
         if (self.node) |n| {
             self.node = n.next;
             return n.data.items;

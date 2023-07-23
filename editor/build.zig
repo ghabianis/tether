@@ -100,15 +100,7 @@ fn build_static_lib(
         },
         .optimize = optimize,
     });
-    add_libs(static_lib, modules);
-    if (cpu_arch == .aarch64) {
-        static_lib.addLibraryPath("/Users/zackradisic/Code/tether/editor/lib/tree-sitter/target/release/");
-    } else {
-        static_lib.addLibraryPath("/Users/zackradisic/Code/tether/editor/lib/tree-sitter/target/x86_64-apple-darwin/release/");
-    }
-    static_lib.linkSystemLibrary("tree_sitter_highlight");
-    static_lib.linkLibrary(treesitter);
-    static_lib.step.dependOn(&treesitter.step);
+    add_libs(static_lib, modules, treesitter);
 
     const ENABLE_DEBUG_SYMBOLS = true;
     if (comptime ENABLE_DEBUG_SYMBOLS) {
@@ -121,9 +113,9 @@ fn build_static_lib(
     try lib_list.append(.{ .generated = &static_lib.output_path_source });
     try lib_list.append(.{ .generated = &treesitter.output_path_source });
     if (cpu_arch == .aarch64) {
-        try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/target/release/libtree_sitter_highlight.a" });
+        try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/libtree-sitter.a" });
     } else {
-        try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/target/x86_64-apple-darwin/release/libtree_sitter_highlight.a" });
+        // try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/libtree-sitter.a" });
     }
 
     const libtool = LibtoolStep.create(b, .{
@@ -139,7 +131,7 @@ fn build_static_lib(
     return .{ .out = libtool.output, .step = libtool.step };
 }
 
-fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module) void {
+fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module, treesitter: *std.build.Step.Compile) void {
     compile.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
     compile.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     compile.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
@@ -148,16 +140,27 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module
     compile.linkFramework("Foundation");
     compile.linkFramework("AppKit");
     compile.linkFramework("CoreGraphics");
+    compile.linkSystemLibraryName("System");
     compile.linkLibC();
 
     compile.bundle_compiler_rt = true;
     for (modules) |module| {
         compile.addModule("zig-objc", module);
     }
+
+    // treesitter stuff
+    // _ = treesitter;
+    compile.addCSourceFile("src/syntax/tree-sitter-zig/src/parser.c", &.{});
+    compile.addCSourceFile("src/syntax/tree-sitter-typescript/typescript/src/parser.c", &.{});
+    compile.addCSourceFile("src/syntax/tree-sitter-typescript/typescript/src/scanner.c", &.{});
+    compile.linkLibrary(treesitter);
+    compile.addIncludePath("lib/tree-sitter/lib/include");
+    compile.step.dependOn(&treesitter.step);
 }
 
 fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target: std.zig.CrossTarget, optimize: std.builtin.Mode) void {
     const test_step = b.step("test", "Run tests");
+    const treesitter = build_treesitter(b, target, optimize, .aarch64);
 
     const tests = [_]std.build.TestOptions{
         .{
@@ -165,18 +168,28 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
             .root_source_file = .{ .path = "src/rope.zig" },
             .target = target,
             .optimize = optimize,
-            // .filter = "coroutine test",
         },
         .{
             .name = "vim_tests",
             .root_source_file = .{ .path = "src/vim.zig" },
             .target = target,
             .optimize = optimize,
-            // .filter = "command parse",
         },
         .{
             .name = "editor_tests",
             .root_source_file = .{ .path = "src/editor.zig" },
+            .target = target,
+            .optimize = optimize,
+        },
+        .{
+            .name = "math_tests",
+            .root_source_file = .{ .path = "src/math.zig" },
+            .target = target,
+            .optimize = optimize,
+        },
+        .{
+            .name = "highlight_tests",
+            .root_source_file = .{ .path = "src/highlight.zig" },
             .target = target,
             .optimize = optimize,
             // .filter = "backspace line",
@@ -184,15 +197,16 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
     };
 
     for (tests) |t| {
-        build_test(b, test_step, modules, t);
+        build_test(b, test_step, modules, treesitter, t);
     }
 }
 
-fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const *std.build.Module, opts: std.build.TestOptions) void {
+fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const *std.build.Module, treesitter: *std.build.Step.Compile, opts: std.build.TestOptions) void {
     const the_test = b.addTest(opts);
-    add_libs(the_test, modules);
+    add_libs(the_test, modules, treesitter);
     the_test.linkLibC();
     b.default_step.dependOn(&the_test.step);
+    b.default_step.dependOn(&treesitter.step);
     const run: *std.build.Step.Run = b.addRunArtifact(the_test);
     b.installArtifact(the_test);
     test_step.dependOn(&the_test.step);

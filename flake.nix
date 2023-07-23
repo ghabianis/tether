@@ -5,6 +5,7 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     zig.url = "github:mitchellh/zig-overlay";
+    zls.url = "github:zigtools/zls";
 
     # Used for shell.nix
     flake-compat = {
@@ -24,6 +25,7 @@
       (final: prev: rec {
         zigpkgs = inputs.zig.packages.${prev.system};
         zig = zigpkgs.master;
+        zls = inputs.zls.packages.${prev.system}.zls;
       })
     ];
 
@@ -38,10 +40,12 @@
           nativeBuildInputs = with pkgs; [
             zigpkgs.master
             pkg-config
+            zls
           ];
           buildInputs = with pkgs; [
             freetype
             pkg-config
+            zls
           ];
         };
 

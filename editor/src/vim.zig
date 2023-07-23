@@ -854,3 +854,4 @@ test "command parse visual" {
     _ = try test_parse(alloc, &self, "c", .{ .repeat = 1, .kind = .{ .Change = null } });
     _ = try test_parse(alloc, &self, "y", .{ .repeat = 1, .kind = .{ .Yank = null } });
 }
+

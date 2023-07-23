@@ -1,30 +1,52 @@
-pub const ErrorCode = enum(u32) {
-    Ok,
-    UnknownScope,
-    Timeout,
-    InvalidLanguage,
-    InvalidUtf8,
-    InvalidRegex,
-    InvalidQuery,
+pub const c = @cImport({
+    @cInclude("tree_sitter/api.h");
+});
+
+pub extern "C" fn tree_sitter_zig() *c.TSLanguage;
+pub extern "C" fn tree_sitter_typescript() *c.TSLanguage;
+
+pub const ZIG: Language = Language.comptime_new(
+    tree_sitter_zig, 
+    "./syntax/tree-sitter-zig/queries/highlights.scm", 
+    "./syntax/tree-sitter-zig/queries/injections.scm", 
+    null,
+);
+
+pub const TS: Language = Language.comptime_new(
+    tree_sitter_typescript, 
+    "./syntax/tree-sitter-typescript/queries/highlights.scm", 
+    null,
+    null,
+);
+
+pub const Language = struct {
+    highlights: []const u8,
+    injections: []const u8,
+    locals: []const u8,
+    lang_fn: *const fn () callconv(.C) *c.TSLanguage,
+
+    pub fn comptime_new(comptime lang_fn: *const fn () callconv(.C) *c.TSLanguage, comptime highlights_path: []const u8, comptime injections_path: ?[]const u8, comptime locals_path: ?[]const u8) Language {
+        const highlights = @embedFile(highlights_path);
+        const injections = if (injections_path) |path| @embedFile(path) else "";
+        const locals = if (locals_path) |path| @embedFile(path) else "";
+
+        return .{
+            .lang_fn = lang_fn,
+            .highlights = highlights,
+            .injections = injections,
+            .locals = locals,
+        };
+    }
 };
 
-pub const TSHighlighter = anyopaque;
+pub const Tree = struct {
+    ptr: *c.TSTree,
 
-pub extern "C" fn ts_highlighter_new(
-    highlight_names: [*]const [*:0]const u8,
-    attribute_strings: [*]const [*:0]const u8,
-    highlight_count: u32,
-) *TSHighlighter;
+    pub fn from_ptr(p: *c.TSTree) Tree {
+        return .{ .ptr = p };
+    }
 
-// pub extern "C" fn ts_highlighter_add_language(
-//     this: *TSHighlighter,
-//     scope_name: [*]const u8,
-//     injection_regex: [*]const u8,
-//     language: Language,
-//     highlight_query: [*]const u8,
-//     injection_query: [*]const u8,
-//     locals_query: [*]const u8,
-//     highlight_query_len: u32,
-//     injection_query_len: u32,
-//     locals_query_len: u32,
-// ) *TSHighlighter;
+    pub fn deinit(self: Tree) !void {
+        c.ts_tree_delete(self.ptr);
+    }
+};
