@@ -211,10 +211,11 @@ pub const MoveKind = union(MoveKindEnum) {
     BeginningWord: bool,
     EndWord: bool,
 
+    /// Does removing text with this movement include the character under the cursor?
     pub fn is_delete_end_inclusive(self: *const MoveKind) bool {
         return switch (self.*) {
-            .Left, .Right, .Up, .Down, .LineStart, .LineEnd, .ParagraphBegin, .ParagraphEnd, .Start, .End, .Word, .BeginningWord, .EndWord => false,
-            .Find => true,
+            .Left, .Right, .Up, .Down, .LineStart, .LineEnd, .ParagraphBegin, .ParagraphEnd, .Start, .End, .Word => false,
+            .BeginningWord, .EndWord, .Find => true,
         };
     }
 };
