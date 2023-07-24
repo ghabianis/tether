@@ -53,27 +53,10 @@ const Renderer = struct {
     editor: Editor,
     highlight: ?Highlight = null,
 
-    // fucck this
     pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
-        // const highlight = Highlight.init(alloc, &ts.ZIG, &.{
-        //     .{ .name = "function", .color = math.hex4("#7AA2F7") },
-        //     .{ .name = "function.builtin", .color = math.hex4("#0BB9D7") },
-
-        //     .{ .name = "keyword", .color = math.hex4("#BB9AF7") },
-        //     // .{ .name = "keyword.function", .color = math.hex4("#BB9AF7") },
-        //     .{ .name = "conditional", .color = math.hex4("#BB9AF7") },
-        //     // .{ .name = "keyword.operator", .color = math.hex4("#BB9AF7") },
-        //     // .{ .name = "keyword.return", .color = math.hex4("#BB9AF7") },
-        //     .{ .name = "type.qualifier", .color = math.hex4("#BB9AF7") },
-
-        //     .{ .name = "comment", .color = math.hex4("#444B6A") },
-        //     .{ .name = "spell", .color = math.hex4("#444B6A") },
-
-        //     .{ .name = "operator", .color = math.hex4("#88ddff") },
-        // }) catch @panic("SHIT");
         const highlight = Highlight.init(alloc, &ts.ZIG, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
 
         var renderer: Renderer = .{
@@ -330,20 +313,23 @@ const Renderer = struct {
         var cursor_col: u32 = 0;
         var index: u32 = 0;
         while (iter.next()) |the_line| {
+            // if empty line or line with only \n
             if (the_line.len == 0 or the_line.len == 1 and strutil.is_newline(the_line[0])) {
                 if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
                     cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
                 }
-                self.editor.rope.print_nodes();
-                charIdxToVertexIdx.items[index] = @intCast(u32, self.vertices.items.len);
-                try self.vertices.appendSlice(alloc, &[_]Vertex{Vertex.default()} ** 6);
+                if (the_line.len == 1) {
+                    charIdxToVertexIdx.items[index] = @intCast(u32, self.vertices.items.len);
+                    try self.vertices.appendSlice(alloc, &[_]Vertex{Vertex.default()} ** 6);
+                    index += 1;
+                }
 
                 starting_y -= self.atlas.descent + self.atlas.ascent;
                 cursor_line += 1;
                 cursor_col = 0;
-                index += 1;
                 continue;
             }
+            // remove \n
             var line = if (strutil.is_newline(the_line[the_line.len - 1])) the_line[0 .. the_line.len - 1] else the_line;
 
             // TODO: I think this can be created once before this loop, then
@@ -358,7 +344,7 @@ const Renderer = struct {
             const run_count = ct.CFArrayGetCount(runs);
             std.debug.assert(run_count <= 1);
             if (run_count == 0) {
-                continue;
+                @panic("This is bad");
             }
 
             const run = ct.CFArrayGetValueAtIndex(runs, 0);
@@ -573,7 +559,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 48.0);
+    var atlas = font.Atlas.new(alloc, 32.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
