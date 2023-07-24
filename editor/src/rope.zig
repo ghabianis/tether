@@ -364,7 +364,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
             }
 
             const ret = self.node.data.items[self.cursor.col];
-            self.incr_cursor();
+            _ = self.incr_cursor();
             return ret;
         }
 
@@ -392,6 +392,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
             return ret;
         }
 
+        /// Look at the next char without consuming anythign
         pub fn peek2(self: *@This()) ?u8 {
             var node_cpy = self.node;
             var cursor_cpy = self.cursor;
@@ -414,18 +415,20 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
             self.cursor = prev;
         }
 
-        fn incr_cursor(self: *@This()) void {
+        pub fn incr_cursor(self: *@This()) bool {
             if (comptime Reverse) {
                 if (self.cursor.col == 0) {
-                    _ = self.next_node();
+                    return self.next_node();
                 } else {
                     self.cursor.col -= 1;
+                    return true;
                 }
             } else {
                 self.cursor.col += 1;
                 if (self.cursor.col >= self.node.data.items.len) {
-                    _ = self.next_node();
+                    return self.next_node();
                 }
+                return true;
             }
         }
 

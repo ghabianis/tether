@@ -493,29 +493,31 @@ fn get_selection_impl(self: *Self, alloc: Allocator, sel: Selection) !?[]const u
 /// W -> same as above but punctuation inclusive
 ///
 /// w/W => always goes to next word, if EOL then go to the last char
-fn forward_word(self: *Self, skip_punctuation: bool) void {
+fn forward_word(self: *Self, capital_key: bool) void {
     var node = self.rope.node_at_line(self.cursor.line) orelse return;
 
     // TODO: initialize this properly
-    var prev_char: u8 = 0;
-    var can_break = !skip_punctuation and self.is_punctuation(prev_char, node.data.items[self.cursor.col]);
+    // var prev_char: u8 = 0;
+    var starts_on_punctuation: bool = self.is_punctuation(node.data.items[self.cursor.col]);
 
-    var prev_cursor: TextPos = .{ .line = self.cursor.line, .col = self.cursor.col + 1 };
+    var prev_cursor: TextPos = .{ .line = self.cursor.line, .col = self.cursor.col };
     var iter = Rope.iter_chars(
         node,
         prev_cursor,
     );
+
+    var skip_one = false;
     while (iter.next_update_prev_cursor(&prev_cursor)) |char| {
-        if (strutil.is_whitespace(char)) {
-            can_break = true;
-        } else if (can_break or (!skip_punctuation and self.is_punctuation(prev_char, char))) {
-            prev_char = char;
+        if (self.breaks_word(capital_key, starts_on_punctuation, char, &skip_one)) {
             break;
         }
-        prev_char = char;
     }
 
-    self.cursor = prev_cursor;
+    if (skip_one) {
+        self.cursor = iter.cursor;
+    } else {
+        self.cursor = prev_cursor;
+    }
 }
 
 /// e -> end of word (if already at end of cur word go to end of next word)
@@ -524,8 +526,8 @@ fn forward_word(self: *Self, skip_punctuation: bool) void {
 /// e/E => need to check if at the end of the current word, which means
 ///        char_at(cur_pos + 1) is whitespace or punctuation (if E)
 ///
-fn forward_word_end(self: *Self, skip_punctuation: bool) void {
-    self.backward_word_or_forward_word_end(skip_punctuation, .EndWord);
+fn forward_word_end(self: *Self, capital_key: bool) void {
+    self.backward_word_or_forward_word_end(capital_key, .EndWord);
 }
 
 /// b -> start of word (if pos == cur word start then go to next word)
@@ -534,19 +536,21 @@ fn forward_word_end(self: *Self, skip_punctuation: bool) void {
 /// b/B => need to check if at start of cur word, meaning char_at(cur_pos - 1) is
 ///        whitespace or punctuation (if B)
 ///
-fn backward_word(self: *Self, skip_punctuation: bool) void {
-    self.backward_word_or_forward_word_end(skip_punctuation, .BeginningWord);
+fn backward_word(self: *Self, capital_key: bool) void {
+    self.backward_word_or_forward_word_end(capital_key, .BeginningWord);
 }
 
-/// b/B and e/E are the inverse of each other
-fn backward_word_or_forward_word_end(self: *Self, skip_punctuation: bool, comptime dir: Vim.MoveKindEnum) void {
+/// b/B and e/E are the inverse of each other so the two functions for them
+/// share this as the core logic
+fn backward_word_or_forward_word_end(self: *Self, capital_key: bool, comptime dir: Vim.MoveKindEnum) void {
     var node = self.rope.node_at_line(self.cursor.line) orelse return;
     var prev_cursor: TextPos = .{ .line = self.cursor.line, .col = self.cursor.col };
+    var skip_one: bool = false;
 
     // TODO: Initialize this properly
-    var prev_char: u8 = 0;
-    var prev_char_punctual: bool = self.is_punctuation(prev_char, node.data.items[prev_cursor.col]);
-    _ = prev_char_punctual;
+    // var prev_char: u8 = 0;
+    // var prev_char_punctual: bool = self.is_punctuation(prev_char, node.data.items[prev_cursor.col]);
+    // _ = prev_char_punctual;
 
     var iter = if (comptime dir == .BeginningWord) Rope.iter_chars_rev(
         node,
@@ -566,7 +570,8 @@ fn backward_word_or_forward_word_end(self: *Self, skip_punctuation: bool, compti
         }
         // Otherwise, check if already at end of word
         else if (iter.peek2()) |initial_peek2| {
-            if (strutil.is_whitespace(initial_peek2) or (!skip_punctuation and self.is_punctuation(prev_char, initial_peek2))) {
+            var starts_on_punctuation = self.is_punctuation(initial_peek);
+            if (self.breaks_word(capital_key, starts_on_punctuation, initial_peek2, &skip_one)) {
                 _ = iter.next_update_prev_cursor(&prev_cursor);
                 prev_cursor = iter.cursor;
                 // Skip whitespace if needed
@@ -584,35 +589,38 @@ fn backward_word_or_forward_word_end(self: *Self, skip_punctuation: bool, compti
         return;
     }
 
+    var starts_on_punctuation = self.is_punctuation(iter.peek() orelse return);
     while (iter.next_update_prev_cursor(&prev_cursor)) |char| {
+        _ = char;
         // Check if at end of word
         if (iter.peek()) |c| {
-            if (strutil.is_whitespace(c) or (!skip_punctuation and self.is_punctuation(prev_char, c))) {
+            if (self.breaks_word(capital_key, starts_on_punctuation, c, &skip_one)) {
                 break;
             }
         }
-        prev_char = char;
     }
 
     self.cursor = prev_cursor;
 }
 
-fn breaks_word(self: *Self, skip_punctuation: bool, prev_char_punctual: bool, prev_char: u8, c: u8) bool {
-    if (!skip_punctuation) return strutil.is_whitespace(c);
-    if (strutil.is_whitespace(c)) return true;
-    if (prev_char_punctual) return !self.is_punctuation(prev_char, c);
-    return self.is_punctuation(prev_char, c);
+fn breaks_word(self: *Self, capital_key: bool, starts_on_punctuation: bool, char: u8, skip_one: *bool) bool {
+    // For, W/B/E the only thing that breaks a word is whitespace
+    const is_whitespace = strutil.is_whitespace(char);
+    skip_one.* = is_whitespace;
+    if (capital_key) { 
+        return is_whitespace;
+    }
+    const punctuation = self.is_punctuation(char);
+    const breaks = starts_on_punctuation and !punctuation or !starts_on_punctuation and punctuation;
+    return breaks;
 }
 
-fn is_punctuation(self: *Self, prev_char: u8, c: u8) bool {
+fn is_punctuation(self: *Self, c: u8) bool {
     _ = self;
     return switch (c) {
-        '#', '&', '^', '%', '!', '@', '`', ':', ';', '/', '-', '+', '*', '.', ',', '(', '[', '<' => true,
-        '"' => return prev_char != '"',
-        '\'' => return prev_char != '\'',
-        ')' => return prev_char != '(',
-        ']' => return prev_char != '[',
-        '>' => return prev_char != '<',
+        '>', ']', ')', '\'', '"', '#', '&', '^', '%', '!', '@', '`', ':', ';', '/', '-', '+', '*', '.', ',', '(', '[', '<' => true,
+        // whitespace also counts
+        ' ', '\t','\n', '\r' => true,
         else => false,
     };
 }
@@ -744,4 +752,74 @@ test "backspace line" {
     str = try editor.text(std.heap.c_allocator);
 }
 
-// 012345
+test "move word" {
+    var expected: TextPos = undefined;
+
+    var editor = Self{};
+    try editor.init();
+
+    try editor.insert("fuck++yay! nice wow");
+
+    // Start on non-punctuation (f) should end on (+)
+    editor.cursor = . { .line = 0, .col = 0 };
+    editor.move(1, .{ .Word = false });
+    expected = .{ .line = 0, .col = 4 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+    
+    // Start on punctuation (+) should end on (y)
+    editor.cursor = .{ .line = 0, .col = 4 };
+    editor.move(1, .{ .Word = false });
+    expected = .{ .line = 0, .col = 6 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+
+    // Start on whitespace should move to next word (n)
+    editor.cursor = .{ .line = 0, .col = 10 };
+    editor.move(1, .{ .Word = false });
+    expected = .{ .line = 0, .col = 11 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+
+    // Skip whitespace
+    editor.cursor = .{ .line = 0, .col = 11 };
+    editor.move(1, .{ .Word = false });
+    expected = .{ .line = 0, .col = 16 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+
+    // Big W whitespace
+    editor.cursor = . { .line = 0, .col = 0 };
+    editor.move(1, .{ .Word = true });
+    expected = .{ .line = 0, .col = 11 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+}
+
+test "move beginning word" {
+    var expected: TextPos = undefined;
+
+    var editor = Self{};
+    try editor.init();
+
+    try editor.insert("fuck++yay! nice wow");
+
+    // start first y, end on first +
+    editor.cursor = .{ .line = 0, .col = 6 };
+    editor.move(1, .{ .BeginningWord = false });
+    expected = .{ .line = 0, .col = 4 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+
+    // start first y, end on first +
+    editor.cursor = .{ .line = 0, .col = 6 };
+    editor.move(1, .{ .BeginningWord = true });
+    expected = .{ .line = 0, .col = 0 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+
+    // start first +, end on last +
+    editor.cursor = .{ .line = 0, .col = 4 };
+    editor.move(1, .{ .EndWord = false });
+    expected = .{ .line = 0, .col = 5 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+
+    // start first e, end on !
+    editor.cursor = .{ .line = 0, .col = 4 };
+    editor.move(1, .{ .EndWord = true });
+    expected = .{ .line = 0, .col = 9 };
+    try std.testing.expectEqualDeep(expected, editor.cursor);
+}
