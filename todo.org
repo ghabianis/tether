@@ -1,13 +1,13 @@
 #+title: Todo
 
-* TODO Now [1/6]
+* TODO Now [2/6]
 ** DONE Scrolling [0/0]
 *** DONE scrolling updates the model matrix with x,y translation
 *** DONE cap y and x axis [0/0]
 **** DONE yt <= 0 and yt >= text_height
 **** DONE xt >= 0 and xt <= text_width
 **** DONE xt locked at 0 until text_width >= screen_width
-** TODO bug newline
+** DONE bug newline
 after the while loop in build_text_geometry, need to also add vertices for the end of line
 ** TODO Status line
 ** TODO Line numbers
