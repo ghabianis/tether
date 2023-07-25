@@ -88,6 +88,31 @@ class EditorViewController: NSViewController {
 class CustomMTKView: MTKView {
     var renderer: Renderer?
     
+    var isScrolling = false
+    
+    override func scrollWheel(with event: NSEvent) {
+        guard let renderer = self.renderer else {
+            return
+        }
+//        switch (event.phase) {
+//        case NSEvent.Phase.began:
+//            print("NSEventPhaseBegan");
+//        case NSEvent.Phase.cancelled:
+//            print("NSEventPhaseCancelled");
+//        case NSEvent.Phase.changed:
+//            print("NSEventPhaseChanged");
+//        case NSEvent.Phase.ended:
+//            print("NSEventPhaseEnded");
+//        case NSEvent.Phase.mayBegin:
+//            print("NSEventPhaseMayBegin");
+//        case NSEvent.Phase.stationary:
+//            print("NSEventPhaseStationary");
+//        default:
+//            print("NSEventPhaseNone");
+//        }
+        renderer_handle_scroll(renderer, event.deltaX, event.deltaY, event.phase)
+    }
+    
     override func keyDown(with event: NSEvent) {
         guard let renderer = self.renderer else {
             return

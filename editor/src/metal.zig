@@ -60,6 +60,16 @@ pub const NSEvent = struct {
     const Self = @This();
     obj: objc.Object,
 
+    pub const Phase = enum(NSUInteger) {
+        None        = 0,
+        Began       = 0x1 << 0,
+        Stationary  = 0x1 << 1,
+        Changed     = 0x1 << 2,
+        Ended       = 0x1 << 3,
+        Cancelled   = 0x1 << 4,
+        MayBegin    = 0x1 << 5,
+    };
+
     pub usingnamespace DefineObject(@This());
 
     pub fn keycode(self: Self) u16 {
@@ -72,6 +82,10 @@ pub const NSEvent = struct {
             return null;
         }
         return NSString.from_id(characters_id);
+    }
+
+    pub fn phase(self: Self) Phase {
+        return self.obj.getProperty(Phase, "phase");
     }
 };
 

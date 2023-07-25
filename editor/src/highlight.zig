@@ -226,6 +226,7 @@ pub fn highlight(self: *Highlight, str: []const u8, charIdxToVertexIdx: []const 
             while (j < end) : (j += 1) {
                 const vertIndex = charIdxToVertexIdx[j];
                 if (self.theme[capture.index]) |color| {
+                    print("CAPTURED: {s} :: {d} {d}\n", .{str[start..end], j - start, str[j]});
                     vertices[vertIndex].color = color;
                     vertices[vertIndex + 1].color = color;
                     vertices[vertIndex + 2].color = color;

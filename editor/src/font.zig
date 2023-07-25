@@ -225,7 +225,29 @@ pub const Atlas = struct {
         var glyph_rects = ArrayList(metal.CGRect){};
 
         const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n";
-        const COMMON_LIGATURES = [_][]const u8{ "=>", "++", "->", "==", "===", "!=", "!==", "<=", ">=", "::", "*=", ":=", "//" };
+        const COMMON_LIGATURES = [_][]const u8{ 
+            //
+            "=>", 
+            "++", 
+            "->", 
+            "==", 
+            "===", 
+            "!=", 
+            "!==", 
+            "<=", 
+            ">=", 
+            "::", 
+            "*=", 
+            ":=", 
+            "//",
+            "///",
+            "<<",
+            ">>",
+            ".?",
+            ".?.",
+            "..",
+            "...",
+        };
 
         // For some reason this will always put ligatures even when kCTLigatureAttributeName is set to 0,
         // so we build the glyphs manually here.
