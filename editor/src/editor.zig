@@ -25,6 +25,7 @@ draw_text: bool = false,
 vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
+desired_col: ?u32 = null,
 
 pub fn init(self: *Self) !void {
     try self.rope.init();
@@ -238,11 +239,12 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
             self.cursor = .{ .line = 0, .col = 0 };
         },
         .End => {
-            const last = self.rope.nodes.last orelse return;
-            self.cursor = .{
-                .line = @intCast(u32, self.rope.nodes.len - 1),
-                .col = @intCast(u32, last.data.items.len),
-            };
+            if (self.rope.nodes.last) |last| {
+                self.cursor = .{
+                    .line = @intCast(u32, self.rope.nodes.len - 1),
+                    .col = @intCast(u32, last.data.items.len),
+                };
+            }
         },
         .Word => |skip_punctuation| {
             self.forward_word(skip_punctuation);
@@ -251,9 +253,12 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
             self.backward_word(skip_punctuation);
         },
         .EndWord => |skip_punctuation| {
-            print("NICE: \n", .{});
             self.forward_word_end(skip_punctuation);
         },
+    }
+
+    if (mv != .Up and mv != .Down) {
+        self.desired_col = self.cursor.col;
     }
 }
 
@@ -640,7 +645,13 @@ pub fn down(self: *Self) void {
 pub fn move_line(self: *Self, delta: i64) void {
     const d = @intCast(u32, if (delta < 0) -delta else delta);
     const line = if (delta < 0) self.cursor.line -| d else @min(self.rope.nodes.len -| 1, self.cursor.line + d);
-    const col = @min(self.cursor_eol_for_mode(self.rope.node_at_line(line).?) -| 1, self.cursor.col);
+    const target_col = target_col: {
+        if (self.desired_col) |desired_col| {
+            break :target_col desired_col;
+        }
+        break :target_col self.cursor.col;
+    };
+    const col = @min(self.cursor_eol_for_mode(self.rope.node_at_line(line).?) -| 1, target_col);
     self.cursor.line = line;
     self.cursor.col = col;
     self.draw_text = true;

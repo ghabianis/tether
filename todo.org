@@ -1,7 +1,7 @@
 #+title: Todo
 
-* TODO Now [1/5]
-** TODO moving up/down/creating lines preserves word column when possible
+* TODO Now [1/6]
+** DONE moving up/down/creating lines preserves word column when possible
 example:
 #+begin_src zig
 pub fn start_of_line(self: *Self) void {
@@ -20,6 +20,11 @@ when moving up or down, we try to put the cursor on this desired column, or max 
 the cursor tries to move to the "desired" col only when the user moves /strictly/ up or down (movements like ={= or =}= include horizontal movements and dont count)
 
 the "desired" column is set when the user does /not move strictly/ up or down (the inverse)
+** TODO indentation on newline [0/2]
+when the cursor directly succeeds a delimiter (excluding whitespace but not newlines), and the user inserts
+a newline, then the newline should be indented by +1 indentation level
+*** TODO check if should indent
+*** TODO calculate indentation level of line
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::
