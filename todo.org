@@ -1,13 +1,6 @@
 #+title: Todo
 
 * TODO Now [1/5]
-** TODO Status line
-*** BRAINSTORM
-- what we want ::
-  - current file path relative to project root
-  - current line / col
-  - vim mode
-
 ** TODO moving up/down/creating lines preserves word column when possible
 example:
 #+begin_src zig
@@ -20,23 +13,33 @@ pub fn start_of_line(self: *Self) void {
 if cursor is at =s= in =start_of_line= (index 7)
 
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
+** TODO Status line
+*** BRAINSTORM
+- what we want ::
+  - current file path relative to project root
+  - current line / col
+  - vim mode
+
 ** TODO sweep thru code for objc memory leaks
 there are probably lots of places where i am not freeing objc objects
 ** TODO bug: =cc= (change line) should preserve line and not delete it entirely
-* TODO Later [0/10]
-** TODO coalesce the text geometry building code for =build_text_geometry()= and =build_line_number_geometry()=
-** TODO only build line number geometry for lines we see
-** TODO only build text geometry for text we see?
-** TODO cursor on ligature glyph should render the regular glyph on top of cursor
-** TODO add new ligatures to atlas when encountered
+* TODO Later [0/11]
+** TODO (refactor) coalesce the text geometry building code for =build_text_geometry()= and =build_line_number_geometry()=
+** TODO (perf) only build line number geometry for lines we see
+** TODO (perf) only build text geometry for text we see?
+** TODO (bug) cursor on ligature glyph should render the regular glyph on top of cursor
+** TODO (feat) add new ligatures to atlas when encountered
 easiest to rebuild atlas from scratch again
 
 later can do this off main thread so rendering isn't interrupted
-** TODO don't render/rebuild geometry if not needed
+** TODO (perf) don't render/rebuild geometry if not needed
 especially right now we rebuild all text when moving cursor as ez way to redraw cursor since it depends on text position
 
 now we this charIdxToVertexIdx map we create in create_text_geometry, we can save this and use it to get their
 vertices of a given char, so we can redraw the crusor without having to call =create_text_geometry= again.
+** TODO (perf) don't output existing glyphs in the atlas
+some ligatures like =//= and =///= reuse the same glyph
+but we are being lazy and not checking for this and adding redundant glyphs to the atlas
 ** TODO event loop or some mechanism to do work without stalling frame
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?

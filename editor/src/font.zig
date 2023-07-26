@@ -224,10 +224,12 @@ pub const Atlas = struct {
             "///",
             "<<",
             ">>",
+            // these are sus glyphs
             ".?",
             ".?.",
             "..",
             "...",
+            "!?",
         };
 
         // For some reason this will always put ligatures even when kCTLigatureAttributeName is set to 0,
