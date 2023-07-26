@@ -1,13 +1,6 @@
 #+title: Todo
 
 * TODO Now [1/5]
-** DONE Line numbers [0/0]
-*** DONE calculate column width from max digit count
-on Emacs, at first reserves enough space for 3 digits (min is 3)
-
-then updates as this number continues
-*** DONE draw numbers
-*** DONE update text/selection/cursor geometry building procedures to adjust by x offset
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::

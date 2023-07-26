@@ -27,7 +27,7 @@ pub const Vertex = extern struct {
         const l = @floatCast(f32, pos.x) + x + @floatCast(f32, rect.origin.x);
         const r = l + @floatCast(f32, rect.size.width);
 
-        const txt = glyph_info.ty - @intToFloat(f32, glyph_info.rect.heightCeil()) / atlas_h;
+        const txt = glyph_info.ty - @intToFloat(f32, rect.heightCeil()) / atlas_h;
         const txb = glyph_info.ty;
         const txl = glyph_info.tx;
         const txr = glyph_info.tx + width / atlas_w;

@@ -25,6 +25,43 @@ pub const CGAffineTransform = extern struct {
     ty: metal.CGFloat,
 };
 
+pub const CTTextAlignment = enum(u8) {
+    Left      = 0,
+    Right     = 1,
+    Center    = 2,
+    Justified = 3,
+    Natural   = 4,
+};
+
+pub const CTParagraphStyleSpecifier = enum(u32) {
+    Alignment = 0,
+    FirstLineHeadIndent = 1,
+    HeadIndent = 2,
+    TailIndent = 3,
+    TabStops = 4,
+    DefaultTabInterval = 5,
+    LineBreakMode = 6,
+    LineHeightMultiple = 7,
+    MaximumLineHeight = 8,
+    MinimumLineHeight = 9,
+    // kCTParagraphStyleSpecifierLineSpacing CT_ENUM_DEPRECATED("See documentation for replacements", macos(10.5, 10.8), ios(3.2, 6.0)) CT_ENUM_UNAVAILABLE(watchos, tvos) = 10,
+    ParagraphSpacing = 11,
+    ParagraphSpacingBefore = 12,
+    BaseWritingDirection = 13,
+    MaximumLineSpacing = 14,
+    MinimumLineSpacing = 15,
+    LineSpacingAdjustment = 16,
+    LineBoundsOptions = 17,
+
+    Count
+};
+
+pub const CTParagraphStyleSetting = extern struct {
+    spec: CTParagraphStyleSpecifier,
+    value_size: usize,
+    value: *const anyopaque,
+};
+
 pub extern "C" const CGAffineTransformIdentity: CGAffineTransform;
 
 pub const CFTypeRef = objc.c.id;
@@ -40,11 +77,14 @@ pub const CGImageRef = objc.c.id;
 pub const CTLineRef = objc.c.id;
 pub const CTRunRef = objc.c.id;
 pub const CGPathRef = objc.c.id;
+pub const CFAllocatorRef = ?*anyopaque;
+pub const CTParagraphStyleRef = objc.c.id;
 
 pub extern "C" const kCGColorSpaceSRGB: objc.c.id;
 pub extern "C" const kCTFontBaselineAdjustAttribute: objc.c.id;
 pub extern "C" const kCTLigatureAttributeName: objc.c.id;
 pub extern "C" const kCTFontAttributeName: objc.c.id;
+pub extern "C" const kCTParagraphStyleAttributeName: objc.c.id;
 pub const kCGImageAlphaPremultipliedLast: u32 = 1;
 
 pub extern "C" fn CTFontGetAscent(font: CTFontRef) metal.CGFloat;
@@ -64,6 +104,8 @@ pub extern "C" fn CTLineGetGlyphRuns(line: CTLineRef) CFArrayRef;
 pub extern "C" fn CTRunGetGlyphs(run: CTRunRef, range: CFRange, buffer: [*]metal.CGGlyph) void;
 pub extern "C" fn CTRunGetGlyphCount(run: CTRunRef) CFIndex;
 pub extern "C" fn CTRunGetPositions(run: CTRunRef, range: CFRange, buffer: [*]metal.CGPoint) void;
+pub extern "C" fn CTRunGetTypographicBounds(run: CTRunRef, range: CFRange, ascent: ?*metal.CGFloat, descent: ?*metal.CGFloat, leading: ?*metal.CGFloat) f64;
+pub extern "C" fn CTParagraphStyleCreate(settings: ?[*]const CTParagraphStyleSetting, settings_count: usize) CTParagraphStyleRef;
 
 pub extern "C" fn CGFontGetGlyphAdvances(font: CGFontRef, glyphs: [*]metal.CGGlyph, count: usize, advances: [*]i32) bool;
 pub extern "C" fn CGFontGetDescent(font: CGFontRef) i32;
@@ -75,6 +117,7 @@ pub extern "C" fn CFAttributedStringGetLength(string: CFAttributedStringRef) CFI
 
 pub extern "C" fn CFArrayGetValueAtIndex(array: CFArrayRef, index: CFIndex) CFTypeRef;
 pub extern "C" fn CFArrayGetCount(array: CFArrayRef) CFIndex;
+// pub extern "C" fn CFDictionaryCreate(allocator: CFAllocatorRef, keys: [*]const void, values: [*]const void, num_values: CFIndex, )
 
 pub extern "C" fn CFRelease(obj: CFTypeRef) void;
 

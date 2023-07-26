@@ -152,7 +152,8 @@ const Renderer = struct {
         var number_str_buf = [_]u8{0} ** 16;
 
         const number_str = strutil.number_to_str(biggest_num, digit_count, &number_str_buf);
-        const width = self.atlas.str_width(number_str);
+        const padding = self.atlas.max_adv_before_ligatures;
+        const width = self.atlas.str_width(number_str) + padding;
 
         return @floatCast(f32, width);
     }
@@ -298,7 +299,7 @@ const Renderer = struct {
         return ret;
     }
 
-    fn text_attributed_string_dict(self: *Self) objc.Object {
+    fn text_attributed_string_dict(self: *Self, comptime alignment: ct.CTTextAlignment) objc.Object {
         const dict = metal.NSDictionary.new_mutable();
         const two = metal.NSNumber.number_with_int(1);
         defer two.release();
@@ -311,6 +312,21 @@ const Renderer = struct {
             self.atlas.font.value,
             ct.kCTFontAttributeName,
         });
+        if (comptime alignment != .Left) {
+            const settings = [_]ct.CTParagraphStyleSetting{
+                .{ 
+                    .spec = ct.CTParagraphStyleSpecifier.Alignment,
+                    .value_size = @sizeOf(ct.CTTextAlignment),
+                    .value = @ptrCast(*const anyopaque, &alignment),
+                }
+            };
+            const paragraph_style = ct.CTParagraphStyleCreate(&settings, settings.len);
+            defer objc.Object.fromId(paragraph_style).msgSend(void, objc.sel("release"), .{});
+            dict.msgSend(void, objc.sel("setObject:forKey:"), .{
+                paragraph_style,
+                ct.kCTParagraphStyleAttributeName
+            });
+        }
 
         return dict;
     }
@@ -364,7 +380,7 @@ const Renderer = struct {
         try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
 
         // TODO: This can be created once at startup
-        const text_attributes = self.text_attributed_string_dict();
+        const text_attributes = self.text_attributed_string_dict(.Left);
         defer text_attributes.msgSend(void, objc.sel("release"), .{});
 
         var iter = self.editor.rope.iter_lines(self.editor.rope.nodes.first orelse return);
@@ -503,19 +519,20 @@ const Renderer = struct {
         frame_arena: *ArenaAllocator,
         screenx: f32, 
         screeny: f32,
-        text_start_x: f32,
+        line_nb_col_width: f32,
     ) !void {
         _ = screenx;
-        _ = text_start_x;
         const line_count = self.editor.rope.nodes.len;
-        const text_attributes = self.text_attributed_string_dict();
+        const text_attributes = self.text_attributed_string_dict(.Right);
         defer text_attributes.msgSend(void, objc.sel("release"), .{});
 
-        const starting_x: f32 = 0.0;
+        const starting_x: f32 = 0.0 + self.atlas.max_adv_before_ligatures * 0.5;
         var starting_y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
 
         const atlas_w = @intToFloat(f32, self.atlas.width);
         const atlas_h = @intToFloat(f32, self.atlas.height);
+
+        const p = self.atlas.max_adv_before_ligatures * 0.5;
 
         var number_buf = [_]u8{0} ** 16;
 
@@ -565,14 +582,28 @@ const Renderer = struct {
                 @panic("Houston we have a problem");
             }
 
+            const run_width: metal.CGFloat = run_width: {
+                if (glyph_rects.items.len == 0) continue;
+
+                const pos: metal.CGPoint = positions.items[glyph_rects.items.len - 1];
+                const glyph_info: *const Glyph = self.atlas.lookup(glyphs.items[glyph_rects.items.len - 1]);
+                
+                break :run_width pos.x + if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance;
+            };
+
+            const origin_adjust = (line_nb_col_width - p * 2.0) - run_width;
+
             var j: usize = 0;
             while (j < glyphs.items.len) : (j += 1) {
                 const glyph = glyphs.items[j];
                 const glyph_info = self.atlas.lookup(glyph);
-                const rect = glyph_rects.items[j];
-                const pos = positions.items[j];
+                const rect: metal.CGRect = glyph_rects.items[j];
 
-                const color = if (on_current_line) TEXT_COLOR else math.hex4("#737aa2");
+                // Align text position to the right
+                var pos = positions.items[j];
+                pos.x += origin_adjust;
+
+                const color = if (on_current_line) math.hex4("#7279a1") else math.hex4("#353a52");
 
                 const vertices = Vertex.square_from_glyph(
                     &rect,
@@ -742,7 +773,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 64.0);
+    var atlas = font.Atlas.new(alloc, 32.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

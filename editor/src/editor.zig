@@ -216,7 +216,6 @@ fn move(self: *Self, amount: u16, mv: Vim.MoveKind) void {
 fn move_repeated(self: *Self, amount: u16, mv: Vim.MoveKind) void {
     var i: u16 = 0;
     while (i < amount) : (i += 1) {
-        i += 1;
         self.move_impl(mv);
     }
 }

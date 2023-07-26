@@ -60,10 +60,17 @@ void ShowGlyphsAtPositions(
 
 void ShowGlyphsAtPoint(CGContextRef ctx, const CGGlyph *glyphs, CGFloat x, CGFloat y) {
     
-    //    CTFontLe
+
     return CGContextShowGlyphsAtPoint(ctx, x, y, glyphs, 1);
 }
 
 void SetTextMatrix(CGContextRef ctx, CGAffineTransform t) {
     CGContextSetTextMatrix(ctx, t);
+}
+
+void RandomTest(CFAttributedStringRef str) {
+//    CTFramesetterRef frame_setter = CTFramesetterCreateWithAttributedString(str);
+//    CTFrameRef frame = CTFramesetterCreateFrame(frame_setter, CFRangeMake(0, 0), <#CGPathRef  _Nonnull path#>, <#CFDictionaryRef  _Nullable frameAttributes#>);
+    
+    
 }

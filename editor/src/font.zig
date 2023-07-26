@@ -16,6 +16,7 @@ pub const GlyphInfo = struct {
 
     const DEFAULT = Self.default();
 
+    /// TODO: Not really necessary to store this anymore
     rect: metal.CGRect,
     tx: f32,
     ty: f32,
@@ -57,6 +58,7 @@ pub const Atlas = struct {
     max_glyph_height: i32,
     max_glyph_width: i32,
     max_glyph_width_before_ligatures: i32,
+    max_adv_before_ligatures: f32,
 
     atlas: ct.CGImageRef,
     width: i32,
@@ -93,6 +95,7 @@ pub const Atlas = struct {
             .max_glyph_height = undefined,
             .max_glyph_width = undefined,
             .max_glyph_width_before_ligatures = undefined,
+            .max_adv_before_ligatures = undefined,
 
             .atlas = undefined,
             .width = undefined,
@@ -256,6 +259,7 @@ pub const Atlas = struct {
         var max_w_before_ligatures: i32 = 0;
         var max_w: i32 = 0;
         var max_advance: i32 = 0;
+        var max_advance_before_ligatures: f32 = 0;
         var lowest_origin: f32 = 0.0;
         {
             var i: usize = 0;
@@ -274,6 +278,7 @@ pub const Atlas = struct {
 
                 // ligatures screw up the max width calculation
                 if (i < chars_len) {
+                    max_advance_before_ligatures = @max(max_advance_before_ligatures, @intToFloat(f32, advance));
                     max_w_before_ligatures = @max(max_w, glyph_rect.widthCeil());
                     max_w = @max(max_w_before_ligatures, glyph_rect.widthCeil());
                 } else {
@@ -419,5 +424,8 @@ pub const Atlas = struct {
         }
 
         self.atlas = ct.CGBitmapContextCreateImage(ctx);
+        self.max_adv_before_ligatures = max_advance_before_ligatures;
+
+        print("MAX ADV BEFORE LIGATURES: {d}\n", .{self.max_glyph_width_before_ligatures});
     }
 };
