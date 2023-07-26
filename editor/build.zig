@@ -192,7 +192,12 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
             .root_source_file = .{ .path = "src/highlight.zig" },
             .target = target,
             .optimize = optimize,
-            // .filter = "backspace line",
+        },
+        .{
+            .name = "strutil_tests",
+            .root_source_file = .{ .path = "src/highlight.zig" },
+            .target = target,
+            .optimize = optimize,
         },
     };
 

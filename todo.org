@@ -1,16 +1,20 @@
 #+title: Todo
 
-* TODO Now [2/6]
-** DONE Scrolling [0/0]
-*** DONE scrolling updates the model matrix with x,y translation
-*** DONE cap y and x axis [0/0]
-**** DONE yt <= 0 and yt >= text_height
-**** DONE xt >= 0 and xt <= text_width
-**** DONE xt locked at 0 until text_width >= screen_width
-** DONE bug newline
-after the while loop in build_text_geometry, need to also add vertices for the end of line
+* TODO Now [1/5]
+** DONE Line numbers [0/0]
+*** DONE calculate column width from max digit count
+on Emacs, at first reserves enough space for 3 digits (min is 3)
+
+then updates as this number continues
+*** DONE draw numbers
+*** DONE update text/selection/cursor geometry building procedures to adjust by x offset
 ** TODO Status line
-** TODO Line numbers
+*** BRAINSTORM
+- what we want ::
+  - current file path relative to project root
+  - current line / col
+  - vim mode
+
 ** TODO moving up/down/creating lines preserves word column when possible
 example:
 #+begin_src zig
@@ -23,8 +27,13 @@ pub fn start_of_line(self: *Self) void {
 if cursor is at =s= in =start_of_line= (index 7)
 
 when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
+** TODO sweep thru code for objc memory leaks
+there are probably lots of places where i am not freeing objc objects
 ** TODO bug: =cc= (change line) should preserve line and not delete it entirely
-* TODO Later [0/7]
+* TODO Later [0/10]
+** TODO coalesce the text geometry building code for =build_text_geometry()= and =build_line_number_geometry()=
+** TODO only build line number geometry for lines we see
+** TODO only build text geometry for text we see?
 ** TODO cursor on ligature glyph should render the regular glyph on top of cursor
 ** TODO add new ligatures to atlas when encountered
 easiest to rebuild atlas from scratch again

@@ -59,6 +59,7 @@ pub extern "C" fn CTFontCopyAttribute(font: CTFontRef, attribute: CFStringRef) C
 pub extern "C" fn CTFontGetLigatureCaretPositions(font: CTFontRef, glyph: metal.CGGlyph, positions: [*]metal.CGFloat, max_positions: CFIndex) CFIndex;
 pub extern "C" fn CTFontCreatePathForGlyph(font: CTFontRef, glyph: metal.CGGlyph, transform: ?*const CGAffineTransform) CGPathRef;
 pub extern "C" fn CTLineCreateWithAttributedString(string: CFAttributedStringRef) CTLineRef;
+pub extern "C" fn CTLineGetTypographicBounds(line: CTLineRef, ascent: ?*metal.CGFloat, descent: ?*metal.CGFloat, leading: ?*metal.CGFloat) f64;
 pub extern "C" fn CTLineGetGlyphRuns(line: CTLineRef) CFArrayRef;
 pub extern "C" fn CTRunGetGlyphs(run: CTRunRef, range: CFRange, buffer: [*]metal.CGGlyph) void;
 pub extern "C" fn CTRunGetGlyphCount(run: CTRunRef) CFIndex;

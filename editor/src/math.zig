@@ -1,4 +1,6 @@
 const std = @import("std");
+const metal = @import("./metal.zig");
+const GlyphInfo = @import("./font.zig").GlyphInfo;
 
 pub const Vertex = extern struct {
     pos: Float2,
@@ -7,6 +9,30 @@ pub const Vertex = extern struct {
 
     pub fn default() Vertex {
         return .{ .pos = .{ .x = 0.0, .y = 0.0 }, .tex_coords = .{ .x = 0.0, .y = 0.0 }, .color = .{ .x = 0.0, .y = 0.0, .w = 0.0, .z = 0.0 } };
+    }
+
+    pub fn square_from_glyph(
+        rect: *const metal.CGRect,
+        pos: *const metal.CGPoint,
+        glyph_info: *const GlyphInfo,
+        color: Float4,
+        x: f32,
+        y: f32,
+        atlas_w: f32,
+        atlas_h: f32,
+    ) [6]Vertex {
+        const width = @intToFloat(f32, rect.widthCeil());
+        const b = @floatCast(f32, pos.y) + y + @floatCast(f32, rect.origin.y);
+        const t = b + @floatCast(f32, rect.size.height);
+        const l = @floatCast(f32, pos.x) + x + @floatCast(f32, rect.origin.x);
+        const r = l + @floatCast(f32, rect.size.width);
+
+        const txt = glyph_info.ty - @intToFloat(f32, glyph_info.rect.heightCeil()) / atlas_h;
+        const txb = glyph_info.ty;
+        const txl = glyph_info.tx;
+        const txr = glyph_info.tx + width / atlas_w;
+
+        return Vertex.square(.{ .t = t, .b = b, .l = l, .r = r }, .{ .t = txt, .b = txb, .l = txl, .r = txr }, color);
     }
 
     pub fn square(coords: struct { t: f32, b: f32, l: f32, r: f32 }, tex_coords: struct { t: f32, b: f32, l: f32, r: f32 }, color: Float4) [6]Vertex {
@@ -119,11 +145,11 @@ pub const Float4 = extern struct {
         const digit34temp = @floor(self.y * 255.0);
         const digit3 = @floatToInt(u8, @floor(digit34temp / 16.0));
         const digit4 = @floatToInt(u8, digit34temp - @intToFloat(f32, digit3 * 16));
-        
+
         const digit56temp = @floor(self.z * 255.0);
         const digit5 = @floatToInt(u8, @floor(digit56temp / 16.0));
         const digit6 = @floatToInt(u8, digit56temp - @intToFloat(f32, digit5 * 16));
-        
+
         ret[1] = decimal_to_hex(digit1);
         ret[2] = decimal_to_hex(digit2);
         ret[3] = decimal_to_hex(digit3);

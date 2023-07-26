@@ -278,7 +278,6 @@ fn handle_key_insert(self: *Self, key: Key) !void {
 }
 
 fn visual_move(self: *Self, mv: Vim.Move) void {
-    print("PREV SEL: {any}\n", .{self.selection});
     const prev_cursor = self.cursor;
 
     var i: usize = 0;
@@ -324,8 +323,6 @@ fn visual_move(self: *Self, mv: Vim.Move) void {
     }
 
     self.draw_text = true;
-
-    print("NEXT SEL: {any}\n", .{self.selection});
 }
 
 pub fn switch_mode(self: *Self, mode: Vim.Mode) void {

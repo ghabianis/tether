@@ -136,9 +136,29 @@ const Renderer = struct {
         try self.update_text(alloc);
     }
 
+    fn digits(val: usize) u32 {
+        return if (val == 0) 1 else @floatToInt(u32, @floor(@log10(@intToFloat(f32, val)))) + 1;
+    }
+
+    fn line_number_column_width(self: *Self) f32 {
+        const line = self.editor.cursor.line;
+        const max_line = self.editor.rope.nodes.len;
+
+        const up = @intCast(u32, @max(0, @intCast(i64, line) - 1));
+        const down = max_line - line;
+
+        const biggest_num = @max(up, @max(down, line));
+        const digit_count = digits(biggest_num);
+        var number_str_buf = [_]u8{0} ** 16;
+
+        const number_str = strutil.number_to_str(biggest_num, digit_count, &number_str_buf);
+        const width = self.atlas.str_width(number_str);
+
+        return @floatCast(f32, width);
+    }
+
     fn update_text(self: *Self, alloc: Allocator) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
-        // print("STR: {s}\n", .{str});
         defer {
             if (str.len > 0) {
                 std.heap.c_allocator.destroy(str);
@@ -147,9 +167,11 @@ const Renderer = struct {
 
         const screenx = @floatCast(f32, self.screen_size.width);
         const screeny = @floatCast(f32, self.screen_size.height);
+        const text_start_x = self.line_number_column_width();
 
-        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny);
-        try self.build_selection_geometry(alloc, str, screenx, screeny);
+        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny, text_start_x);
+        try self.build_selection_geometry(alloc, str, screenx, screeny, text_start_x);
+        try self.build_line_numbers_geometry(alloc, &Arena, screenx, screeny, text_start_x);
 
         // Creating a buffer of length 0 causes a crash, so we need to check if we have any vertices
         if (self.vertices.items.len > 0) {
@@ -312,7 +334,15 @@ const Renderer = struct {
         }
     }
 
-    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32) !void {
+    pub fn build_text_geometry(
+        self: *Self, 
+        alloc: Allocator, 
+        frame_arena: *ArenaAllocator, 
+        str: []const u8, 
+        screenx: f32, 
+        screeny: f32, 
+        text_start_x: f32
+    ) !void {
         _ = screenx;
         var charIdxToVertexIdx = try ArrayList(u32).initCapacity(frame_arena.allocator(), str.len);
         charIdxToVertexIdx.items.len = str.len;
@@ -321,8 +351,8 @@ const Renderer = struct {
         var cursor_vertices: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
         var cursor_vert_index: ?u32 = null;
 
-        var initial_x: f32 = 0.0;
-        var starting_x: f32 = initial_x;
+        const initial_x: f32 = text_start_x;
+        const starting_x: f32 = initial_x;
         var starting_y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
         var text_max_width: f32 = 0.0;
 
@@ -358,7 +388,7 @@ const Renderer = struct {
             // remove \n because it has no corresponding glyph
             var line = if (has_newline) the_line[0 .. the_line.len - 1] else the_line;
 
-            var last_x: f32 = 0.0;
+            var last_x: f32 = initial_x;
             if (line.len > 0) {
                 // TODO: I think this can be created once before this loop, then
                 //       reused by calling init_with_bytes_no_copy
@@ -406,20 +436,20 @@ const Renderer = struct {
                     const glyph = glyphs.items[i];
                     const glyph_info = self.atlas.lookup(glyph);
                     const rect = glyph_rects.items[i];
-                    var pos = positions.items[i];
+                    const pos = positions.items[i];
 
-                    const width = @intToFloat(f32, glyph_info.rect.widthCeil());
-                    const b = @floatCast(f32, pos.y) + starting_y + @floatCast(f32, rect.origin.y);
-                    const t = b + @floatCast(f32, rect.size.height);
-                    const l = @floatCast(f32, pos.x) + starting_x + @floatCast(f32, rect.origin.x);
-                    const r = l + @floatCast(f32, rect.size.width);
+                    const vertices = Vertex.square_from_glyph(
+                        &rect,
+                        &pos,
+                        glyph_info,
+                        color,
+                        starting_x,
+                        starting_y,
+                        atlas_w,
+                        atlas_h,
+                    );
+                    const l = vertices[0].pos.x;
 
-                    const txt = glyph_info.ty - @intToFloat(f32, glyph_info.rect.heightCeil()) / atlas_h;
-                    const txb = glyph_info.ty;
-                    const txl = glyph_info.tx;
-                    const txr = glyph_info.tx + width / atlas_w;
-
-                    const vertices = Vertex.square(.{ .t = t, .b = b, .l = l, .r = r }, .{ .t = txt, .b = txb, .l = txl, .r = txr }, color);
                     charIdxToVertexIdx.items[index] = @intCast(u32, self.vertices.items.len);
                     if (has_cursor) {
                         cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), starting_x + @floatCast(f32, pos.x), if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance);
@@ -467,7 +497,107 @@ const Renderer = struct {
         _ = frame_arena.reset(.retain_capacity);
     }
 
-    pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32) !void {
+    pub fn build_line_numbers_geometry(
+        self: *Self, 
+        alloc: Allocator, 
+        frame_arena: *ArenaAllocator,
+        screenx: f32, 
+        screeny: f32,
+        text_start_x: f32,
+    ) !void {
+        _ = screenx;
+        _ = text_start_x;
+        const line_count = self.editor.rope.nodes.len;
+        const text_attributes = self.text_attributed_string_dict();
+        defer text_attributes.msgSend(void, objc.sel("release"), .{});
+
+        const starting_x: f32 = 0.0;
+        var starting_y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
+
+        const atlas_w = @intToFloat(f32, self.atlas.width);
+        const atlas_h = @intToFloat(f32, self.atlas.height);
+
+        var number_buf = [_]u8{0} ** 16;
+
+        var i: usize = 0;
+        while (i < line_count): (i += 1) {
+            defer {
+                starting_y -= self.atlas.descent + self.atlas.ascent;
+            }
+            var on_current_line = false;
+            const num = num: {
+                if (i == self.editor.cursor.line) {
+                    on_current_line = true;
+                    break :num @intCast(u32, i);
+                }
+
+                break :num @intCast(u32, std.math.absInt(@intCast(i64, self.editor.cursor.line) - @intCast(i64, i)) catch @panic("oops"));
+            };
+            const digit_count = digits(num);
+            const str = strutil.number_to_str(num, digit_count, &number_buf);
+            const nstring = metal.NSString.new_with_bytes_no_copy(str, .ascii);
+            const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
+            defer attributed_string.release();
+
+            const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
+            const runs = ct.CTLineGetGlyphRuns(ctline);
+            const run_count = ct.CFArrayGetCount(runs);
+            std.debug.assert(run_count <= 1);
+            if (run_count == 0) {
+                @panic("This is bad");
+            }
+
+            const run = ct.CFArrayGetValueAtIndex(runs, 0);
+            const glyph_count = @intCast(usize, ct.CTRunGetGlyphCount(run));
+
+            var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), glyph_count);
+            var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), glyph_count);
+            var positions = try ArrayList(metal.CGPoint).initCapacity(frame_arena.allocator(), glyph_count);
+
+            glyphs.items.len = glyph_count;
+            glyph_rects.items.len = glyph_count;
+            positions.items.len = glyph_count;
+
+            ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @intCast(i64, glyph_count) }, glyphs.items.ptr);
+            ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
+            self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
+            if (glyphs.items.len != str.len) {
+                @panic("Houston we have a problem");
+            }
+
+            var j: usize = 0;
+            while (j < glyphs.items.len) : (j += 1) {
+                const glyph = glyphs.items[j];
+                const glyph_info = self.atlas.lookup(glyph);
+                const rect = glyph_rects.items[j];
+                const pos = positions.items[j];
+
+                const color = if (on_current_line) TEXT_COLOR else math.hex4("#737aa2");
+
+                const vertices = Vertex.square_from_glyph(
+                    &rect,
+                    &pos,
+                    glyph_info,
+                    color,
+                    starting_x,
+                    starting_y,
+                    atlas_w,
+                    atlas_h,
+                );
+
+                try self.vertices.appendSlice(alloc, &vertices);
+            }
+        }
+    }
+
+    pub fn build_selection_geometry(
+        self: *Self, 
+        alloc: Allocator, 
+        text_: []const u8, 
+        screenx: f32, 
+        screeny: f32,
+        text_start_x: f32
+    ) !void {
         _ = screenx;
         // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         var bg = math.hex4("#b4f9f8");
@@ -477,8 +607,8 @@ const Renderer = struct {
         const selection = self.editor.selection orelse return;
 
         var y: f32 = screeny - @intToFloat(f32, self.atlas.max_glyph_height);
-        var x: f32 = 0.0;
-        var starting_x: f32 = 0.0;
+        const starting_x: f32 = text_start_x;
+        var x: f32 = starting_x;
         var text = text_;
 
         var i: u32 = 0;
