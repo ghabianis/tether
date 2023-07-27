@@ -84,6 +84,13 @@ pub const Rope = struct {
         return .{ .line = text[0..text.len], .rest = null, .newline = false };
     }
 
+    pub fn replace_line(self: *Self, line_node: *Node, txt: []const u8) !void {
+        self.len -= line_node.data.items.len;
+        self.len += txt.len;
+        try line_node.data.replaceRange(self.text_alloc, 0, line_node.data.items.len, txt);
+    }
+
+    /// TODO: allowing passing initial node to this function
     pub fn insert_text(self: *Self, pos_: TextPos, text: []const u8) !TextPos {
         var pos = pos_;
         var nlr = next_line(text);
@@ -322,7 +329,7 @@ pub const Rope = struct {
         };
     }
 
-    pub fn iter_chars_rev(starting_node: *Node, cursor: TextPos) RopeCharIteratorRev {
+    pub fn iter_chars_rev(starting_node: *const Node, cursor: TextPos) RopeCharIteratorRev {
         return .{
             .node = starting_node,
             .cursor = cursor,

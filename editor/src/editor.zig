@@ -376,21 +376,184 @@ fn paste(self: *Self, before: bool) !void {
 }
 
 pub fn insert_char(self: *Self, c: u8) !void {
-    try self.insert_at(self.cursor, &[_]u8{c});
+    try self.insert_at(self.cursor, &[_]u8{c}, false, null);
 }
 
 pub fn insert_char_at(self: *Self, cursor: TextPos, c: u8) !void {
-    try self.insert_at(cursor, &[_]u8{c});
+    try self.insert_at(cursor, &[_]u8{c}, false, null);
 }
 
 pub fn insert(self: *Self, chars: []const u8) !void {
-    try self.insert_at(self.cursor, chars);
+    try self.insert_at(self.cursor, chars, false, null);
 }
 
-pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8) !void {
+pub fn insert_at(
+    self: *Self, 
+    cursor: TextPos, 
+    chars: []const u8, 
+    comptime fix_delimiter_indentation: bool, 
+    indent_level_: ?IndentLevel
+) !void {
+    if (comptime fix_delimiter_indentation) {
+        const indent_level = indent_level_.?;
+        var char_buf = [_]u8{0} ** 256;
+        const char_buf_slice = indent_level.fill_str(char_buf[0..]);
+        var ins_cursor = try self.rope.insert_text(cursor, chars);
+        _ = try self.rope.insert_text(ins_cursor, char_buf_slice);
+        self.draw_text = true;
+        return;
+    } 
+
+    if (chars.len == 1) b: {
+        if (self.is_closing_delimiter(chars[0])) {
+            const node = self.rope.node_at_line(self.cursor.line) orelse break :b;
+            if (self.has_opening_delimiter(node, .{ .line = self.cursor.line, .col = self.cursor.col -| 1 }, chars[0])) |line| {
+                if (line == self.cursor.line) break :b;
+            } else {
+                break :b;
+            }
+            const prev = node.prev orelse @panic("This is bad");
+            const new_indent = self.get_indent_level(prev).decrement();
+            var char_buf = [_]u8{0} ** 256;
+            const indent_buf = new_indent.fill_str(char_buf[0..]);
+            try self.rope.replace_line(node, indent_buf);
+            self.cursor.col = @intCast(u32, node.data.items.len);
+            self.cursor = try self.rope.insert_text(cursor, chars);
+            self.draw_text = true;
+            return;
+        }
+
+    }
+
+    if (chars.len > 0 and strutil.is_newline(chars[chars.len - 1]) ) {
+        var char_buf = [_]u8{0} ** 256;
+
+        const prev_cursor = self.cursor;
+        const node = self.rope.node_at_line(prev_cursor.line) orelse @panic("Well that's fucked.");
+
+        var after_opening_delimiter = false;
+        var before_closing_delimiter = false;
+        if (self.succeeds_opening_delimiter(node, cursor.col)) |open_delimiter| {
+            after_opening_delimiter = true;
+            before_closing_delimiter = self.precedes_closing_delimiter(node, self.cursor.col, open_delimiter);
+        }
+
+        const indent_level = self.get_indent_level(node);
+        self.cursor = try self.rope.insert_text(cursor, chars);
+
+        // increase indentation of newly inserted line
+        if (after_opening_delimiter) {
+            const inner_indent_level = indent_level.increment();
+            const char_buf_slice = inner_indent_level.fill_str(char_buf[0..]);
+            self.cursor = try self.rope.insert_text(.{ .line = self.cursor.line, .col = 0 }, char_buf_slice);
+            // add a newline and dedent the closing bracket
+            if (before_closing_delimiter) {
+                const cached = self.cursor;
+                try self.insert_at(self.cursor, "\n", true, indent_level);
+                self.cursor = cached;
+            }
+            self.draw_text = true;
+            return;
+        }
+
+        const char_buf_slice = indent_level.fill_str(char_buf[0..]);
+
+        const result = try self.rope.insert_text(.{ .line = self.cursor.line, .col = 0 }, char_buf_slice);
+        self.cursor.col += result.col;
+        self.draw_text = true;
+        return;
+    }  
+
     const new_cursor = try self.rope.insert_text(cursor, chars);
     self.cursor = new_cursor;
     self.draw_text = true;
+}
+
+fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
+    _ = self;
+    var count: usize = 0;
+    for (line_node.data.items) |c| {
+        if (strutil.is_whitespace(c)) {
+            count += 1;
+        } else {
+            break;
+        }
+    }
+    // assuming indentation width of 2 or 4 spaces for now
+    if (count % 4 == 0) {
+        return .{ 
+            .width = 4,
+            .level = @intCast(u8, count / 4),
+        };
+    }
+    if (count % 2 == 0) {
+        return .{
+            .width = 2,
+            .level = @intCast(u8, count / 2),
+        };
+    }
+    return .{ .width = 0, .level = 0 };
+}
+
+fn succeeds_opening_delimiter(self: *Self, node_: ?*const Rope.Node, col: u32) ?u8 {
+    const node = node_ orelse return null;
+    if (node.data.items.len == 0) return null; 
+    
+    // Look for the first non-whitespace character and check if it is an opening
+    // delimiter
+    var i: i64 = @intCast(i64, col -| 1);
+    while (i >= 0): (i -= 1) {
+        const c = node.data.items[@intCast(usize, i)];
+        if (strutil.is_whitespace(c)) continue;
+        return if (self.is_opening_delimiter(c)) c else null;
+    }
+
+    return null;
+}
+
+fn precedes_closing_delimiter(self: *Self, node: *const Rope.Node, col: u32, opening: u8) bool {
+    _ = self;
+    if (col >= node.data.items.len) return false;
+    const next = node.data.items[col];
+    return switch (opening) {
+        '<' => next == '>',
+        '{' => next == '}',
+        '(' => next == ')',
+        '[' => next == ']',
+        else => false,
+    };
+}
+
+fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?u32 {
+    _ = self;
+    var iter = Rope.iter_chars_rev(node, cursor);
+
+    var prev_cursor = cursor;
+    while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
+        if ((delimiter == ')' and c == '(') or c == delimiter - 2) {
+            return prev_cursor.line;
+        }
+    }
+    return null;
+}
+
+fn is_closing_delimiter(self: *Self, c: u8) bool {
+    _ = self;
+    return switch(c) {
+        '>',
+        '}',
+        ')',
+        ']' => true,
+        else => false,
+    };
+}
+
+fn is_opening_delimiter(self: *Self, c: u8) bool {
+    _ = self;
+    return switch (c) {
+        '<', '{', '(', '[' => true,
+        else => false,
+    };
 }
 
 pub fn backspace(self: *Self) !void {
@@ -734,6 +897,37 @@ pub const Selection = struct {
     }
 };
 
+const IndentLevel = struct {
+    level: u8,
+    width: u8,
+
+    pub fn increment(self: IndentLevel) IndentLevel {
+        return .{
+            .level = self.level + 1,
+            .width = self.width,
+        };
+    }
+
+    pub fn decrement(self: IndentLevel) IndentLevel {
+        return .{
+            .level = self.level -| 1,
+            .width = self.width,
+        };
+    }
+
+    fn num_chars(self: IndentLevel) u8 {
+        return self.level * self.width;
+    }
+
+    fn fill_str(self: IndentLevel, buf: []u8) []u8 {
+        const len = @intCast(u32, self.num_chars());
+        const char_buf_slice: []u8 = buf[0..len];
+        if (len > 128) @panic("Indentation too big!");
+        @memset(char_buf_slice, ' ');
+        return buf[0..len];
+    }
+};
+
 test "backspace simple" {
     var editor = Self{};
     try editor.init();
@@ -829,4 +1023,118 @@ test "move beginning word" {
     editor.move(1, .{ .EndWord = true });
     expected = .{ .line = 0, .col = 9 };
     try std.testing.expectEqualDeep(expected, editor.cursor);
+}
+
+test "insert indent" {
+    var editor = Self{};
+    try editor.init();
+
+    var expected: []const u8 = "";
+    var str: []const u8 = "";
+
+    try editor.insert("  const x = 0;");
+    try editor.insert("\n");
+    try editor.insert("nice");
+    expected = 
+     \\  const x = 0;
+     \\  nice
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+}
+
+test "basic indentation" {
+    var editor = Self{};
+    try editor.init();
+
+    var expected: []const u8 = "";
+    var str: []const u8 = "";
+
+    try editor.insert("fn testFn() void {");
+    try editor.insert("\n");
+    try editor.insert("const x = 0;");
+    expected = 
+     \\fn testFn() void {
+     \\    const x = 0;
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+
+    try editor.insert("\n");
+    try editor.insert("const y = 0;");
+    expected = 
+     \\fn testFn() void {
+     \\    const x = 0;
+     \\    const y = 0;
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+}
+
+test "indentation with closing delimiter" {
+    var editor = Self{};
+    try editor.init();
+
+    var expected: []const u8 = "";
+    var str: []const u8 = "";
+
+    try editor.insert("fn testFn() void {}");
+    editor.cursor.col -= 1;
+    try editor.insert("\n");
+    expected = 
+     \\fn testFn() void {
+     \\    
+     \\}
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+
+    editor.cursor.line = 1;
+    editor.cursor.col = 4;
+    try editor.insert("const x = a: {};");
+    editor.cursor.col -= 2;
+    try editor.insert("\n");
+    expected = 
+     \\fn testFn() void {
+     \\    const x = a: {
+     \\        
+     \\    };
+     \\}
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+
+    try editor.insert("const y = b: {};");
+    editor.cursor.col -= 2;
+    try editor.insert("\n");
+    expected = 
+     \\fn testFn() void {
+     \\    const x = a: {
+     \\        const y = b: {
+     \\            
+     \\        };
+     \\    };
+     \\}
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+}
+
+test "fix indentation on closing inserting delimiter" {
+    var editor = Self{};
+    try editor.init();
+
+    var expected: []const u8 = "";
+    var str: []const u8 = "";
+
+    try editor.insert("fn testFn() void {");
+    try editor.insert("\n");
+    try editor.insert("}");
+
+    expected = 
+     \\fn testFn() void {
+     \\}
+     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
 }
