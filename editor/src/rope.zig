@@ -599,6 +599,18 @@ fn DoublyLinkedList(comptime T: type) type {
             pub fn end(self: *Node) usize {
                 return if (self.data.items.len == 0) 0 else self.data.items.len - 1;
             }
+
+            pub fn decrement_textpos(node: **const Node, pos: *TextPos) void {
+                if (pos.col == 0) {
+                    pos.line -= 1;
+                    if (node.*.prev) |prev| {
+                        pos.col = @intCast(prev.data.items.len -| 1);
+                        node.* = prev;
+                    }
+                } else {
+                    pos.col -= 1;
+                }
+            }
         };
 
         fn at_index_impl(self: *Self, idx: usize) struct { prev: ?*Node, cur: ?*Node } {

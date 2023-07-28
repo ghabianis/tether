@@ -528,16 +528,22 @@ const Renderer = struct {
                         }
                     }
                 } else {
-                    var i: i64 = @as(i64, @intCast(cvi.str_index));
+                    var i: i64 = @intCast(cvi.str_index);
+                    var stack_count: u32 = 0;
                     while (i >= 0) : (i -= 1) {
-                        const c = str[@as(usize, @intCast(i))];
+                        const c = str[@intCast(i)];
                         if (self.editor.matches_closing_delimiter(cvi.c, c)) {
-                            const vert_index = charIdxToVertexIdx.items[@as(usize, @intCast(i))];
-                            const tl: *const Vertex = &self.vertices.items[vert_index];
-                            const br: *const Vertex = &self.vertices.items[vert_index + 4];
-                            const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
-                            try self.vertices.appendSlice(alloc, &border_cursor);
-                            break;
+                            if (stack_count == 1) {
+                                const vert_index = charIdxToVertexIdx.items[@intCast(i)];
+                                const tl: *const Vertex = &self.vertices.items[vert_index];
+                                const br: *const Vertex = &self.vertices.items[vert_index + 4];
+                                const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
+                                try self.vertices.appendSlice(alloc, &border_cursor);
+                                break;
+                            }
+                            stack_count -= 1;
+                        } else if (c == cvi.c) {
+                            stack_count += 1;
                         }
                     }
                 }
@@ -801,7 +807,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 64.0);
+    var atlas = font.Atlas.new(alloc, 32.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

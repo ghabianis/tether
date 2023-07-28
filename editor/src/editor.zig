@@ -492,7 +492,7 @@ fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
 }
 
 fn move_to_matching_pair(self: *Self) void {
-    const node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");
+    var node: *const Rope.Node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");
     if (self.cursor.col >= node.data.items.len) return;
 
     const current_char = node.data.items[self.cursor.col];
@@ -504,7 +504,9 @@ fn move_to_matching_pair(self: *Self) void {
             self.cursor = close_pos;
         }
     } else {
-        if (self.has_opening_delimiter(node, self.cursor, current_char)) |open_pos| {
+        var new_pos = self.cursor;
+        Rope.Node.decrement_textpos(&node, &new_pos);
+        if (self.has_opening_delimiter(node, new_pos, current_char)) |open_pos| {
             self.cursor = open_pos;
         }
     }
@@ -560,13 +562,20 @@ pub fn matches_opening_delimiter(self: *Self, opening: u8, c: u8) bool {
     };
 }
 
+/// Returns the position of a matching open delimiter for the given delimiter
+/// NOTE: Cursor should be BEFORE the closing delimiter
 fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
     var iter = Rope.iter_chars_rev(node, cursor);
 
+    var open_count: u32 = 0;
     var prev_cursor = cursor;
     while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
+        if (c == delimiter) {
+            open_count += 1;
+        }
         if (self.matches_closing_delimiter(delimiter, c)) {
-            return prev_cursor;
+            if (open_count == 0) return prev_cursor;
+            open_count -= 1;
         }
     }
     return null;
@@ -576,9 +585,14 @@ fn has_closing_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, d
     var iter = Rope.iter_chars(node, cursor);
 
     var prev_cursor = cursor;
+    var open_count: u32 = 0;
     while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
+        if (c == delimiter) {
+            open_count += 1;
+        }
         if (self.matches_opening_delimiter(delimiter, c)) {
-            return prev_cursor;
+            if (open_count == 1) return prev_cursor;
+            open_count -= 1;
         }
     }
     return null;
