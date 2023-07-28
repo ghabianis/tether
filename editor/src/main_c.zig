@@ -521,37 +521,37 @@ const Renderer = struct {
             self.vertices.items[vi + 5].color = black;
             var is_opening = false;
             if (self.editor.is_delimiter(cvi.c, &is_opening)) {
-                const border_cursor = self.build_cursor_geometry(cvi.y, cvi.xx, cvi.width, true);
-                try self.vertices.appendSlice(alloc, &border_cursor);
-            }
-            if (is_opening) {
-                var stack_count: u32 = 0;
-                for (str[cvi.str_index..], cvi.str_index..) |c, i| {
-                    if (self.editor.matches_opening_delimiter(cvi.c, c)) {
-                        if (stack_count == 1) {
-                            const vert_index = charIdxToVertexIdx.items[i];
+                const border_cursor_ = self.build_cursor_geometry(cvi.y, cvi.xx, cvi.width, true);
+                try self.vertices.appendSlice(alloc, &border_cursor_);
+                if (is_opening) {
+                    var stack_count: u32 = 0;
+                    for (str[cvi.str_index..], cvi.str_index..) |c, i| {
+                        if (self.editor.matches_opening_delimiter(cvi.c, c)) {
+                            if (stack_count == 1) {
+                                const vert_index = charIdxToVertexIdx.items[i];
+                                const tl: *const Vertex = &self.vertices.items[vert_index];
+                                const br: *const Vertex = &self.vertices.items[vert_index + 4];
+                                const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x, br.pos.x, true);
+                                try self.vertices.appendSlice(alloc, &border_cursor);
+                                break;
+                            }
+                            stack_count -= 1;
+                        } else if (c == cvi.c) {
+                            stack_count += 1;
+                        }  
+                    }
+                } else {
+                    var i: i64 = @intCast(i64, cvi.str_index);
+                    while (i >= 0): (i -= 1) {
+                        const c = str[@intCast(usize, i)];
+                        if (self.editor.matches_closing_delimiter(cvi.c, c)) {
+                            const vert_index = charIdxToVertexIdx.items[@intCast(usize, i)];
                             const tl: *const Vertex = &self.vertices.items[vert_index];
                             const br: *const Vertex = &self.vertices.items[vert_index + 4];
-                            const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x, br.pos.x, true);
+                            const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
                             try self.vertices.appendSlice(alloc, &border_cursor);
                             break;
                         }
-                        stack_count -= 1;
-                    } else if (c == cvi.c) {
-                        stack_count += 1;
-                    }  
-                }
-            } else {
-                var i: i64 = @intCast(i64, cvi.str_index);
-                while (i >= 0): (i -= 1) {
-                    const c = str[@intCast(usize, i)];
-                    if (self.editor.matches_closing_delimiter(cvi.c, c)) {
-                        const vert_index = charIdxToVertexIdx.items[@intCast(usize, i)];
-                        const tl: *const Vertex = &self.vertices.items[vert_index];
-                        const br: *const Vertex = &self.vertices.items[vert_index + 4];
-                        const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
-                        try self.vertices.appendSlice(alloc, &border_cursor);
-                        break;
                     }
                 }
             }

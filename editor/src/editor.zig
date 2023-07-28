@@ -255,6 +255,9 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         .EndWord => |skip_punctuation| {
             self.forward_word_end(skip_punctuation);
         },
+        .MatchingPair => {
+            self.move_to_matching_pair();
+        },
     }
 
     if (mv != .Up and mv != .Down) {
@@ -407,8 +410,8 @@ pub fn insert_at(
     if (chars.len == 1) b: {
         if (self.is_closing_delimiter(chars[0])) {
             const node = self.rope.node_at_line(self.cursor.line) orelse break :b;
-            if (self.has_opening_delimiter(node, .{ .line = self.cursor.line, .col = self.cursor.col -| 1 }, chars[0])) |line| {
-                if (line == self.cursor.line) break :b;
+            if (self.has_opening_delimiter(node, .{ .line = self.cursor.line, .col = self.cursor.col -| 1 }, chars[0])) |pos| {
+                if (pos.line == self.cursor.line) break :b;
             } else {
                 break :b;
             }
@@ -495,6 +498,25 @@ fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
     return .{ .width = 0, .level = 0 };
 }
 
+fn move_to_matching_pair(self: *Self) void {
+    const node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");    
+    if (self.cursor.col >= node.data.items.len) return;
+
+    const current_char = node.data.items[self.cursor.col];
+    var is_opening = false;
+    if (!self.is_delimiter(current_char, &is_opening)) return;
+
+    if (is_opening) {
+        if (self.has_closing_delimiter(node, self.cursor, current_char)) |close_pos| {
+            self.cursor = close_pos;
+        }
+    } else {
+        if (self.has_opening_delimiter(node, self.cursor, current_char)) |open_pos| {
+            self.cursor = open_pos;
+        }
+    }
+}
+
 fn succeeds_opening_delimiter(self: *Self, node_: ?*const Rope.Node, col: u32) ?u8 {
     const node = node_ orelse return null;
     if (node.data.items.len == 0) return null; 
@@ -545,13 +567,25 @@ pub fn matches_opening_delimiter(self: *Self, opening: u8, c: u8) bool {
     };
 }
 
-fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?u32 {
+fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
     var iter = Rope.iter_chars_rev(node, cursor);
 
     var prev_cursor = cursor;
     while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
         if (self.matches_closing_delimiter(delimiter, c)) {
-            return prev_cursor.line;
+            return prev_cursor;
+        }
+    }
+    return null;
+}
+
+fn has_closing_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
+    var iter = Rope.iter_chars(node, cursor);
+
+    var prev_cursor = cursor;
+    while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
+        if (self.matches_opening_delimiter(delimiter, c)) {
+            return prev_cursor;
         }
     }
     return null;

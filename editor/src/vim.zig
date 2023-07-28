@@ -192,6 +192,7 @@ pub const MoveKindEnum = enum {
     Word,
     BeginningWord,
     EndWord,
+    MatchingPair,
 };
 
 pub const MoveKind = union(MoveKindEnum) {
@@ -210,12 +211,13 @@ pub const MoveKind = union(MoveKindEnum) {
     Word: bool,
     BeginningWord: bool,
     EndWord: bool,
+    MatchingPair,
 
     /// Does removing text with this movement include the character under the cursor?
     pub fn is_delete_end_inclusive(self: *const MoveKind) bool {
         return switch (self.*) {
             .Left, .Right, .Up, .Down, .LineStart, .LineEnd, .ParagraphBegin, .ParagraphEnd, .Start, .End, .Word => false,
-            .BeginningWord, .EndWord, .Find => true,
+            .BeginningWord, .EndWord, .Find, .MatchingPair => true,
         };
     }
 };
@@ -430,6 +432,8 @@ pub const CommandParser = struct {
 
                         'g' => return self.parse_g(),
                         'G' => return self.set_kind(.End),
+
+                        '%' => return self.set_kind(.MatchingPair),
 
                         else => return if (self.data.optional()) .Skip else .Fail,
                     }

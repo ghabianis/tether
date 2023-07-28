@@ -322,7 +322,7 @@ pub const Rope = struct {
         };
     }
 
-    pub fn iter_chars(starting_node: *Node, cursor: TextPos) RopeCharIterator {
+    pub fn iter_chars(starting_node: *const Node, cursor: TextPos) RopeCharIterator {
         return .{
             .node = starting_node,
             .cursor = cursor,
