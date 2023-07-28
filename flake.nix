@@ -1,8 +1,8 @@
 {
-  description = "libxev is a high performance, cross-platform event loop.";
+  description = "code editor";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/release-23.05";
     flake-utils.url = "github:numtide/flake-utils";
     zig.url = "github:mitchellh/zig-overlay";
     zls.url = "github:zigtools/zls";
@@ -22,9 +22,8 @@
   } @ inputs: let
     overlays = [
       # Other overlays
-      (final: prev: rec {
+      (final: prev: {
         zigpkgs = inputs.zig.packages.${prev.system};
-        zig = zigpkgs.master;
         zls = inputs.zls.packages.${prev.system}.zls;
       })
     ];
@@ -39,12 +38,8 @@
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             zigpkgs.master
-            pkg-config
-            zls
           ];
           buildInputs = with pkgs; [
-            freetype
-            pkg-config
             zls
           ];
         };

@@ -178,8 +178,8 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
             const next_abs = self.rope.pos_to_idx(next_cursor) orelse unreachable;
 
             const end_offset: usize = if (mv.kind.is_delete_end_inclusive()) 1 else 0;
-            const start = @intCast(u32, @min(prev_abs, next_abs));
-            const end = @intCast(u32, @max(prev_abs, next_abs) + end_offset);
+            const start = @as(u32, @intCast(@min(prev_abs, next_abs)));
+            const end = @as(u32, @intCast(@max(prev_abs, next_abs) + end_offset));
 
             if (comptime cmd_kind == .Change or cmd_kind == .Delete) {
                 try self.delete_range(.{ .start = start, .end = end });
@@ -241,8 +241,8 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         .End => {
             if (self.rope.nodes.last) |last| {
                 self.cursor = .{
-                    .line = @intCast(u32, self.rope.nodes.len - 1),
-                    .col = @intCast(u32, last.data.items.len),
+                    .line = @as(u32, @intCast(self.rope.nodes.len - 1)),
+                    .col = @as(u32, @intCast(last.data.items.len)),
                 };
             }
         },
@@ -295,8 +295,8 @@ fn visual_move(self: *Self, mv: Vim.Move) void {
     const sel = self.selection orelse return;
 
     const next_cursor = self.cursor;
-    const prev_abs = @intCast(u32, self.rope.pos_to_idx(prev_cursor) orelse @panic("ohno"));
-    const next_abs = @intCast(u32, self.rope.pos_to_idx(next_cursor) orelse @panic("ohno"));
+    const prev_abs = @as(u32, @intCast(self.rope.pos_to_idx(prev_cursor) orelse @panic("ohno")));
+    const next_abs = @as(u32, @intCast(self.rope.pos_to_idx(next_cursor) orelse @panic("ohno")));
 
     if (prev_abs == sel.start and sel.end == sel.start + 1) {
         if (next_abs > sel.start) {
@@ -337,7 +337,7 @@ pub fn switch_mode(self: *Self, mode: Vim.Mode) void {
         self.selection = null;
     }
     if (mode == .Visual) {
-        const cursor_absolute_pos = @intCast(u32, self.rope.pos_to_idx(self.cursor) orelse @panic("SHIT!"));
+        const cursor_absolute_pos = @as(u32, @intCast(self.rope.pos_to_idx(self.cursor) orelse @panic("SHIT!")));
         self.selection = .{ .start = cursor_absolute_pos, .end = cursor_absolute_pos + 1 };
     } else if (self.vim.mode == .Insert and mode == .Normal) {
         self.left();
@@ -390,13 +390,7 @@ pub fn insert(self: *Self, chars: []const u8) !void {
     try self.insert_at(self.cursor, chars, false, null);
 }
 
-pub fn insert_at(
-    self: *Self, 
-    cursor: TextPos, 
-    chars: []const u8, 
-    comptime fix_delimiter_indentation: bool, 
-    indent_level_: ?IndentLevel
-) !void {
+pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_delimiter_indentation: bool, indent_level_: ?IndentLevel) !void {
     if (comptime fix_delimiter_indentation) {
         const indent_level = indent_level_.?;
         var char_buf = [_]u8{0} ** 256;
@@ -405,7 +399,7 @@ pub fn insert_at(
         _ = try self.rope.insert_text(ins_cursor, char_buf_slice);
         self.draw_text = true;
         return;
-    } 
+    }
 
     if (chars.len == 1) b: {
         if (self.is_closing_delimiter(chars[0])) {
@@ -420,15 +414,14 @@ pub fn insert_at(
             var char_buf = [_]u8{0} ** 256;
             const indent_buf = new_indent.fill_str(char_buf[0..]);
             try self.rope.replace_line(node, indent_buf);
-            self.cursor.col = @intCast(u32, node.data.items.len);
+            self.cursor.col = @as(u32, @intCast(node.data.items.len));
             self.cursor = try self.rope.insert_text(cursor, chars);
             self.draw_text = true;
             return;
         }
-
     }
 
-    if (chars.len > 0 and strutil.is_newline(chars[chars.len - 1]) ) {
+    if (chars.len > 0 and strutil.is_newline(chars[chars.len - 1])) {
         var char_buf = [_]u8{0} ** 256;
 
         const prev_cursor = self.cursor;
@@ -465,7 +458,7 @@ pub fn insert_at(
         self.cursor.col += result.col;
         self.draw_text = true;
         return;
-    }  
+    }
 
     const new_cursor = try self.rope.insert_text(cursor, chars);
     self.cursor = new_cursor;
@@ -484,22 +477,22 @@ fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
     }
     // assuming indentation width of 2 or 4 spaces for now
     if (count % 4 == 0) {
-        return .{ 
+        return .{
             .width = 4,
-            .level = @intCast(u8, count / 4),
+            .level = @as(u8, @intCast(count / 4)),
         };
     }
     if (count % 2 == 0) {
         return .{
             .width = 2,
-            .level = @intCast(u8, count / 2),
+            .level = @as(u8, @intCast(count / 2)),
         };
     }
     return .{ .width = 0, .level = 0 };
 }
 
 fn move_to_matching_pair(self: *Self) void {
-    const node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");    
+    const node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");
     if (self.cursor.col >= node.data.items.len) return;
 
     const current_char = node.data.items[self.cursor.col];
@@ -519,13 +512,13 @@ fn move_to_matching_pair(self: *Self) void {
 
 fn succeeds_opening_delimiter(self: *Self, node_: ?*const Rope.Node, col: u32) ?u8 {
     const node = node_ orelse return null;
-    if (node.data.items.len == 0) return null; 
-    
+    if (node.data.items.len == 0) return null;
+
     // Look for the first non-whitespace character and check if it is an opening
     // delimiter
-    var i: i64 = @intCast(i64, col -| 1);
-    while (i >= 0): (i -= 1) {
-        const c = node.data.items[@intCast(usize, i)];
+    var i: i64 = @as(i64, @intCast(col -| 1));
+    while (i >= 0) : (i -= 1) {
+        const c = node.data.items[@as(usize, @intCast(i))];
         if (strutil.is_whitespace(c)) continue;
         return if (self.is_opening_delimiter(c)) c else null;
     }
@@ -547,7 +540,7 @@ fn precedes_closing_delimiter(self: *Self, node: *const Rope.Node, col: u32, ope
 }
 
 /// TODO: This only works for ascii
-/// all ascii delimiters except for ( and ) 
+/// all ascii delimiters except for ( and )
 pub fn matches_closing_delimiter(self: *Self, closing: u8, c: u8) bool {
     _ = self;
     if ((closing == ')' and c == '(') or c == closing - 2) {
@@ -558,10 +551,10 @@ pub fn matches_closing_delimiter(self: *Self, closing: u8, c: u8) bool {
 
 pub fn matches_opening_delimiter(self: *Self, opening: u8, c: u8) bool {
     _ = self;
-    return switch(opening) {
-        '<' => return c == '>', 
-        '{' => return c == '}', 
-        '(' => return c == ')', 
+    return switch (opening) {
+        '<' => return c == '>',
+        '{' => return c == '}',
+        '(' => return c == ')',
         '[' => return c == ']',
         else => false,
     };
@@ -593,18 +586,16 @@ fn has_closing_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, d
 
 pub fn is_delimiter(self: *Self, c: u8, is_opening: *bool) bool {
     _ = self;
-    switch(c) {
-        '<', 
-        '{', 
-        '(', 
-        '[', => {
+    switch (c) {
+        '<',
+        '{',
+        '(',
+        '[',
+        => {
             is_opening.* = true;
             return true;
         },
-        '>',
-        '}',
-        ')',
-        ']' => {
+        '>', '}', ')', ']' => {
             is_opening.* = false;
             return true;
         },
@@ -614,11 +605,8 @@ pub fn is_delimiter(self: *Self, c: u8, is_opening: *bool) bool {
 
 pub fn is_closing_delimiter(self: *Self, c: u8) bool {
     _ = self;
-    return switch(c) {
-        '>',
-        '}',
-        ')',
-        ']' => true,
+    return switch (c) {
+        '>', '}', ')', ']' => true,
         else => false,
     };
 }
@@ -626,10 +614,7 @@ pub fn is_closing_delimiter(self: *Self, c: u8) bool {
 pub fn is_opening_delimiter(self: *Self, c: u8) bool {
     _ = self;
     return switch (c) {
-        '<', 
-        '{', 
-        '(', 
-        '[' => true,
+        '<', '{', '(', '[' => true,
         else => false,
     };
 }
@@ -644,7 +629,7 @@ pub fn backspace(self: *Self) !void {
             const line_node = self.rope.node_at_line(new_line) orelse @panic("No node");
             break :cursor .{
                 .line = new_line,
-                .col = @intCast(u32, line_node.data.items.len) -| 1,
+                .col = @as(u32, @intCast(line_node.data.items.len)) -| 1,
             };
         } else {
             break :cursor .{
@@ -680,8 +665,8 @@ fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
         if (line_node.data.items.len > 0) {
             const has_newline = strutil.is_newline(line_node.data.items[line_node.data.items.len - 1]);
             if (line_node == self.rope.nodes.last or has_newline) {
-                if (has_newline) return @intCast(u32, line_node.data.items.len -| 1);
-                return @intCast(u32, line_node.data.items.len);
+                if (has_newline) return @as(u32, @intCast(line_node.data.items.len -| 1));
+                return @as(u32, @intCast(line_node.data.items.len));
             }
         } else {
             return 0;
@@ -690,10 +675,10 @@ fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
 
     // Even if there is no \n at end of line, visual and insert mode can be to the right of the last char.
     if (line_node.data.items.len > 0 and !strutil.is_newline(line_node.data.items[line_node.data.items.len - 1])) {
-        return @intCast(u32, line_node.data.items.len + 1);
+        return @as(u32, @intCast(line_node.data.items.len + 1));
     }
 
-    return @intCast(u32, line_node.data.items.len);
+    return @as(u32, @intCast(line_node.data.items.len));
 }
 
 pub fn start_of_line(self: *Self) void {
@@ -726,7 +711,7 @@ fn get_selection_impl(self: *Self, alloc: Allocator, sel: Selection) !?[]const u
     // TODO: this is inefficient for large text
     const ret = try alloc.alloc(u8, sel.len());
     const str = try self.rope.as_str(alloc);
-    defer std.heap.c_allocator.destroy(str);
+    defer std.heap.c_allocator.free(str);
     @memcpy(ret, str[sel.start..sel.end]);
     return ret;
 }
@@ -849,7 +834,7 @@ fn breaks_word(self: *Self, capital_key: bool, starts_on_punctuation: bool, char
     // For, W/B/E the only thing that breaks a word is whitespace
     const is_whitespace = strutil.is_whitespace(char);
     skip_one.* = is_whitespace;
-    if (capital_key) { 
+    if (capital_key) {
         return is_whitespace;
     }
     const punctuation = self.is_punctuation(char);
@@ -862,7 +847,7 @@ fn is_punctuation(self: *Self, c: u8) bool {
     return switch (c) {
         '>', ']', ')', '\'', '"', '#', '&', '^', '%', '!', '@', '`', ':', ';', '/', '-', '+', '*', '.', ',', '(', '[', '<' => true,
         // whitespace also counts
-        ' ', '\t','\n', '\r' => true,
+        ' ', '\t', '\n', '\r' => true,
         else => false,
     };
 }
@@ -884,7 +869,7 @@ pub fn down(self: *Self) void {
 }
 
 pub fn move_line(self: *Self, delta: i64) void {
-    const d = @intCast(u32, if (delta < 0) -delta else delta);
+    const d = @as(u32, @intCast(if (delta < 0) -delta else delta));
     const line = if (delta < 0) self.cursor.line -| d else @min(self.rope.nodes.len -| 1, self.cursor.line + d);
     const target_col = target_col: {
         if (self.desired_col) |desired_col| {
@@ -908,13 +893,13 @@ pub fn move_char(self: *Self, delta_: i64, limited_to_line: bool) void {
     var delta: i64 = if (delta_ < 0) -delta_ else delta_;
     while (delta > 0) {
         // go next line:
-        if (dir == .Right and delta + col >= @intCast(i64, self.cursor_eol_for_mode(cur_node))) {
+        if (dir == .Right and delta + col >= @as(i64, @intCast(self.cursor_eol_for_mode(cur_node)))) {
             // I :: len = 3
             // N :: len = 2
             // hi\
             // 012
             if (!limited_to_line and cur_node.next != null) {
-                delta -= @intCast(i64, cur_node.data.items.len) - col;
+                delta -= @as(i64, @intCast(cur_node.data.items.len)) - col;
                 col = 0;
                 cur_node = cur_node.next.?;
             } else {
@@ -927,7 +912,7 @@ pub fn move_char(self: *Self, delta_: i64, limited_to_line: bool) void {
         if (dir == .Left and col - delta < 0) {
             if (!limited_to_line and cur_node.prev != null) {
                 delta -= col + 1;
-                col = @intCast(i64, cur_node.data.items.len) -| 1;
+                col = @as(i64, @intCast(cur_node.data.items.len)) -| 1;
                 cur_node = cur_node.prev.?;
             } else {
                 col = 0;
@@ -941,7 +926,7 @@ pub fn move_char(self: *Self, delta_: i64, limited_to_line: bool) void {
     }
 
     self.cursor.line = line;
-    self.cursor.col = @intCast(u32, col);
+    self.cursor.col = @as(u32, @intCast(col));
     // TODO: Probably very bad to redraw entire text after just moving cursor
     self.draw_text = true;
 }
@@ -998,7 +983,7 @@ const IndentLevel = struct {
     }
 
     fn fill_str(self: IndentLevel, buf: []u8) []u8 {
-        const len = @intCast(u32, self.num_chars());
+        const len = @as(u32, @intCast(self.num_chars()));
         const char_buf_slice: []u8 = buf[0..len];
         if (len > 128) @panic("Indentation too big!");
         @memset(char_buf_slice, ' ');
@@ -1040,11 +1025,11 @@ test "move word" {
     try editor.insert("fuck++yay! nice wow");
 
     // Start on non-punctuation (f) should end on (+)
-    editor.cursor = . { .line = 0, .col = 0 };
+    editor.cursor = .{ .line = 0, .col = 0 };
     editor.move(1, .{ .Word = false });
     expected = .{ .line = 0, .col = 4 };
     try std.testing.expectEqualDeep(expected, editor.cursor);
-    
+
     // Start on punctuation (+) should end on (y)
     editor.cursor = .{ .line = 0, .col = 4 };
     editor.move(1, .{ .Word = false });
@@ -1064,7 +1049,7 @@ test "move word" {
     try std.testing.expectEqualDeep(expected, editor.cursor);
 
     // Big W whitespace
-    editor.cursor = . { .line = 0, .col = 0 };
+    editor.cursor = .{ .line = 0, .col = 0 };
     editor.move(1, .{ .Word = true });
     expected = .{ .line = 0, .col = 11 };
     try std.testing.expectEqualDeep(expected, editor.cursor);
@@ -1113,10 +1098,10 @@ test "insert indent" {
     try editor.insert("  const x = 0;");
     try editor.insert("\n");
     try editor.insert("nice");
-    expected = 
-     \\  const x = 0;
-     \\  nice
-     ;
+    expected =
+        \\  const x = 0;
+        \\  nice
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 }
@@ -1131,20 +1116,20 @@ test "basic indentation" {
     try editor.insert("fn testFn() void {");
     try editor.insert("\n");
     try editor.insert("const x = 0;");
-    expected = 
-     \\fn testFn() void {
-     \\    const x = 0;
-     ;
+    expected =
+        \\fn testFn() void {
+        \\    const x = 0;
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 
     try editor.insert("\n");
     try editor.insert("const y = 0;");
-    expected = 
-     \\fn testFn() void {
-     \\    const x = 0;
-     \\    const y = 0;
-     ;
+    expected =
+        \\fn testFn() void {
+        \\    const x = 0;
+        \\    const y = 0;
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 }
@@ -1159,11 +1144,11 @@ test "indentation with closing delimiter" {
     try editor.insert("fn testFn() void {}");
     editor.cursor.col -= 1;
     try editor.insert("\n");
-    expected = 
-     \\fn testFn() void {
-     \\    
-     \\}
-     ;
+    expected =
+        \\fn testFn() void {
+        \\
+        \\}
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 
@@ -1172,28 +1157,28 @@ test "indentation with closing delimiter" {
     try editor.insert("const x = a: {};");
     editor.cursor.col -= 2;
     try editor.insert("\n");
-    expected = 
-     \\fn testFn() void {
-     \\    const x = a: {
-     \\        
-     \\    };
-     \\}
-     ;
+    expected =
+        \\fn testFn() void {
+        \\    const x = a: {
+        \\
+        \\    };
+        \\}
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 
     try editor.insert("const y = b: {};");
     editor.cursor.col -= 2;
     try editor.insert("\n");
-    expected = 
-     \\fn testFn() void {
-     \\    const x = a: {
-     \\        const y = b: {
-     \\            
-     \\        };
-     \\    };
-     \\}
-     ;
+    expected =
+        \\fn testFn() void {
+        \\    const x = a: {
+        \\        const y = b: {
+        \\
+        \\        };
+        \\    };
+        \\}
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 }
@@ -1209,10 +1194,10 @@ test "fix indentation on closing inserting delimiter" {
     try editor.insert("\n");
     try editor.insert("}");
 
-    expected = 
-     \\fn testFn() void {
-     \\}
-     ;
+    expected =
+        \\fn testFn() void {
+        \\}
+    ;
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 }

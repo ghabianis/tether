@@ -6,15 +6,15 @@ pub extern "C" fn tree_sitter_zig() *c.TSLanguage;
 pub extern "C" fn tree_sitter_typescript() *c.TSLanguage;
 
 pub const ZIG: Language = Language.comptime_new(
-    tree_sitter_zig, 
-    "./syntax/tree-sitter-zig/queries/highlights.scm", 
-    "./syntax/tree-sitter-zig/queries/injections.scm", 
+    tree_sitter_zig,
+    "./syntax/tree-sitter-zig/queries/highlights.scm",
+    "./syntax/tree-sitter-zig/queries/injections.scm",
     null,
 );
 
 pub const TS: Language = Language.comptime_new(
-    tree_sitter_typescript, 
-    "./syntax/tree-sitter-typescript/queries/highlights.scm", 
+    tree_sitter_typescript,
+    "./syntax/tree-sitter-typescript/queries/highlights.scm",
     null,
     null,
 );

@@ -132,7 +132,7 @@ pub const Rope = struct {
                 pos.line += 1;
                 pos.col = 0;
             } else {
-                pos.col += @intCast(u32, nlr_line.len);
+                pos.col += @as(u32, @intCast(nlr_line.len));
                 std.debug.assert(nlr.line == null);
             }
         }
@@ -187,7 +187,7 @@ pub const Rope = struct {
 
         const node = iter_node orelse return null;
         _ = node;
-        return i + @intCast(usize, pos.col);
+        return i + @as(usize, @intCast(pos.col));
     }
 
     pub fn idx_to_pos(self: *Self, idx: usize) ?TextPos {
@@ -198,7 +198,7 @@ pub const Rope = struct {
         var i: usize = 0;
         while (node) |n| {
             if (idx >= i and idx < i + n.data.items.len) {
-                col = @intCast(u32, idx - i);
+                col = @as(u32, @intCast(idx - i));
                 return .{ .line = line, .col = col };
             }
             line += 1;
@@ -362,7 +362,7 @@ fn _SIMDRopeCharIterator() type {
 
         fn reverse_buf(buf: *[VectorWidth]u8) void {
             var i: u8 = 0;
-            while (i < VectorWidth / 2): (i += 1) {
+            while (i < VectorWidth / 2) : (i += 1) {
                 const last = VectorWidth - 1 -| i;
                 const temp = buf[last];
                 buf[last] = buf[i];
@@ -379,34 +379,34 @@ fn _SIMDRopeCharIterator() type {
         fn next_impl(self: *@This()) ?[8]u8 {
             if (self.last_imcomplete != null) return null;
             var buf: [VectorWidth]u8 = [_]u8{0} ** 8;
-            var col: i64 = @intCast(i64, self.cursor.col);
+            var col: i64 = @as(i64, @intCast(self.cursor.col));
 
             var filled_amount: u8 = 0;
             while (filled_amount < VectorWidth) {
-                const node = self.node orelse { 
+                const node = self.node orelse {
                     self.last_imcomplete = filled_amount;
                     return buf;
                 };
                 // 0123456789
                 // we're asumming cursor always points in front of last char to grab
                 // in this iteration
-                var amount_to_grab: u8 = @intCast(u8, VectorWidth) - filled_amount;
+                var amount_to_grab: u8 = @as(u8, @intCast(VectorWidth)) - filled_amount;
                 var start: usize = undefined;
                 // line doesn't have enough to grab, grab entire line
                 if (self.cursor.col + 1 < amount_to_grab) {
-                    amount_to_grab = @intCast(u8, self.cursor.col + 1);
+                    amount_to_grab = @as(u8, @intCast(self.cursor.col + 1));
                     start = 0;
                 } else {
                     start = self.cursor.col - amount_to_grab + 1;
                 }
-                @memcpy(buf[filled_amount..filled_amount+amount_to_grab], node.data.items[start..start+amount_to_grab]);
-                col -= @intCast(i64, amount_to_grab);
-                self.cursor.col = @intCast(u32, @max(col, 0));
+                @memcpy(buf[filled_amount .. filled_amount + amount_to_grab], node.data.items[start .. start + amount_to_grab]);
+                col -= @as(i64, @intCast(amount_to_grab));
+                self.cursor.col = @as(u32, @intCast(@max(col, 0)));
                 filled_amount += amount_to_grab;
                 if (col < 0) {
                     self.node = node.prev;
                     self.cursor.line = self.cursor.line -| 1;
-                    self.cursor.col = if (self.node) |n| @intCast(u32, n.data.items.len -| 1) else 0;
+                    self.cursor.col = if (self.node) |n| @as(u32, @intCast(n.data.items.len -| 1)) else 0;
                     col = self.cursor.col;
                 }
             }
@@ -554,7 +554,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
             if (comptime Reverse) {
                 if (self.node.prev) |n| {
                     self.cursor.line -= 1;
-                    self.cursor.col = @intCast(u32, n.data.items.len) -| 1;
+                    self.cursor.col = @as(u32, @intCast(n.data.items.len)) -| 1;
                     self.node = n;
                     return true;
                 }
@@ -571,7 +571,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
                 return false;
             }
         }
-    };    
+    };
 }
 
 pub const SimdRopeCharIterator = _SIMDRopeCharIterator();
@@ -703,7 +703,7 @@ fn remove_range(src: []u8, start: usize, end: usize) []u8 {
 //     var cursor = try rope.insert_text(.{ .line = 0, .col = 0}, "wtf\ndude\nbroooooo!");
 //     cursor.col -= 1;
 //     var iter = SimdRopeCharIterator{
-//         .cursor = cursor, 
+//         .cursor = cursor,
 //         .node = rope.nodes.last,
 //     };
 
@@ -721,7 +721,7 @@ fn remove_range(src: []u8, start: usize, end: usize) []u8 {
 //     // var simd = iter.next();
 //     // buf = simd orelse empty;
 //     // print("BUF: {s}\n", .{buf});
-    
+
 //     // try std.testing.expectEqualDeep("987\n6543"[0..], buf[0..]);
 // }
 

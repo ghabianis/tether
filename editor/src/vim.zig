@@ -239,7 +239,7 @@ pub const CommandParser = struct {
         idx: u4 = 0,
 
         fn is_valid_mode(self: Metadata, mode: Mode) bool {
-            return (@bitCast(u8, self) & 0b00000111) & @bitCast(u8, @enumToInt(mode)) != 0;
+            return (@as(u8, @bitCast(self)) & 0b00000111) & @as(u8, @bitCast(@intFromEnum(mode))) != 0;
         }
 
         pub fn from_valid_modes(modes: ValidMode) Metadata {
@@ -714,6 +714,7 @@ pub const CommandParser = struct {
     }
 
     fn input_blah(comptime N: usize, comptime str: []const u8) []Input {
+        @setEvalBranchQuota(100000);
         var inputs = [_]Input{.{ .Number = .{} }} ** N;
         var n: usize = N;
         CommandParser.populate_from_str(inputs[0..N], str);
@@ -742,6 +743,7 @@ pub const CommandParser = struct {
                 @"<mv>",
                 @"<#>",
             };
+
             const case = std.meta.stringToEnum(Case, token) orelse {
                 if (token.len != 1) {
                     @panic("Invalid token");
@@ -859,4 +861,3 @@ test "command parse visual" {
     _ = try test_parse(alloc, &self, "c", .{ .repeat = 1, .kind = .{ .Change = null } });
     _ = try test_parse(alloc, &self, "y", .{ .repeat = 1, .kind = .{ .Yank = null } });
 }
-

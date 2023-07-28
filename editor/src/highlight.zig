@@ -7,7 +7,6 @@ const c = ts.c;
 const Rope = @import("./rope.zig").Rope;
 const math = @import("./math.zig");
 const r = @import("./regex.zig");
-const Theme = @import("./theme.zig");
 const strutil = @import("./strutil.zig");
 
 const CommonCaptureNames = enum {
@@ -51,11 +50,11 @@ const CommonCaptureNames = enum {
         }
 
         const new_len = N + (upper_case_count - 1);
-        const ret: [new_len]u8 = comptime ret: { 
+        const ret: [new_len]u8 = comptime ret: {
             var return_string: [new_len]u8 = [_]u8{0} ** new_len;
             var i: usize = 0;
             var j: usize = 0;
-            while (j < N): (j += 1) {
+            while (j < N) : (j += 1) {
                 if (j == 0) {
                     return_string[i] = strutil.lowercase_char(str[j]);
                     i += 1;
@@ -68,7 +67,7 @@ const CommonCaptureNames = enum {
                     return_string[i] = str[j];
                     i += 1;
                 }
-            } 
+            }
             break :ret return_string;
         };
         return &ret;
@@ -76,9 +75,9 @@ const CommonCaptureNames = enum {
 
     pub fn as_str(self: CommonCaptureNames) []const u8 {
         inline for (@typeInfo(CommonCaptureNames).Enum.fields) |field| {
-            if (field.value == @enumToInt(self)) {
+            if (field.value == @intFromEnum(self)) {
                 const N = field.name.len;
-                return comptime CommonCaptureNames.upper_camel_case_to_dot_notation(N, @ptrCast(*const [N]u8, field.name.ptr));
+                return comptime CommonCaptureNames.upper_camel_case_to_dot_notation(N, @as(*const [N]u8, @ptrCast(field.name.ptr)));
             }
         }
     }
@@ -88,7 +87,7 @@ const CommonCaptureNames = enum {
 };
 
 const CaptureConfig = struct {
-    name: []const u8, 
+    name: []const u8,
     color: math.Float4,
 };
 
@@ -109,14 +108,14 @@ theme: []const ?math.Float4,
 /// @keyword.
 fn configure_higlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []const CaptureConfig) ![]?math.Float4 {
     const count: u32 = c.ts_query_capture_count(q);
-    var theme = try alloc.alloc(?math.Float4, @intCast(usize, count));
+    var theme = try alloc.alloc(?math.Float4, @as(usize, @intCast(count)));
     @memset(theme, null);
 
     var capture_parts = std.ArrayList([]const u8).init(alloc);
     defer capture_parts.deinit();
 
     var i: u32 = 0;
-    while (i < count): (i += 1) {
+    while (i < count) : (i += 1) {
         var length: u32 = 0;
         const capture_name_ptr = c.ts_query_capture_name_for_id(q, i, &length);
         const capture_name = capture_name_ptr[0..length];
@@ -133,7 +132,7 @@ fn configure_higlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []cons
         var best_match_len: u32 = 0;
 
         var j: u32 = 0;
-        while (j < recognized_names.len): (j += 1) {
+        while (j < recognized_names.len) : (j += 1) {
             const recognized_name = recognized_names[j];
             var len: u32 = 0;
             var matches: bool = true;
@@ -169,7 +168,7 @@ pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const Capt
     var error_offset: u32 = undefined;
     var error_type: c.TSQueryError = undefined;
 
-    const query = c.ts_query_new(language.lang_fn(), language.highlights.ptr, @intCast(u32, language.highlights.len), &error_offset, &error_type);
+    const query = c.ts_query_new(language.lang_fn(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type);
 
     if (query) |q| {
         var parser = c.ts_parser_new();
@@ -194,7 +193,7 @@ pub fn highlight(self: *Highlight, str: []const u8, charIdxToVertexIdx: []const 
     if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
         @panic("Failed to set parser!");
     }
-    var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @intCast(u32, str.len));
+    var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
     var root_node = c.ts_tree_root_node(tree);
     var query_cursor = c.ts_query_cursor_new();
     var match: c.TSQueryMatch = undefined;
@@ -313,7 +312,6 @@ fn find_name(names: [][]const u8, name: []const u8) ?usize {
     return null;
 }
 
-
 pub const TokyoNightStorm = struct {
     const Self = @This();
     const FG = math.hex4("#c0caf5");
@@ -334,59 +332,59 @@ pub const TokyoNightStorm = struct {
     const GREY = math.hex4("#444B6A");
 
     const conf = [_]CaptureConfig{
-            .{ 
-                .name = CommonCaptureNames.Function.as_str_comptime(),
-                .color = Self.BLUE,
-            },
-            .{
-                .name = CommonCaptureNames.FunctionBuiltin.as_str_comptime(),
-                .color = Self.TURQUOISE,
-            },
-            .{
-                .name = CommonCaptureNames.Keyword.as_str_comptime(),
-                .color = Self.MAGENTA,
-            },
-            .{
-                .name = "conditional",
-                .color = Self.MAGENTA,
-            },
-            .{
-                .name = "type.qualifier",
-                .color = Self.MAGENTA,
-            },
-            .{
-                .name = CommonCaptureNames.Comment.as_str_comptime(),
-                .color = Self.GREY,
-            },
-            .{
-                .name = "spell",
-                .color = Self.GREY,
-            },
-            .{
-                .name = CommonCaptureNames.String.as_str_comptime(),
-                .color = Self.GREEN,
-            },
-            .{
-                .name = CommonCaptureNames.Operator.as_str_comptime(),
-                .color = Self.CYAN,
-            },
-            .{
-                .name = "boolean",
-                .color = ORANGE,
-            },
-            .{
-                .name = "constant",
-                .color = YELLOW,
-            }
-            // .{
-            //     .name = CommonCaptureNames.Punctuation.as_str_comptime(),
-            //     .color = Self.CYAN,
-            // },
-            // .{
-            //     .name = CommonCaptureNames.Label.as_str_comptime(),
-            //     .color = Self.YELLOW,
-            // },
-        };
+        .{
+            .name = CommonCaptureNames.Function.as_str_comptime(),
+            .color = Self.BLUE,
+        },
+        .{
+            .name = CommonCaptureNames.FunctionBuiltin.as_str_comptime(),
+            .color = Self.TURQUOISE,
+        },
+        .{
+            .name = CommonCaptureNames.Keyword.as_str_comptime(),
+            .color = Self.MAGENTA,
+        },
+        .{
+            .name = "conditional",
+            .color = Self.MAGENTA,
+        },
+        .{
+            .name = "type.qualifier",
+            .color = Self.MAGENTA,
+        },
+        .{
+            .name = CommonCaptureNames.Comment.as_str_comptime(),
+            .color = Self.GREY,
+        },
+        .{
+            .name = "spell",
+            .color = Self.GREY,
+        },
+        .{
+            .name = CommonCaptureNames.String.as_str_comptime(),
+            .color = Self.GREEN,
+        },
+        .{
+            .name = CommonCaptureNames.Operator.as_str_comptime(),
+            .color = Self.CYAN,
+        },
+        .{
+            .name = "boolean",
+            .color = ORANGE,
+        },
+        .{
+            .name = "constant",
+            .color = YELLOW,
+        },
+        // .{
+        //     .name = CommonCaptureNames.Punctuation.as_str_comptime(),
+        //     .color = Self.CYAN,
+        // },
+        // .{
+        //     .name = CommonCaptureNames.Label.as_str_comptime(),
+        //     .color = Self.YELLOW,
+        // },
+    };
 
     pub fn to_indices() []const CaptureConfig {
         return &Self.conf;
@@ -409,11 +407,11 @@ test "dot notation" {
 test "configure higlights levels" {
     const alloc = std.heap.c_allocator;
     const language = ts.ZIG;
-    
+
     var error_offset: u32 = undefined;
     var error_type: c.TSQueryError = undefined;
 
-    const query = c.ts_query_new(ts.tree_sitter_zig(), language.highlights.ptr, @intCast(u32, language.highlights.len), &error_offset, &error_type) orelse @panic("Failed to set up query");
+    const query = c.ts_query_new(ts.tree_sitter_zig(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type) orelse @panic("Failed to set up query");
 
     var parser = c.ts_parser_new();
     if (!c.ts_parser_set_language(parser, ts.tree_sitter_zig())) {
@@ -423,7 +421,7 @@ test "configure higlights levels" {
     const count = c.ts_query_capture_count(query);
     const names = try alloc.alloc([]const u8, count);
     var i: u32 = 0;
-    while (i < count): (i += 1) {
+    while (i < count) : (i += 1) {
         var length: u32 = 0;
         const capture_name_ptr = c.ts_query_capture_name_for_id(query, i, &length);
         const capture_name = capture_name_ptr[0..length];
@@ -432,7 +430,7 @@ test "configure higlights levels" {
 
     const color_keyword = math.Float4.new(69.0, 420.0, 69420.0, 1.0);
     const color_keyword_function = math.Float4.new(32.0, 32.0, 32.0, 1.0);
-    const color_punctuation = math.Float4.new( 1.0, 1.0, 0.0, 1.0 );
+    const color_punctuation = math.Float4.new(1.0, 1.0, 0.0, 1.0);
     const color_function = math.Float4.new(0.0, 1.0, 0.0, 0.0);
     const theme = try Highlight.configure_higlights(alloc, query, &.{
         .{ .name = "keyword", .color = color_keyword },
@@ -457,11 +455,11 @@ test "configure higlights levels" {
 test "configure higlights levels edge case" {
     const alloc = std.heap.c_allocator;
     const language = ts.ZIG;
-    
+
     var error_offset: u32 = undefined;
     var error_type: c.TSQueryError = undefined;
 
-    const query = c.ts_query_new(ts.tree_sitter_zig(), language.highlights.ptr, @intCast(u32, language.highlights.len), &error_offset, &error_type) orelse @panic("Failed to set up query");
+    const query = c.ts_query_new(ts.tree_sitter_zig(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type) orelse @panic("Failed to set up query");
 
     var parser = c.ts_parser_new();
     if (!c.ts_parser_set_language(parser, ts.tree_sitter_zig())) {
@@ -471,7 +469,7 @@ test "configure higlights levels edge case" {
     const count = c.ts_query_capture_count(query);
     const names = try alloc.alloc([]const u8, count);
     var i: u32 = 0;
-    while (i < count): (i += 1) {
+    while (i < count) : (i += 1) {
         var length: u32 = 0;
         const capture_name_ptr = c.ts_query_capture_name_for_id(query, i, &length);
         const capture_name = capture_name_ptr[0..length];
@@ -479,7 +477,7 @@ test "configure higlights levels edge case" {
     }
 
     const color_keyword = math.Float4.new(69.0, 420.0, 69420.0, 1.0);
-    const color_punctuation = math.Float4.new( 1.0, 1.0, 0.0, 1.0 );
+    const color_punctuation = math.Float4.new(1.0, 1.0, 0.0, 1.0);
     const color_function = math.Float4.new(0.0, 1.0, 0.0, 0.0);
     const theme = try Highlight.configure_higlights(alloc, query, &.{
         .{ .name = "keyword", .color = color_keyword },

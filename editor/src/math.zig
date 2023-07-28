@@ -21,13 +21,13 @@ pub const Vertex = extern struct {
         atlas_w: f32,
         atlas_h: f32,
     ) [6]Vertex {
-        const width = @intToFloat(f32, rect.widthCeil());
-        const b = @floatCast(f32, pos.y) + y + @floatCast(f32, rect.origin.y);
-        const t = b + @floatCast(f32, rect.size.height);
-        const l = @floatCast(f32, pos.x) + x + @floatCast(f32, rect.origin.x);
-        const r = l + @floatCast(f32, rect.size.width);
+        const width = @as(f32, @floatFromInt(rect.widthCeil()));
+        const b = @as(f32, @floatCast(pos.y)) + y + @as(f32, @floatCast(rect.origin.y));
+        const t = b + @as(f32, @floatCast(rect.size.height));
+        const l = @as(f32, @floatCast(pos.x)) + x + @as(f32, @floatCast(rect.origin.x));
+        const r = l + @as(f32, @floatCast(rect.size.width));
 
-        const txt = glyph_info.ty - @intToFloat(f32, rect.heightCeil()) / atlas_h;
+        const txt = glyph_info.ty - @as(f32, @floatFromInt(rect.heightCeil())) / atlas_h;
         const txb = glyph_info.ty;
         const txl = glyph_info.tx;
         const txr = glyph_info.tx + width / atlas_w;
@@ -139,16 +139,16 @@ pub const Float4 = extern struct {
         var ret = [_]u8{ '#', 0, 0, 0, 0, 0, 0 };
         // ret[1] = (self.x * 255.0)
         const digit12temp = @floor(self.x * 255.0);
-        const digit1 = @floatToInt(u8, @floor(digit12temp / 16.0));
-        const digit2 = @floatToInt(u8, digit12temp - @intToFloat(f32, digit1 * 16));
+        const digit1 = @as(u8, @intFromFloat(@floor(digit12temp / 16.0)));
+        const digit2 = @as(u8, @intFromFloat(digit12temp - @as(f32, @floatFromInt(digit1 * 16))));
 
         const digit34temp = @floor(self.y * 255.0);
-        const digit3 = @floatToInt(u8, @floor(digit34temp / 16.0));
-        const digit4 = @floatToInt(u8, digit34temp - @intToFloat(f32, digit3 * 16));
+        const digit3 = @as(u8, @intFromFloat(@floor(digit34temp / 16.0)));
+        const digit4 = @as(u8, @intFromFloat(digit34temp - @as(f32, @floatFromInt(digit3 * 16))));
 
         const digit56temp = @floor(self.z * 255.0);
-        const digit5 = @floatToInt(u8, @floor(digit56temp / 16.0));
-        const digit6 = @floatToInt(u8, digit56temp - @intToFloat(f32, digit5 * 16));
+        const digit5 = @as(u8, @intFromFloat(@floor(digit56temp / 16.0)));
+        const digit6 = @as(u8, @intFromFloat(digit56temp - @as(f32, @floatFromInt(digit5 * 16))));
 
         ret[1] = decimal_to_hex(digit1);
         ret[2] = decimal_to_hex(digit2);

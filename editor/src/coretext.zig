@@ -26,11 +26,11 @@ pub const CGAffineTransform = extern struct {
 };
 
 pub const CTTextAlignment = enum(u8) {
-    Left      = 0,
-    Right     = 1,
-    Center    = 2,
+    Left = 0,
+    Right = 1,
+    Center = 2,
     Justified = 3,
-    Natural   = 4,
+    Natural = 4,
 };
 
 pub const CTParagraphStyleSpecifier = enum(u32) {
@@ -53,7 +53,7 @@ pub const CTParagraphStyleSpecifier = enum(u32) {
     LineSpacingAdjustment = 16,
     LineBoundsOptions = 17,
 
-    Count
+    Count,
 };
 
 pub const CTParagraphStyleSetting = extern struct {

@@ -33,7 +33,7 @@ pub const GlyphInfo = struct {
 };
 
 pub fn intCeil(float: f64) i32 {
-    return @floatToInt(i32, @ceil(float));
+    return @as(i32, @intFromFloat(@ceil(float)));
 }
 
 /// rounding down the number plus half is the same of rounding to the nearest integer
@@ -105,10 +105,10 @@ pub const Atlas = struct {
             .atlas = undefined,
             .width = undefined,
             .height = undefined,
-            .baseline = @floatCast(f32, baseline),
-            .ascent = @floatCast(f32, ct.CTFontGetAscent(font.value)),
+            .baseline = @as(f32, @floatCast(baseline)),
+            .ascent = @as(f32, @floatCast(ct.CTFontGetAscent(font.value))),
             .descent = undefined,
-            .leading = @floatCast(f32, ct.CTFontGetLeading(font.value)),
+            .leading = @as(f32, @floatCast(ct.CTFontGetLeading(font.value))),
             .lowest_origin = undefined,
 
             .cursor_tx = undefined,
@@ -168,7 +168,7 @@ pub const Atlas = struct {
         defer chars.release();
         const ligature_value = metal.NSNumber.number_with_int(if (comptime enable_ligatures) 2 else 0);
         defer ligature_value.release();
-        const len = @intCast(i64, chars.length());
+        const len = @as(i64, @intCast(chars.length()));
 
         const attributed_string = ct.CFAttributedStringCreateMutable(0, len);
         ct.CFAttributedStringReplaceString(attributed_string, .{ .location = 0, .length = 0 }, chars.obj.value);
@@ -198,7 +198,7 @@ pub const Atlas = struct {
         const line = ct.CTLineCreateWithAttributedString(attributed_string);
         const glyph_runs = ct.CTLineGetGlyphRuns(line);
         const glyph_run = ct.CFArrayGetValueAtIndex(glyph_runs, 0);
-        const glyph_count = @intCast(usize, ct.CTRunGetGlyphCount(glyph_run));
+        const glyph_count = @as(usize, @intCast(ct.CTRunGetGlyphCount(glyph_run)));
 
         const start = glyphs.items.len;
         try glyphs.appendNTimes(alloc, 0, glyph_count);
@@ -207,8 +207,8 @@ pub const Atlas = struct {
         const glyph_slice = glyphs.items[start..end];
         const glyph_rects_slice = glyph_rects.items[start..end];
 
-        ct.CTRunGetGlyphs(glyph_run, .{ .location = 0, .length = @intCast(i64, glyph_count) }, glyph_slice.ptr);
-        _ = ct.CTFontGetBoundingRectsForGlyphs(self.font.value, .horizontal, glyph_slice.ptr, glyph_rects_slice.ptr, @intCast(i64, glyph_count));
+        ct.CTRunGetGlyphs(glyph_run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyph_slice.ptr);
+        _ = ct.CTFontGetBoundingRectsForGlyphs(self.font.value, .horizontal, glyph_slice.ptr, glyph_rects_slice.ptr, @as(i64, @intCast(glyph_count)));
     }
 
     pub fn make_atlas(self: *Self, alloc: Allocator) !void {
@@ -216,20 +216,20 @@ pub const Atlas = struct {
         var glyph_rects = ArrayList(metal.CGRect){};
 
         const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n    ";
-        const COMMON_LIGATURES = [_][]const u8{ 
+        const COMMON_LIGATURES = [_][]const u8{
             //
-            "=>", 
-            "++", 
-            "->", 
-            "==", 
-            "===", 
-            "!=", 
-            "!==", 
-            "<=", 
-            ">=", 
-            "::", 
-            "*=", 
-            ":=", 
+            "=>",
+            "++",
+            "->",
+            "==",
+            "===",
+            "!=",
+            "!==",
+            "<=",
+            ">=",
+            "::",
+            "*=",
+            ":=",
             "//",
             "///",
             "<<",
@@ -253,10 +253,10 @@ pub const Atlas = struct {
         try glyph_rects.appendNTimes(alloc, metal.CGRect.default(), chars_len);
         var unichars = [_]u16{0} ** chars_c.len;
         chars.get_characters(&unichars);
-        if (!ct.CTFontGetGlyphsForCharacters(self.font.value, &unichars, glyphs.items.ptr, @intCast(i64, chars_len))) {
+        if (!ct.CTFontGetGlyphsForCharacters(self.font.value, &unichars, glyphs.items.ptr, @as(i64, @intCast(chars_len)))) {
             @panic("Failed to get glyphs for characters");
         }
-        _ = ct.CTFontGetBoundingRectsForGlyphs(self.font.value, .horizontal, glyphs.items.ptr, glyph_rects.items.ptr, @intCast(i64, chars_len));
+        _ = ct.CTFontGetBoundingRectsForGlyphs(self.font.value, .horizontal, glyphs.items.ptr, glyph_rects.items.ptr, @as(i64, @intCast(chars_len)));
 
         for (COMMON_LIGATURES) |ligature| {
             try self.get_glyphs(alloc, &glyphs, &glyph_rects, ligature[0..ligature.len], true);
@@ -282,7 +282,7 @@ pub const Atlas = struct {
                 const glyph_rect: metal.CGRect = glyph_rects.items[i];
                 const advance = self.get_advance(cgfont, glyph);
                 max_advance = @max(max_advance, advance);
-                lowest_origin = @min(lowest_origin, @floatCast(f32, glyph_rect.origin.y));
+                lowest_origin = @min(lowest_origin, @as(f32, @floatCast(glyph_rect.origin.y)));
 
                 if (roww + glyph_rect.widthCeil() + advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                     w = @max(w, roww);
@@ -292,7 +292,7 @@ pub const Atlas = struct {
 
                 // ligatures screw up the max width calculation
                 if (i < chars_len) {
-                    max_advance_before_ligatures = @max(max_advance_before_ligatures, @intToFloat(f32, advance));
+                    max_advance_before_ligatures = @max(max_advance_before_ligatures, @as(f32, @floatFromInt(advance)));
                     max_w_before_ligatures = @max(max_w, glyph_rect.widthCeil());
                     max_w = @max(max_w_before_ligatures, glyph_rect.widthCeil());
                 } else {
@@ -327,20 +327,20 @@ pub const Atlas = struct {
 
         const name = ct.kCGColorSpaceSRGB;
         const color_space = ct.CGColorSpaceCreateWithName(name);
-        const ctx = ct.CGBitmapContextCreate(null, @intCast(usize, tex_w), @intCast(usize, tex_h), 8, 0, color_space, ct.kCGImageAlphaPremultipliedLast);
+        const ctx = ct.CGBitmapContextCreate(null, @as(usize, @intCast(tex_w)), @as(usize, @intCast(tex_h)), 8, 0, color_space, ct.kCGImageAlphaPremultipliedLast);
         const fill_color = ct.CGColorCreateGenericRGB(0.0, 0.0, 0.0, 0.0);
         defer ct.CGColorSpaceRelease(color_space);
         defer ct.CGContextRelease(ctx);
         defer ct.CGColorRelease(fill_color);
 
         ct.CGContextSetFillColorWithColor(ctx, fill_color);
-        ct.CGContextFillRect(ctx, metal.CGRect.new(0.0, 0.0, @intToFloat(f64, tex_w), @intToFloat(f64, tex_h)));
+        ct.CGContextFillRect(ctx, metal.CGRect.new(0.0, 0.0, @as(f64, @floatFromInt(tex_w)), @as(f64, @floatFromInt(tex_h))));
 
         ct.CGContextSetFont(ctx, cgfont);
         ct.CGContextSetFontSize(ctx, self.font_size);
 
         // self.descent = @intToFloat(f32, ct.CGFontGetDescent(cgfont));
-        self.descent = @ceil(@floatCast(f32, ct.CTFontGetDescent(self.font.value)));
+        self.descent = @ceil(@as(f32, @floatCast(ct.CTFontGetDescent(self.font.value))));
 
         ct.CGContextSetShouldAntialias(ctx, true);
         ct.CGContextSetAllowsAntialiasing(ctx, true);
@@ -384,8 +384,8 @@ pub const Atlas = struct {
                     rowh = 0;
                 }
 
-                const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
-                const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
+                const tx = @as(f32, @floatFromInt(ox)) / @as(f32, @floatFromInt(tex_w));
+                const ty = (@as(f32, @floatFromInt(tex_h)) - (@as(f32, @floatFromInt(oy)))) / @as(f32, @floatFromInt(tex_h));
                 var the_glyph = [_]metal.CGGlyph{glyph};
                 _ = the_glyph;
 
@@ -395,7 +395,7 @@ pub const Atlas = struct {
                 //
                 // We use CGPath because CGContextShowGlyphs* caused off-by-one
                 // problems causing the glyphs to be rendered incorrectly.
-                const transform = ct.CGAffineTransform{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .tx = @intToFloat(f64, ox) - rect.origin.x, .ty = @intToFloat(f64, oy) - rect.origin.y };
+                const transform = ct.CGAffineTransform{ .a = 1.0, .b = 0.0, .c = 0.0, .d = 1.0, .tx = @as(f64, @floatFromInt(ox)) - rect.origin.x, .ty = @as(f64, @floatFromInt(oy)) - rect.origin.y };
                 const path = ct.CTFontCreatePathForGlyph(self.font.value, glyph, &transform);
                 defer ct.CGPathRelease(path);
                 ct.CGContextAddPath(ctx, path);
@@ -411,8 +411,8 @@ pub const Atlas = struct {
                 try self.glyph_info.put(glyph, .{
                     .rect = new_rect,
                     .tx = tx,
-                    .ty = @floatCast(f32, ty),
-                    .advance = @intToFloat(f32, advance),
+                    .ty = @as(f32, @floatCast(ty)),
+                    .advance = @as(f32, @floatFromInt(advance)),
                 });
 
                 ox += rectw + max_advance + 1;
@@ -424,18 +424,18 @@ pub const Atlas = struct {
                 oy += max_h;
                 rowh = 0;
             }
-            ox += max_w_before_ligatures + @floatToInt(i32, @ceil(max_advance_before_ligatures)) + 1;
+            ox += max_w_before_ligatures + @as(i32, @intFromFloat(@ceil(max_advance_before_ligatures))) + 1;
             const cursor_rect = .{
-                .origin = .{ .x = @intToFloat(f32, ox), .y = @intToFloat(f32, oy) },
-                .size = .{ .width = @intToFloat(f32, max_w_before_ligatures), .height = @intToFloat(f32, max_h) },
+                .origin = .{ .x = @as(f32, @floatFromInt(ox)), .y = @as(f32, @floatFromInt(oy)) },
+                .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = @as(f32, @floatFromInt(max_h)) },
             };
-            const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
-            const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
+            const tx = @as(f32, @floatFromInt(ox)) / @as(f32, @floatFromInt(tex_w));
+            const ty = (@as(f32, @floatFromInt(tex_h)) - (@as(f32, @floatFromInt(oy)))) / @as(f32, @floatFromInt(tex_h));
             ct.CGContextFillRect(ctx, cursor_rect);
             self.cursor_tx = tx;
             self.cursor_ty = ty;
-            self.cursor_w = cursor_rect.size.width / @intToFloat(f32, tex_w);
-            self.cursor_h = cursor_rect.size.height / @intToFloat(f32, tex_h);
+            self.cursor_w = cursor_rect.size.width / @as(f32, @floatFromInt(tex_w));
+            self.cursor_h = cursor_rect.size.height / @as(f32, @floatFromInt(tex_h));
 
             // add rectangular cursor glyph
             if (ox + max_w_before_ligatures + max_advance + 1 >= intCeil(Self.MAX_WIDTH)) {
@@ -443,20 +443,20 @@ pub const Atlas = struct {
                 oy += max_h;
                 rowh = 0;
             }
-            ox += max_w_before_ligatures + @floatToInt(i32, @ceil(max_advance_before_ligatures)) + 1;
+            ox += max_w_before_ligatures + @as(i32, @intFromFloat(@ceil(max_advance_before_ligatures))) + 1;
             const rectangular_cursor_rect = .{
-                .origin = .{ .x = @intToFloat(f32, ox), .y = @intToFloat(f32, oy) },
-                .size = .{ .width = @intToFloat(f32, max_w_before_ligatures), .height = @intToFloat(f32, max_h) },
+                .origin = .{ .x = @as(f32, @floatFromInt(ox)), .y = @as(f32, @floatFromInt(oy)) },
+                .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = @as(f32, @floatFromInt(max_h)) },
             };
-            const border_tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
-            const border_ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
+            const border_tx = @as(f32, @floatFromInt(ox)) / @as(f32, @floatFromInt(tex_w));
+            const border_ty = (@as(f32, @floatFromInt(tex_h)) - (@as(f32, @floatFromInt(oy)))) / @as(f32, @floatFromInt(tex_h));
             // https://stackoverflow.com/questions/14258924/uiview-drawrect-is-it-possible-to-stroke-inside-a-path
             ct.CGContextClipToRect(ctx, rectangular_cursor_rect);
             ct.CGContextStrokeRectWithWidth(ctx, rectangular_cursor_rect, 4.0);
             self.border_cursor_tx = border_tx;
             self.border_cursor_ty = border_ty;
-            self.border_cursor_w = rectangular_cursor_rect.size.width / @intToFloat(f32, tex_w);
-            self.border_cursor_h = rectangular_cursor_rect.size.height / @intToFloat(f32, tex_h);
+            self.border_cursor_w = rectangular_cursor_rect.size.width / @as(f32, @floatFromInt(tex_w));
+            self.border_cursor_h = rectangular_cursor_rect.size.height / @as(f32, @floatFromInt(tex_h));
         }
 
         self.atlas = ct.CGBitmapContextCreateImage(ctx);

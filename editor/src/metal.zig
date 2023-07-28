@@ -3,10 +3,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Object = objc.Object;
 
-const TAG: usize = @bitCast(usize, 1) << 63;
+const TAG: usize = @as(usize, @bitCast(1)) << 63;
 /// https://github.com/opensource-apple/objc4/blob/cd5e62a5597ea7a31dccef089317abb3a661c154/runtime/objc-internal.h#L203
 pub fn is_tagged_pointer(id: objc.c.id) bool {
-    return @bitCast(isize, @ptrToInt(id)) < 0;
+    return @as(isize, @bitCast(@intFromPtr(id))) < 0;
 }
 
 pub const NSMutableArray = struct {
@@ -61,13 +61,13 @@ pub const NSEvent = struct {
     obj: objc.Object,
 
     pub const Phase = enum(NSUInteger) {
-        None        = 0,
-        Began       = 0x1 << 0,
-        Stationary  = 0x1 << 1,
-        Changed     = 0x1 << 2,
-        Ended       = 0x1 << 3,
-        Cancelled   = 0x1 << 4,
-        MayBegin    = 0x1 << 5,
+        None = 0,
+        Began = 0x1 << 0,
+        Stationary = 0x1 << 1,
+        Changed = 0x1 << 2,
+        Ended = 0x1 << 3,
+        Cancelled = 0x1 << 4,
+        MayBegin = 0x1 << 5,
     };
 
     pub usingnamespace DefineObject(@This());
@@ -131,11 +131,11 @@ pub const CGRect = extern struct {
     }
 
     pub inline fn widthCeil(self: *const Self) i32 {
-        return @floatToInt(i32, @ceil(self.width()));
+        return @as(i32, @intFromFloat(@ceil(self.width())));
     }
 
     pub inline fn heightCeil(self: *const Self) i32 {
-        return @floatToInt(i32, @ceil(self.height()));
+        return @as(i32, @intFromFloat(@ceil(self.height())));
     }
 
     pub inline fn height(self: *const Self) CGFloat {
@@ -151,11 +151,11 @@ pub const CGRect = extern struct {
     }
 
     pub inline fn minyCeil(self: *const Self) i32 {
-        return @floatToInt(i32, @ceil(self.miny()));
+        return @as(i32, @intFromFloat(@ceil(self.miny())));
     }
 
     pub inline fn maxyCeil(self: *const Self) i32 {
-        return @floatToInt(i32, @ceil(self.maxy()));
+        return @as(i32, @intFromFloat(@ceil(self.maxy())));
     }
 };
 
@@ -204,7 +204,7 @@ pub const NSString = struct {
         if (!success) {
             return null;
         }
-        return @ptrCast([*:0]u8, buf);
+        return @as([*:0]u8, @ptrCast(buf));
     }
 
     pub fn get_characters(self: NSString, buf: []u16) void {
@@ -240,7 +240,7 @@ pub const NSNumber = struct {
     }
 
     pub fn from_enum(value: anytype) Self {
-        return Self.from_int(@intCast(i32, @enumToInt(value)));
+        return Self.from_int(@as(i32, @intCast(@intFromEnum(value))));
     }
 
     pub fn float_value(self: Self) CGFloat {
@@ -483,10 +483,10 @@ pub const MTLResourceOptions = enum(NSUInteger) {
     // cpu_cache_mode_default_cache = @enumToInt(MTLCPUCacheMode.default_cache) << MTLResourceCPUCacheModeShift,
     // cpu_cache_mode_write_combined = @enumToInt(MTLCPUCacheMode.write_combined) << MTLResourceCPUCacheModeShift,
 
-    storage_mode_shared = @enumToInt(MTLStorageMode.shared) << MTLResourceStorageModeShift,
-    storage_mode_managed = @enumToInt(MTLStorageMode.managed) << MTLResourceStorageModeShift,
-    storage_mode_private = @enumToInt(MTLStorageMode.private) << MTLResourceStorageModeShift,
-    storage_mode_memoryless = @enumToInt(MTLStorageMode.memoryless) << MTLResourceStorageModeShift,
+    storage_mode_shared = @intFromEnum(MTLStorageMode.shared) << MTLResourceStorageModeShift,
+    storage_mode_managed = @intFromEnum(MTLStorageMode.managed) << MTLResourceStorageModeShift,
+    storage_mode_private = @intFromEnum(MTLStorageMode.private) << MTLResourceStorageModeShift,
+    storage_mode_memoryless = @intFromEnum(MTLStorageMode.memoryless) << MTLResourceStorageModeShift,
 
     // hazard_tracking_mode_default = @enumToInt(MTLHazardTrackingMode.default) << MTLResourceHazardTrackingModeShift,
     // hazard_tracking_mode_untracked = @enumToInt(MTLHazardTrackingMode.untracked) << MTLResourceHazardTrackingModeShift,
@@ -557,7 +557,7 @@ pub const MTLVertexDescriptor = struct {
     pub fn set_attribute(self: @This(), idx: NSUInteger, attrib: Attribute) void {
         const attrs = objc.Object.fromId(self.obj.getProperty(?*anyopaque, "attributes"));
         const attr = attrs.msgSend(objc.Object, objc.sel("objectAtIndexedSubscript:"), .{idx});
-        attr.setProperty("format", @enumToInt(attrib.format));
+        attr.setProperty("format", @intFromEnum(attrib.format));
         attr.setProperty("offset", attrib.offset);
         attr.setProperty("bufferIndex", attrib.buffer_index);
     }

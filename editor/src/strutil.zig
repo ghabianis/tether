@@ -46,11 +46,11 @@ pub fn number_to_str(num: u32, digit_count: u32, buf: *[16]u8) []u8 {
     var len: u32 = 0;
     var temp: u32 = num;
 
-    var i: i64 = @intCast(i64, digit_count);
+    var i: i64 = @as(i64, @intCast(digit_count));
     while (i > 0) : (i -= 1) {
-        const pow10 = std.math.pow(u32, 10, @intCast(u32, @max(i - 1, 0)));
+        const pow10 = std.math.pow(u32, 10, @as(u32, @intCast(@max(i - 1, 0))));
         const val = temp / pow10;
-        buf[len] = digit_to_char(@intCast(u8, val));
+        buf[len] = digit_to_char(@as(u8, @intCast(val)));
         temp -= pow10 * val;
         len += 1;
     }
@@ -65,27 +65,15 @@ test "number_to_str" {
     };
 
     const inputs = [_]Input{
-        .{ 
-            .val = 0, 
-            .expected = "0"
-        },
-        .{ 
-            .val = 1, 
-            .expected = "1"
-        },
-        .{ 
-            .val = 12, 
-            .expected = "12"
-        },
-        .{ 
-            .val = 300, 
-            .expected = "300"
-        },
+        .{ .val = 0, .expected = "0" },
+        .{ .val = 1, .expected = "1" },
+        .{ .val = 12, .expected = "12" },
+        .{ .val = 300, .expected = "300" },
     };
 
     var buf = [_]u8{0} ** 16;
     for (inputs) |input| {
-        const digits = if (input.val == 0) 1 else @floatToInt(u32, @floor(@log10(@intToFloat(f32, input.val)))) + 1;
+        const digits = if (input.val == 0) 1 else @as(u32, @intFromFloat(@floor(@log10(@as(f32, @floatFromInt(input.val)))))) + 1;
         const result = number_to_str(input.val, digits, &buf);
         try std.testing.expectEqualStrings(input.expected, result);
     }
