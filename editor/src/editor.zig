@@ -524,20 +524,61 @@ fn precedes_closing_delimiter(self: *Self, node: *const Rope.Node, col: u32, ope
     };
 }
 
-fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?u32 {
+/// TODO: This only works for ascii
+/// all ascii delimiters except for ( and ) 
+pub fn matches_closing_delimiter(self: *Self, closing: u8, c: u8) bool {
     _ = self;
+    if ((closing == ')' and c == '(') or c == closing - 2) {
+        return true;
+    }
+    return false;
+}
+
+pub fn matches_opening_delimiter(self: *Self, opening: u8, c: u8) bool {
+    _ = self;
+    return switch(opening) {
+        '<' => return c == '>', 
+        '{' => return c == '}', 
+        '(' => return c == ')', 
+        '[' => return c == ']',
+        else => false,
+    };
+}
+
+fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?u32 {
     var iter = Rope.iter_chars_rev(node, cursor);
 
     var prev_cursor = cursor;
     while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
-        if ((delimiter == ')' and c == '(') or c == delimiter - 2) {
+        if (self.matches_closing_delimiter(delimiter, c)) {
             return prev_cursor.line;
         }
     }
     return null;
 }
 
-fn is_closing_delimiter(self: *Self, c: u8) bool {
+pub fn is_delimiter(self: *Self, c: u8, is_opening: *bool) bool {
+    _ = self;
+    switch(c) {
+        '<', 
+        '{', 
+        '(', 
+        '[', => {
+            is_opening.* = true;
+            return true;
+        },
+        '>',
+        '}',
+        ')',
+        ']' => {
+            is_opening.* = false;
+            return true;
+        },
+        else => return false,
+    }
+}
+
+pub fn is_closing_delimiter(self: *Self, c: u8) bool {
     _ = self;
     return switch(c) {
         '>',
@@ -548,10 +589,13 @@ fn is_closing_delimiter(self: *Self, c: u8) bool {
     };
 }
 
-fn is_opening_delimiter(self: *Self, c: u8) bool {
+pub fn is_opening_delimiter(self: *Self, c: u8) bool {
     _ = self;
     return switch (c) {
-        '<', '{', '(', '[' => true,
+        '<', 
+        '{', 
+        '(', 
+        '[' => true,
         else => false,
     };
 }

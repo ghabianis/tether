@@ -139,6 +139,7 @@ pub extern "C" fn CGContextSetFillColorWithColor(ctx: CGContextRef, color: CGCol
 pub extern "C" fn CGContextFillRect(ctx: CGContextRef, rect: metal.CGRect) void;
 pub extern "C" fn CGContextStrokeRect(ctx: CGContextRef, rect: metal.CGRect) void;
 pub extern "C" fn CGContextStrokeRectWithWidth(ctx: CGContextRef, rect: metal.CGRect, width: metal.CGFloat) void;
+pub extern "C" fn CGContextClipToRect(ctx: CGContextRef, rect: metal.CGRect) void;
 pub extern "C" fn CGContextSetStrokeColorWithColor(ctx: CGContextRef, color: CGColorRef) void;
 pub extern "C" fn CGContextSetFont(ctx: CGContextRef, font: CGFontRef) void;
 pub extern "C" fn CGContextSetFontSize(ctx: CGContextRef, size: metal.CGFloat) void;

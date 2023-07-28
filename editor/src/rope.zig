@@ -352,6 +352,117 @@ pub const RopeLineIterator = struct {
     }
 };
 
+fn _SIMDRopeCharIterator() type {
+    return struct {
+        const VectorWidth: usize = 8;
+        const Vector = @Vector(VectorWidth, u8);
+        node: ?*Rope.Node,
+        cursor: TextPos,
+        last_imcomplete: ?u8 = null,
+
+        fn reverse_buf(buf: *[VectorWidth]u8) void {
+            var i: u8 = 0;
+            while (i < VectorWidth / 2): (i += 1) {
+                const last = VectorWidth - 1 -| i;
+                const temp = buf[last];
+                buf[last] = buf[i];
+                buf[i] = temp;
+            }
+        }
+
+        fn next(self: *@This()) ?Vector {
+            var buf = self.next_impl() orelse return null;
+            // reverse_buf(&buf);
+            return buf;
+        }
+
+        fn next_impl(self: *@This()) ?[8]u8 {
+            if (self.last_imcomplete != null) return null;
+            var buf: [VectorWidth]u8 = [_]u8{0} ** 8;
+            var col: i64 = @intCast(i64, self.cursor.col);
+
+            var filled_amount: u8 = 0;
+            while (filled_amount < VectorWidth) {
+                const node = self.node orelse { 
+                    self.last_imcomplete = filled_amount;
+                    return buf;
+                };
+                // 0123456789
+                // we're asumming cursor always points in front of last char to grab
+                // in this iteration
+                var amount_to_grab: u8 = @intCast(u8, VectorWidth) - filled_amount;
+                var start: usize = undefined;
+                // line doesn't have enough to grab, grab entire line
+                if (self.cursor.col + 1 < amount_to_grab) {
+                    amount_to_grab = @intCast(u8, self.cursor.col + 1);
+                    start = 0;
+                } else {
+                    start = self.cursor.col - amount_to_grab + 1;
+                }
+                @memcpy(buf[filled_amount..filled_amount+amount_to_grab], node.data.items[start..start+amount_to_grab]);
+                col -= @intCast(i64, amount_to_grab);
+                self.cursor.col = @intCast(u32, @max(col, 0));
+                filled_amount += amount_to_grab;
+                if (col < 0) {
+                    self.node = node.prev;
+                    self.cursor.line = self.cursor.line -| 1;
+                    self.cursor.col = if (self.node) |n| @intCast(u32, n.data.items.len -| 1) else 0;
+                    col = self.cursor.col;
+                }
+            }
+
+            return buf;
+        }
+
+        // hello mate
+        // whats going on
+        // fn next_impl(self: *@This()) ?[8]u8 {
+        //     if (self.last_imcomplete) return null;
+        //     const node = self.node orelse return null;
+        //     var buf: [VectorWidth]u8 = [_]u8{0} ** 8;
+
+        //     // need to grab chars across multiple nodes
+        //     if (node.data.items.len < VectorWidth) {
+        //         @memcpy(buf[0..node.data.items.len], node.data.items);
+        //         var filled_amount: u8 = @intCast(u8, node.data.items.len);
+        //         var iter_node = node;
+        //         while (iter_node.prev) |prev| {
+        //             const wanted = VectorWidth - filled_amount;
+        //             const grab_amount = @min(prev.data.items.len, wanted);
+        //             @memcpy(buf[filled_amount..filled_amount+grab_amount], prev.data.items[0..grab_amount]);
+        //             filled_amount += @intCast(u8, grab_amount);
+        //             self.cursor.line = self.cursor.line -| 1;
+        //             self.cursor.col  = @intCast(u32, prev.data.items.len) -| @intCast(u32, grab_amount);
+        //             iter_node = prev;
+        //             if (filled_amount >= VectorWidth) break;
+        //         }
+        //         if (filled_amount != VectorWidth) {
+        //             self.last_imcomplete = true;
+        //             return buf;
+        //         }
+        //         self.node = iter_node;
+        //         return buf;
+        //     }
+
+        //     if (self.cursor.col < VectorWidth) {
+        //         const end = 8;
+        //         const start = 0;
+        //         self.node = node.prev;
+        //         self.cursor.line = self.cursor.line -| 1;
+        //         self.cursor.col = if (self.node) |n| @intCast(u32, n.data.items.len) -| 1 else 0;
+        //         @memcpy(buf[0..], node.data.items[start..end]);
+        //         return buf;
+        //     }
+
+        //     const end = self.cursor.col;
+        //     self.cursor.col -= @intCast(u32, VectorWidth);
+        //     const start = self.cursor.col;
+        //     @memcpy(buf[0..], node.data.items[start..end]);
+        //     return buf;
+        // }
+    };
+}
+
 fn _RopeCharIterator(comptime Reverse: bool) type {
     return struct {
         node: *const Rope.Node,
@@ -460,9 +571,10 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
                 return false;
             }
         }
-    };
+    };    
 }
 
+pub const SimdRopeCharIterator = _SIMDRopeCharIterator();
 pub const RopeCharIterator = _RopeCharIterator(false);
 pub const RopeCharIteratorRev = _RopeCharIterator(true);
 
@@ -584,6 +696,34 @@ fn remove_range(src: []u8, start: usize, end: usize) []u8 {
     }
     return src[0..len];
 }
+
+// test "simd rope char iter" {
+//     var rope = Rope{};
+//     try rope.init();
+//     var cursor = try rope.insert_text(.{ .line = 0, .col = 0}, "wtf\ndude\nbroooooo!");
+//     cursor.col -= 1;
+//     var iter = SimdRopeCharIterator{
+//         .cursor = cursor, 
+//         .node = rope.nodes.last,
+//     };
+
+//     const expected = [][]const u8{
+//         "roooooo!",
+//         "bdude\n"
+//     };
+
+//     // const empty = [_]u8{0} ** 8;
+//     var buf: [8]u8 = undefined;
+//     for (iter.next(), 0..) |simd, i| {
+//         buf = simd;
+//         print("simd: {s}\n", .{buf});
+//     }
+//     // var simd = iter.next();
+//     // buf = simd orelse empty;
+//     // print("BUF: {s}\n", .{buf});
+    
+//     // try std.testing.expectEqualDeep("987\n6543"[0..], buf[0..]);
+// }
 
 test "linked list impl" {
     const alloc = std.heap.c_allocator;

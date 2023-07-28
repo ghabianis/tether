@@ -74,6 +74,11 @@ pub const Atlas = struct {
     cursor_w: f32,
     cursor_h: f32,
 
+    border_cursor_tx: f32,
+    border_cursor_ty: f32,
+    border_cursor_w: f32,
+    border_cursor_h: f32,
+
     pub fn new(alloc: Allocator, font_size: metal.CGFloat) Self {
         const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
         // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Light", .ascii);
@@ -110,6 +115,11 @@ pub const Atlas = struct {
             .cursor_ty = undefined,
             .cursor_w = undefined,
             .cursor_h = undefined,
+
+            .border_cursor_tx = undefined,
+            .border_cursor_ty = undefined,
+            .border_cursor_w = undefined,
+            .border_cursor_h = undefined,
         };
     }
 
@@ -205,7 +215,7 @@ pub const Atlas = struct {
         var glyphs = ArrayList(metal.CGGlyph){};
         var glyph_rects = ArrayList(metal.CGRect){};
 
-        const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n";
+        const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n    ";
         const COMMON_LIGATURES = [_][]const u8{ 
             //
             "=>", 
@@ -230,6 +240,8 @@ pub const Atlas = struct {
             "..",
             "...",
             "!?",
+            "!!",
+            "\\\\",
         };
 
         // For some reason this will always put ligatures even when kCTLigatureAttributeName is set to 0,
@@ -406,23 +418,45 @@ pub const Atlas = struct {
                 ox += rectw + max_advance + 1;
             }
 
-            if (ox + max_w + max_advance + 1 >= intCeil(Self.MAX_WIDTH)) {
+            // add cursor glyph
+            if (ox + max_w_before_ligatures + max_advance + 1 >= intCeil(Self.MAX_WIDTH)) {
                 ox = 0;
                 oy += max_h;
                 rowh = 0;
             }
+            ox += max_w_before_ligatures + @floatToInt(i32, @ceil(max_advance_before_ligatures)) + 1;
             const cursor_rect = .{
                 .origin = .{ .x = @intToFloat(f32, ox), .y = @intToFloat(f32, oy) },
                 .size = .{ .width = @intToFloat(f32, max_w_before_ligatures), .height = @intToFloat(f32, max_h) },
             };
             const tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
             const ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
-
             ct.CGContextFillRect(ctx, cursor_rect);
             self.cursor_tx = tx;
             self.cursor_ty = ty;
             self.cursor_w = cursor_rect.size.width / @intToFloat(f32, tex_w);
             self.cursor_h = cursor_rect.size.height / @intToFloat(f32, tex_h);
+
+            // add rectangular cursor glyph
+            if (ox + max_w_before_ligatures + max_advance + 1 >= intCeil(Self.MAX_WIDTH)) {
+                ox = 0;
+                oy += max_h;
+                rowh = 0;
+            }
+            ox += max_w_before_ligatures + @floatToInt(i32, @ceil(max_advance_before_ligatures)) + 1;
+            const rectangular_cursor_rect = .{
+                .origin = .{ .x = @intToFloat(f32, ox), .y = @intToFloat(f32, oy) },
+                .size = .{ .width = @intToFloat(f32, max_w_before_ligatures), .height = @intToFloat(f32, max_h) },
+            };
+            const border_tx = @intToFloat(f32, ox) / @intToFloat(f32, tex_w);
+            const border_ty = (@intToFloat(f32, tex_h) - (@intToFloat(f32, oy))) / @intToFloat(f32, tex_h);
+            // https://stackoverflow.com/questions/14258924/uiview-drawrect-is-it-possible-to-stroke-inside-a-path
+            ct.CGContextClipToRect(ctx, rectangular_cursor_rect);
+            ct.CGContextStrokeRectWithWidth(ctx, rectangular_cursor_rect, 4.0);
+            self.border_cursor_tx = border_tx;
+            self.border_cursor_ty = border_ty;
+            self.border_cursor_w = rectangular_cursor_rect.size.width / @intToFloat(f32, tex_w);
+            self.border_cursor_h = rectangular_cursor_rect.size.height / @intToFloat(f32, tex_h);
         }
 
         self.atlas = ct.CGBitmapContextCreateImage(ctx);

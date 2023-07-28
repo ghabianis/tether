@@ -69,7 +69,7 @@ void SetTextMatrix(CGContextRef ctx, CGAffineTransform t) {
 }
 
 void RandomTest(CFAttributedStringRef str) {
-//    CTFramesetterRef frame_setter = CTFramesetterCreateWithAttributedString(str);
+    //    CTFramesetterRef frame_setter = CTFramesetterCreateWithAttributedString(str);
 //    CTFrameRef frame = CTFramesetterCreateFrame(frame_setter, CFRangeMake(0, 0), <#CGPathRef  _Nonnull path#>, <#CFDictionaryRef  _Nullable frameAttributes#>);
     
     

@@ -30,6 +30,8 @@ var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
 
 const TEXT_COLOR = math.hex4("#b8c1ea");
+const CURSOR_COLOR = math.hex4("#b4f9f8");
+const BORDER_CURSOR_COLOR = math.hex4("#454961");
 
 const Renderer = struct {
     const Self = @This();
@@ -263,30 +265,24 @@ const Renderer = struct {
         return pipeline;
     }
 
-    pub fn build_cursor_geometry(self: *Self, y: f32, xx: f32, width: f32) [6]Vertex {
-        const yy2 = y + self.atlas.ascent;
-        const bot2 = y - self.atlas.descent;
+    fn build_cursor_geometry_from_tbrl(self: *Self, t: f32, b: f32, l: f32, r: f32, comptime is_border: bool) [6]Vertex {
         var ret: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
+        const tl = math.float2(l, t);
+        const tr = math.float2(r, t);
+        const br = math.float2(r, b);
+        const bl = math.float2(l, b);
 
-        const tl = math.float2(xx, yy2);
-        const tr = math.float2(xx + width, yy2);
-        const br = math.float2(xx + width, bot2);
-        const bl = math.float2(xx, bot2);
-
-        const txt = self.atlas.cursor_ty;
-        const txbb = txt - self.atlas.cursor_h;
-        const txl = self.atlas.cursor_tx;
-        const txr = txl + self.atlas.cursor_w;
+        const txt = if (comptime !is_border) self.atlas.cursor_ty else self.atlas.border_cursor_ty;
+        const txbb = if (comptime !is_border) txt - self.atlas.cursor_h else txt - self.atlas.border_cursor_h;
+        const txl = if (comptime !is_border) self.atlas.cursor_tx else self.atlas.border_cursor_tx;
+        const txr = if (comptime !is_border) txl + self.atlas.cursor_w else txl + self.atlas.border_cursor_w;
 
         const tx_tl = math.float2(txl, txt);
         const tx_tr = math.float2(txr, txt);
         const tx_bl = math.float2(txl, txbb);
         const tx_br = math.float2(txr, txbb);
 
-        var bg = math.hex4("#b4f9f8");
-        // if (self.editor.mode == .Visual) {
-        //     bg.w = 0.5;
-        // }
+        const bg = if (comptime !is_border) CURSOR_COLOR else BORDER_CURSOR_COLOR;
 
         ret[0] = .{ .pos = tl, .tex_coords = tx_tl, .color = bg };
         ret[1] = .{ .pos = tr, .tex_coords = tx_tr, .color = bg };
@@ -297,6 +293,12 @@ const Renderer = struct {
         ret[5] = .{ .pos = bl, .tex_coords = tx_bl, .color = bg };
 
         return ret;
+    }
+
+    pub fn build_cursor_geometry(self: *Self, y: f32, xx: f32, width: f32, comptime is_border: bool) [6]Vertex {
+        const yy2 = y + self.atlas.ascent;
+        const bot2 = y - self.atlas.descent;
+        return self.build_cursor_geometry_from_tbrl(yy2, bot2, xx, xx + width, is_border);
     }
 
     fn text_attributed_string_dict(self: *Self, comptime alignment: ct.CTTextAlignment) objc.Object {
@@ -365,7 +367,8 @@ const Renderer = struct {
         for (charIdxToVertexIdx.items[0..charIdxToVertexIdx.items.len]) |*b| b.* = std.math.maxInt(u32);
 
         var cursor_vertices: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
-        var cursor_vert_index: ?u32 = null;
+        // The index of the vertices where the cursor is
+        var cursor_vert_index: ?struct { str_index: u32, index: u32, c: u8, y: f32, xx: f32, width: f32 } = null;
 
         const initial_x: f32 = text_start_x;
         const starting_x: f32 = initial_x;
@@ -392,7 +395,7 @@ const Renderer = struct {
             // empty line
             if (the_line.len == 0) {
                 if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
-                    cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
+                    cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures), false);
                 }
                 starting_y -= self.atlas.descent + self.atlas.ascent;
                 cursor_line += 1;
@@ -468,8 +471,16 @@ const Renderer = struct {
 
                     charIdxToVertexIdx.items[index] = @intCast(u32, self.vertices.items.len);
                     if (has_cursor) {
-                        cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), starting_x + @floatCast(f32, pos.x), if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance);
-                        cursor_vert_index = @intCast(u32, self.vertices.items.len);
+                        cursor_vertices = self.build_cursor_geometry(starting_y + @floatCast(f32, pos.y), starting_x + @floatCast(f32, pos.x), if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance, false);
+                        // TODO: This will break if there is no 1->1 mapping of character to glyphs (some ligatures)
+                        cursor_vert_index = .{ 
+                            .str_index = index,
+                            .index = @intCast(u32, self.vertices.items.len), 
+                            .c = line[i] ,
+                            .y = starting_y + @floatCast(f32, pos.y),
+                            .xx = starting_x + @floatCast(f32, pos.x),
+                            .width = if (glyph_info.advance == 0.0) @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures) else glyph_info.advance,
+                        };
                     }
                     try self.vertices.appendSlice(alloc, &vertices);
                     last_x = l + glyph_info.advance;
@@ -477,7 +488,7 @@ const Renderer = struct {
             }
 
             if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
-                cursor_vertices = self.build_cursor_geometry(starting_y, last_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
+                cursor_vertices = self.build_cursor_geometry(starting_y, last_x, @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures), false);
             }
 
             text_max_width = @max(text_max_width, last_x + @intToFloat(f32, self.atlas.max_glyph_width_before_ligatures));
@@ -499,7 +510,8 @@ const Renderer = struct {
             try highlight.highlight(str, charIdxToVertexIdx.items, self.vertices.items);
         }
 
-        if (cursor_vert_index) |vi| {
+        if (cursor_vert_index) |cvi| {
+            const vi = cvi.index;
             const black = math.Float4.new(0.0, 0.0, 0.0, 1.0);
             self.vertices.items[vi].color = black;
             self.vertices.items[vi + 1].color = black;
@@ -507,6 +519,42 @@ const Renderer = struct {
             self.vertices.items[vi + 3].color = black;
             self.vertices.items[vi + 4].color = black;
             self.vertices.items[vi + 5].color = black;
+            var is_opening = false;
+            if (self.editor.is_delimiter(cvi.c, &is_opening)) {
+                const border_cursor = self.build_cursor_geometry(cvi.y, cvi.xx, cvi.width, true);
+                try self.vertices.appendSlice(alloc, &border_cursor);
+            }
+            if (is_opening) {
+                var stack_count: u32 = 0;
+                for (str[cvi.str_index..], cvi.str_index..) |c, i| {
+                    if (self.editor.matches_opening_delimiter(cvi.c, c)) {
+                        if (stack_count == 1) {
+                            const vert_index = charIdxToVertexIdx.items[i];
+                            const tl: *const Vertex = &self.vertices.items[vert_index];
+                            const br: *const Vertex = &self.vertices.items[vert_index + 4];
+                            const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x, br.pos.x, true);
+                            try self.vertices.appendSlice(alloc, &border_cursor);
+                            break;
+                        }
+                        stack_count -= 1;
+                    } else if (c == cvi.c) {
+                        stack_count += 1;
+                    }  
+                }
+            } else {
+                var i: i64 = @intCast(i64, cvi.str_index);
+                while (i >= 0): (i -= 1) {
+                    const c = str[@intCast(usize, i)];
+                    if (self.editor.matches_closing_delimiter(cvi.c, c)) {
+                        const vert_index = charIdxToVertexIdx.items[@intCast(usize, i)];
+                        const tl: *const Vertex = &self.vertices.items[vert_index];
+                        const br: *const Vertex = &self.vertices.items[vert_index + 4];
+                        const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
+                        try self.vertices.appendSlice(alloc, &border_cursor);
+                        break;
+                    }
+                }
+            }
         }
         @memcpy(self.vertices.items[0..6], cursor_vertices[0..6]);
 
@@ -773,7 +821,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 48.0);
+    var atlas = font.Atlas.new(alloc, 64.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
