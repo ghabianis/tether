@@ -146,10 +146,11 @@ const Renderer = struct {
         const line = self.editor.cursor.line;
         const max_line = self.editor.rope.nodes.len;
 
+        const min: u32 = 99;
         const up = @as(u32, @intCast(@max(0, @as(i64, @intCast(line)) - 1)));
         const down = max_line - line;
 
-        const biggest_num = @max(up, @max(down, line));
+        const biggest_num = @max(@max(up, @max(down, line)), min);
         const digit_count = digits(biggest_num);
         var number_str_buf = [_]u8{0} ** 16;
 
@@ -807,7 +808,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 32.0);
+    var atlas = font.Atlas.new(alloc, 48.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

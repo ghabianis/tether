@@ -469,7 +469,9 @@ fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
     _ = self;
     var count: usize = 0;
     for (line_node.data.items) |c| {
-        if (strutil.is_whitespace(c)) {
+        if (strutil.is_newline(c)) {
+            break;
+        } else if (strutil.is_whitespace(c)) {
             count += 1;
         } else {
             break;
@@ -1158,11 +1160,7 @@ test "indentation with closing delimiter" {
     try editor.insert("fn testFn() void {}");
     editor.cursor.col -= 1;
     try editor.insert("\n");
-    expected =
-        \\fn testFn() void {
-        \\
-        \\}
-    ;
+    expected = "fn testFn() void {\n    \n}";
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 
@@ -1171,28 +1169,15 @@ test "indentation with closing delimiter" {
     try editor.insert("const x = a: {};");
     editor.cursor.col -= 2;
     try editor.insert("\n");
-    expected =
-        \\fn testFn() void {
-        \\    const x = a: {
-        \\
-        \\    };
-        \\}
-    ;
+    expected = "fn testFn() void {\n    const x = a: {\n        \n    };\n}";
+
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 
     try editor.insert("const y = b: {};");
     editor.cursor.col -= 2;
     try editor.insert("\n");
-    expected =
-        \\fn testFn() void {
-        \\    const x = a: {
-        \\        const y = b: {
-        \\
-        \\        };
-        \\    };
-        \\}
-    ;
+    expected = "fn testFn() void {\n    const x = a: {\n        const y = b: {\n            \n        };\n    };\n}";
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 }
@@ -1212,6 +1197,23 @@ test "fix indentation on closing inserting delimiter" {
         \\fn testFn() void {
         \\}
     ;
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+}
+
+test "indentation edge case" {
+    var editor = Self{};
+    try editor.init();
+
+    var expected: []const u8 = "";
+    var str: []const u8 = "";
+
+    try editor.insert("fn testFn() void {\n    \n}");
+    editor.cursor.line -= 1;
+    editor.cursor.col = 4;
+    try editor.insert("\n");
+    expected = "fn testFn() void {\n    \n    \n}";
+
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
 }
