@@ -602,13 +602,24 @@ fn DoublyLinkedList(comptime T: type) type {
 
             pub fn decrement_textpos(node: **const Node, pos: *TextPos) void {
                 if (pos.col == 0) {
-                    pos.line -= 1;
                     if (node.*.prev) |prev| {
+                        pos.line -= 1;
                         pos.col = @intCast(prev.data.items.len -| 1);
                         node.* = prev;
                     }
                 } else {
                     pos.col -= 1;
+                }
+            }
+
+            pub fn increment_textpos(node: **const Node, pos: *TextPos) void {
+                pos.col += 1;
+                if (pos.col >= node.*.data.items.len) {
+                    if (node.*.next) |next| {
+                        pos.col = 0;
+                        node.* = next;
+                        pos.line += 1;
+                    }
                 }
             }
         };

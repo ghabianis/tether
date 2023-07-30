@@ -231,7 +231,17 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         .LineEnd => self.end_of_line(),
         // Bool is true if find in reverse
         .Find => |f| {
-            _ = f;
+            var node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");
+            var prev_cursor: TextPos = self.cursor;
+            Rope.Node.increment_textpos(&node, &prev_cursor);
+            var iter = Rope.iter_chars(node, prev_cursor);
+            while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
+                if (strutil.is_newline(c)) break;
+                if (c == f.char()) { 
+                    self.cursor = prev_cursor;
+                    break; 
+                }
+            }
         },
         .ParagraphBegin => {},
         .ParagraphEnd => {},

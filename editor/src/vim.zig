@@ -202,8 +202,7 @@ pub const MoveKind = union(MoveKindEnum) {
     Down,
     LineStart,
     LineEnd,
-    // Bool is true if find in reverse
-    Find: struct { char: u8, reverse: bool },
+    Find: Find,
     ParagraphBegin,
     ParagraphEnd,
     Start,
@@ -219,6 +218,56 @@ pub const MoveKind = union(MoveKindEnum) {
             .Left, .Right, .Up, .Down, .LineStart, .LineEnd, .ParagraphBegin, .ParagraphEnd, .Start, .End, .Word => false,
             .BeginningWord, .EndWord, .Find, .MatchingPair => true,
         };
+    }
+};
+
+const NativePacked = @import("builtin");
+pub const Find = packed struct {
+    const native_endian = @import("builtin").target.cpu.arch.endian();
+
+    _char: u7,
+    _reverse: u1,
+
+    pub inline fn char(self: Find) u8 {
+        return @as(u8, @bitCast(self)) & 0b01111111;
+        // return @as(u8, @bitCast(self)) & 0b11111110;
+        // switch (comptime native_endian) {
+        //     .Big => return @as(u8, @bitCast(self)) & 0b01111111,
+        //     .Little => return @as(u8, @bitCast(self)) & 0b10000000,
+        // }
+    }
+
+    pub inline fn reverse(self: Find) bool {
+        return @as(u8, @bitCast(self)) & 0b10000000 != 0;
+        // return @as(u8, @bitCast(self)) & 0b00000001 != 0;
+        // switch (comptime native_endian) {
+        //     .Big => return @as(u8, @bitCast(self)) & 0b10000000 != 0,
+        //     .Little => return @as(u8, @bitCast(self)) & 0b01111111 != 0,
+        // }
+    }
+
+    pub fn new(c: u8, r: bool) Find {
+        return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b01111111) };
+        // return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b11111110) };
+        // switch (comptime native_endian) {
+        //     .Big => { 
+        //         std.debug.assert(c <= 0b01111111);
+        //         return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b01111111) };
+        //     },
+        //     .Little => {
+        //         std.debug.assert(c <= 0b11111110);
+        //         return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b11111110) };
+        //     },
+        // }
+    }
+
+    test "find" {
+        var f = Find.new('a', false);
+        try std.testing.expectEqual(@as(u8, 'a'), f.char());
+        try std.testing.expectEqual(false, f.reverse());
+        f = Find.new('b', true);
+        try std.testing.expectEqual(@as(u8, 'b'), f.char());
+        try std.testing.expectEqual(true, f.reverse());
     }
 };
 
@@ -342,14 +391,19 @@ pub const CommandParser = struct {
         num: NumberParser = .{},
         keys: [4]Key = [_]Key{.Up} ** 4,
         data: PackedData = .{},
-        kind: ?MoveKind = null,
+        kind: MoveKind = .Left,
 
         /// packed struct for additional fields so
-        /// the struct can be packed into 16 bytes
+        /// CommandParser.Input can be packed into 16 bytes
         const PackedData = packed struct {
-            keys_len: u6 = 0,
+            keys_len: u5 = 0,
+            _kind_ready: u1 = 0,
             _num_done: u1 = 0,
             _optional: u1 = 0,
+
+            fn kind_ready(self: PackedData) bool {
+                return self._kind_ready != 0;
+            }
 
             fn optional(self: PackedData) bool {
                 return self._optional != 0;
@@ -363,11 +417,12 @@ pub const CommandParser = struct {
         fn reset(self: *MoveParser) void {
             self.num.reset();
             self.data = .{};
-            self.kind = null;
+            self.kind = .Left;
         }
 
         fn result(self: *MoveParser) ?Move {
-            const kind = self.kind orelse return null;
+            if (!self.data.kind_ready()) return null;
+            const kind = self.kind;
             const amount = self.num.result() orelse 1;
             return .{ .kind = kind, .repeat = amount };
         }
@@ -435,6 +490,8 @@ pub const CommandParser = struct {
 
                         '%' => return self.set_kind(.MatchingPair),
 
+                        'f' => return self.parse_find(false),
+
                         else => return if (self.data.optional()) .Skip else .Fail,
                     }
                 },
@@ -442,6 +499,14 @@ pub const CommandParser = struct {
                 .Down => return self.set_kind(.Down),
                 .Left => return self.set_kind(.Left),
                 .Right => return self.set_kind(.Right),
+                else => return if (self.data.optional()) .Skip else .Fail,
+            }
+        }
+
+        fn parse_find(self: *MoveParser, comptime reverse: bool) ParseResult {
+            if (self.data.keys_len <= 1) return .Continue;
+            switch (self.keys[1]) {
+                .Char => |c| return self.set_kind(.{ .Find = Find.new(c, reverse) }),
                 else => return if (self.data.optional()) .Skip else .Fail,
             }
         }
@@ -460,6 +525,7 @@ pub const CommandParser = struct {
         }
 
         fn set_kind(self: *MoveParser, kind: MoveKind) ParseResult {
+            self.data._kind_ready = 1;
             self.kind = kind;
             return .Accept;
         }
@@ -815,6 +881,8 @@ test "command parse normal" {
     _ = try test_parse(alloc, &self, "20l", .{ .repeat = 20, .kind = .{ .Move = .Right } });
     _ = try test_parse(alloc, &self, "gg", .{ .repeat = 1, .kind = .{ .Move = .Start } });
     _ = try test_parse(alloc, &self, "G", .{ .repeat = 1, .kind = .{ .Move = .End } });
+    _ = try test_parse(alloc, &self, "%", .{ .repeat = 1, .kind = .{ .Move = .MatchingPair } });
+    _ = try test_parse(alloc, &self, "fa", .{ .repeat = 1, .kind = .{ .Move = .{ .Find = Find.new('a', false) } } });
 
     // d/c/y
     _ = try test_parse(alloc, &self, "69d20l", .{ .repeat = 69, .kind = .{ .Delete = .{ .repeat = 20, .kind = .Right } } });
