@@ -77,9 +77,6 @@ class EditorViewController: NSViewController {
         mtkView.device = device
         mtkView.colorPixelFormat = .bgra8Unorm
         
-        var nice = MTLVertexDescriptor();
-        var attrs = nice.attributes;
-        
         renderer = SwiftRenderer(view: mtkView, device: device!, pos: pos, size: size)
         mtkView.delegate = renderer
     }

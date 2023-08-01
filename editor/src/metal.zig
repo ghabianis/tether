@@ -634,6 +634,10 @@ fn DefineObject(comptime T: type) type {
             return from_obj(obj);
         }
 
+        pub fn autorelease(self: T) void {
+            self.obj.msgSend(void, objc.sel("autorelease"), .{});
+        }
+
         pub fn release(self: T) void {
             self.obj.msgSend(void, objc.sel("release"), .{});
         }

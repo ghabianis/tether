@@ -349,6 +349,9 @@ const Renderer = struct {
     }
 
     pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+        var pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
+
         _ = screenx;
         var charIdxToVertexIdx = try ArrayList(u32).initCapacity(frame_arena.allocator(), str.len);
         charIdxToVertexIdx.items.len = str.len;
@@ -372,7 +375,7 @@ const Renderer = struct {
 
         // TODO: This can be created once at startup
         const text_attributes = self.text_attributed_string_dict(.Left);
-        defer text_attributes.msgSend(void, objc.sel("release"), .{});
+        defer text_attributes.msgSend(void, objc.sel("autorelease"), .{});
 
         var iter = self.editor.rope.iter_lines(self.editor.rope.nodes.first orelse return);
 
@@ -400,11 +403,13 @@ const Renderer = struct {
                 // TODO: I think this can be created once before this loop, then
                 //       reused by calling init_with_bytes_no_copy
                 const nstring = metal.NSString.new_with_bytes_no_copy(line, .ascii);
+                defer nstring.autorelease();
                 // TODO: Same as above
                 const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
-                defer attributed_string.release();
+                defer attributed_string.autorelease();
 
                 const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
+                defer objc.Object.fromId(ctline).msgSend(void, objc.sel("autorelease"), .{});
                 const runs = ct.CTLineGetGlyphRuns(ctline);
                 const run_count = ct.CFArrayGetCount(runs);
                 std.debug.assert(run_count <= 1);
@@ -563,6 +568,9 @@ const Renderer = struct {
         screeny: f32,
         line_nb_col_width: f32,
     ) !void {
+        var pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
+
         _ = screenx;
         const line_count = self.editor.rope.nodes.len;
         const text_attributes = self.text_attributed_string_dict(.Right);
@@ -595,10 +603,13 @@ const Renderer = struct {
             const digit_count = digits(num);
             const str = strutil.number_to_str(num, digit_count, &number_buf);
             const nstring = metal.NSString.new_with_bytes_no_copy(str, .ascii);
+            defer nstring.autorelease();
             const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
-            defer attributed_string.release();
+            defer attributed_string.autorelease();
 
             const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
+            defer objc.Object.fromId(ctline).msgSend(void, objc.sel("autorelease"), .{});
+
             const runs = ct.CTLineGetGlyphRuns(ctline);
             const run_count = ct.CFArrayGetCount(runs);
             std.debug.assert(run_count <= 1);
@@ -740,7 +751,11 @@ const Renderer = struct {
     }
 
     pub fn draw(self: *Self, view: metal.MTKView) void {
+        var pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
         const command_buffer = self.queue.command_buffer();
+        // for some reason this causes crash
+        // defer command_buffer.autorelease();
 
         const render_pass_descriptor_id = view.obj.getProperty(objc.c.id, "currentRenderPassDescriptor");
         const drawable_id = view.obj.getProperty(objc.c.id, "currentDrawable");
@@ -756,6 +771,8 @@ const Renderer = struct {
         color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // for some reason this causes crash
+        // defer command_encoder.autorelease();
         const drawable_size = view.drawable_size();
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 

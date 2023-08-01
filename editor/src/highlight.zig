@@ -236,8 +236,10 @@ pub fn highlight(self: *Highlight, str: []const u8, charIdxToVertexIdx: []const 
         @panic("Failed to set parser!");
     }
     var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
+    defer c.ts_tree_delete(tree);
     var root_node = c.ts_tree_root_node(tree);
     var query_cursor = c.ts_query_cursor_new();
+    defer c.ts_query_cursor_delete(query_cursor);
     var match: c.TSQueryMatch = undefined;
 
     c.ts_query_cursor_exec(query_cursor, self.query, root_node);
