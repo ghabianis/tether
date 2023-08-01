@@ -92,11 +92,14 @@ const CaptureConfig = struct {
 };
 
 const Highlight = @This();
+const HashMap = std.AutoHashMap;
 
 parser: *c.TSParser,
 lang: *const ts.Language,
 query: *c.TSQuery,
 theme: []const ?math.Float4,
+/// tree-sitter value id -> regex
+regexes: HashMap(u32, r.regex_t),
 
 /// Adapted with minor changes from:
 /// https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
@@ -176,14 +179,53 @@ pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const Capt
             @panic("Failed to set parser!");
         }
 
+        var regexes = HashMap(u32, r.regex_t).init(alloc);
+
+        const count = c.ts_query_pattern_count(query);
+        for (0..count) |i| {
+            var length: u32 = 0;
+            var predicates_ptr = c.ts_query_predicates_for_pattern(query, @intCast(i), &length);
+            if (length < 1) continue;
+            const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
+            var j: u32 = 0;
+            while (j < length) {
+                const pred = predicates[j];
+                var value_len: u32 = undefined;
+                const value = c.ts_query_string_value_for_id(query, pred.value_id, &value_len);
+
+                if (pred.type == c.TSQueryPredicateStepTypeString) {
+                    // Example:
+                    // TSQueryPredicateStepTypeString: match?
+                    // TSQueryPredicateStepTypeCapture: function
+                    // TSQueryPredicateStepTypeString: ^[a-z]+([A-Z][a-z0-9]*)+$
+                    // TSQueryPredicateStepTypeDone
+                    //
+                    // Has 4 steps
+                    if (std.mem.eql(u8, "match?", value[0..value_len])) {
+                        const regex_step = predicates[j + 2];
+                        var regex_len: u32 = undefined;
+                        const regex_str_ptr = c.ts_query_string_value_for_id(query, regex_step.value_id, &regex_len);
+                        const regex_str = regex_str_ptr[0..regex_len];
+                        var regex: r.regex_t = undefined;
+
+                        if (r.regncomp(&regex, regex_str.ptr, regex_str.len, 0) != 0) {
+                            @panic("Failed to compile regular expression");
+                        }
+
+                        try regexes.put(regex_step.value_id, regex);
+
+                        j += 4;
+                        continue;
+                    }
+                }
+
+                j += 1;
+            }
+        }
+
         const theme = try Highlight.configure_higlights(alloc, q, colors);
 
-        return .{
-            .parser = parser.?,
-            .query = q,
-            .lang = language,
-            .theme = theme,
-        };
+        return .{ .parser = parser.?, .query = q, .lang = language, .theme = theme, .regexes = regexes };
     }
 
     @panic("Query error!");
@@ -257,14 +299,13 @@ fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture,
 
                 if (std.mem.eql(u8, "match?", value[0..value_len])) {
                     const regex_step = predicates[i + 2];
-                    var regex_len: u32 = undefined;
-                    const regex = c.ts_query_string_value_for_id(self.query, regex_step.value_id, &regex_len);
                     const start = c.ts_node_start_byte(capture.node);
                     const end = c.ts_node_end_byte(capture.node);
-                    if (self.satisfies_match(src[start..end], regex[0..regex_len])) {
+                    if (self.satisfies_match(src[start..end], regex_step.value_id)) {
                         return true;
                     }
-                    return false;
+                    i += 4;
+                    continue;
                 }
 
                 return false;
@@ -277,19 +318,10 @@ fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture,
 
     return false;
 }
-
-fn satisfies_match(self: *Highlight, src: []const u8, regex_str: []const u8) bool {
-    _ = self;
-
-    var regex: r.regex_t = undefined;
-    var regex_ptr = &regex;
-    _ = regex_ptr;
-    if (r.regncomp(&regex, regex_str.ptr, regex_str.len, 0) != 0) {
-        @panic("Failed to compile regular expression");
-    }
+fn satisfies_match(self: *Highlight, src: []const u8, regex_step_value_id: u32) bool {
+    var regex = self.regexes.get(regex_step_value_id) orelse @panic("REGEX NOT FOUND!");
 
     const ret = r.regnexec(&regex, src.ptr, src.len, 0, null, 0);
-    r.regfree(&regex);
 
     if (ret == 0) return true;
     if (ret == r.REG_NOMATCH) {

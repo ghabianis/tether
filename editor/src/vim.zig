@@ -394,7 +394,7 @@ pub const CommandParser = struct {
         kind: MoveKind = .Left,
 
         /// packed struct for additional fields so
-        /// CommandParser.Input can be packed into 16 bytes
+        /// CommandParser.Input can be 16 bytes big
         const PackedData = packed struct {
             keys_len: u5 = 0,
             _kind_ready: u1 = 0,
@@ -883,6 +883,7 @@ test "command parse normal" {
     _ = try test_parse(alloc, &self, "G", .{ .repeat = 1, .kind = .{ .Move = .End } });
     _ = try test_parse(alloc, &self, "%", .{ .repeat = 1, .kind = .{ .Move = .MatchingPair } });
     _ = try test_parse(alloc, &self, "fa", .{ .repeat = 1, .kind = .{ .Move = .{ .Find = Find.new('a', false) } } });
+    _ = try test_parse(alloc, &self, "20fa", .{ .repeat = 20, .kind = .{ .Move = .{ .Find = Find.new('a', false) } } });
 
     // d/c/y
     _ = try test_parse(alloc, &self, "69d20l", .{ .repeat = 69, .kind = .{ .Delete = .{ .repeat = 20, .kind = .Right } } });
@@ -917,6 +918,11 @@ test "command parse normal" {
 }
 
 test "command parse visual" {
+    const val: u69 = 420;
+    const val2: u11 = 1024;
+    const PathIntLen = std.math.IntFittingRange(0, 1024);
+    print("VAL: {d} {d}\n", .{val, val2});
+    print("sizes: {d} {s}\n", .{@bitSizeOf(PathIntLen), @typeName(PathIntLen)});
     const rope = @import("./rope.zig");
     _ = rope;
     const alloc = std.heap.c_allocator;
