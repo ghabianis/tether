@@ -1,32 +1,10 @@
 #+title: Todo
 
 * TODO Now [2/5]
-** DONE moving up/down/creating lines preserves word column when possible
-example:
-#+begin_src zig
-pub fn start_of_line(self: *Self) void {
-    self.cursor.col = 0;
-    self.draw_text = true;
-}
-#+end_src
+** TODO optimize treesitter highlighting
+right now we make treesitter parse new tree from scratch every time we rebuild geometry, this is obviously really bad.
 
-if cursor is at =s= in =start_of_line= (index 7)
-
-when going down, cursor will try to be on index 7 if possible, if not then the greatest char possible
-
-to implement this have to store the "desired" column somewhere
-when moving up or down, we try to put the cursor on this desired column, or max value possible for line
-
-the cursor tries to move to the "desired" col only when the user moves /strictly/ up or down (movements like ={= or =}= include horizontal movements and dont count)
-
-the "desired" column is set when the user does /not move strictly/ up or down (the inverse)
-** DONE indentation on newline [0/0]
-when the cursor directly succeeds a delimiter (excluding whitespace but not newlines), and the user inserts
-a newline, then the newline should be indented by +1 indentation level
-*** DONE should always indent the current indentation level
-*** DONE check if should increment indentation level
-*** DONE calculate indentation level of line
-*** DONE if incrementing indentation, then need to create an additional line where the indentation happens IF matching closing delimiter succeeds cursor
+we can make the treesitter tree be an object we maintain in the Editor or even Rope struct, so we don't have to rebuild it every frame.
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::

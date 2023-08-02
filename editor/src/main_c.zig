@@ -348,6 +348,7 @@ const Renderer = struct {
         }
     }
 
+    /// TODO: this can be made faster, just do multiplication bruh
     fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32, end_y: f32 } {
         const ascent: f32 = @floatCast(self.atlas.ascent);
         const descent: f32 = @floatCast(self.atlas.descent);
