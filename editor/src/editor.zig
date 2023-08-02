@@ -32,7 +32,8 @@ pub fn init(self: *Self) !void {
     try self.vim.init(std.heap.c_allocator, &Vim.DEFAULT_PARSERS);
     self.clipboard = Clipboard.init();
     if (comptime Conf.ENABLE_TEST_TEXT) {
-        const str = @embedFile("./stress.txt");
+        // const str = @embedFile("./lines.txt");
+        const str = @embedFile("./main_c.zig");
         self.cursor = try self.rope.insert_text(self.cursor, str);
     }
 }
@@ -237,9 +238,9 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
             var iter = Rope.iter_chars(node, prev_cursor);
             while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
                 if (strutil.is_newline(c)) break;
-                if (c == f.char()) { 
+                if (c == f.char()) {
                     self.cursor = prev_cursor;
-                    break; 
+                    break;
                 }
             }
         },

@@ -74,6 +74,8 @@ pub const CGColorSpaceRef = objc.c.id;
 pub const CGColorRef = objc.c.id;
 pub const CGFontRef = objc.c.id;
 pub const CGImageRef = objc.c.id;
+pub const CTFramesetterRef = objc.c.id;
+pub const CTFrameRef = objc.c.id;
 pub const CTLineRef = objc.c.id;
 pub const CTRunRef = objc.c.id;
 pub const CGPathRef = objc.c.id;
@@ -98,6 +100,10 @@ pub extern "C" fn CTFontGetAdvancesForGlyphs(font: CTFontRef, orientation: CTFon
 pub extern "C" fn CTFontCopyAttribute(font: CTFontRef, attribute: CFStringRef) CFTypeRef;
 pub extern "C" fn CTFontGetLigatureCaretPositions(font: CTFontRef, glyph: metal.CGGlyph, positions: [*]metal.CGFloat, max_positions: CFIndex) CFIndex;
 pub extern "C" fn CTFontCreatePathForGlyph(font: CTFontRef, glyph: metal.CGGlyph, transform: ?*const CGAffineTransform) CGPathRef;
+pub extern "C" fn CTFramesetterCreateWithAttributedString(string: CFAttributedStringRef) CTFramesetterRef;
+pub extern "C" fn CTFramesetterCreateFrame(framesetter: CTFramesetterRef, string_range: CFRange, path: CGPathRef, frame_attributes: objc.c.id) CTFrameRef;
+pub extern "C" fn CTFrameGetLines(frame: CTFrameRef) CFArrayRef;
+pub extern "C" fn CTFrameGetLineOrigins(frame: CTFrameRef, range: CFRange, origins: [*]metal.CGPoint) void;
 pub extern "C" fn CTLineCreateWithAttributedString(string: CFAttributedStringRef) CTLineRef;
 pub extern "C" fn CTLineGetTypographicBounds(line: CTLineRef, ascent: ?*metal.CGFloat, descent: ?*metal.CGFloat, leading: ?*metal.CGFloat) f64;
 pub extern "C" fn CTLineGetGlyphRuns(line: CTLineRef) CFArrayRef;
@@ -159,6 +165,8 @@ pub extern "C" fn CGContextSetAllowsFontSubpixelQuantization(ctx: CGContextRef, 
 pub extern "C" fn CGContextShowGlyphsAtPoint(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat, glyphs: [*]const metal.CGGlyph, count: usize) void;
 pub extern "C" fn CGContextShowGlyphs(ctx: CGContextRef, glyphs: [*]const metal.CGGlyph, count: usize) void;
 pub extern "C" fn CGBitmapContextCreateImage(ctx: CGContextRef) CGImageRef;
+
+pub extern "C" fn CGPathCreateWithRect(rect: metal.CGRect, transform: ?*const CGAffineTransform) CGPathRef;
 
 pub extern "C" fn CGColorRelease(color: CGColorRef) void;
 pub extern "C" fn CGColorSpaceRelease(space: CGColorSpaceRef) void;

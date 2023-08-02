@@ -265,9 +265,15 @@ pub fn highlight(self: *Highlight, str: []const u8, charIdxToVertexIdx: []const 
             const start = c.ts_node_start_byte(capture.node);
             const end = c.ts_node_end_byte(capture.node);
 
+            // print("THE FUCKING NODE: {s}\n", .{str[start..end]});
+
             var j: u32 = start;
             while (j < end) : (j += 1) {
                 const vertIndex = charIdxToVertexIdx[j];
+                if (vertIndex == std.math.maxInt(u32)) {
+                    continue;
+                }
+                // print("AT: {c} {d}\n", .{ str[j], j - start });
                 if (self.theme[capture.index]) |color| {
                     vertices[vertIndex].color = color;
                     vertices[vertIndex + 1].color = color;

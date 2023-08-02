@@ -215,7 +215,7 @@ pub const Atlas = struct {
         var glyphs = ArrayList(metal.CGGlyph){};
         var glyph_rects = ArrayList(metal.CGRect){};
 
-        const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n    ";
+        const chars_c = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n\r    ";
         const COMMON_LIGATURES = [_][]const u8{
             //
             "=>",

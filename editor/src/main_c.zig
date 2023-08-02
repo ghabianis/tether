@@ -131,7 +131,7 @@ const Renderer = struct {
         if (self.editor.draw_text) {
             try self.update(alloc);
         }
-        self.adjust_scroll_to_cursor(@as(f32, @floatCast(self.screen_size.height)));
+        // self.adjust_scroll_to_cursor(@as(f32, @floatCast(self.screen_size.height)));
     }
 
     fn update(self: *Self, alloc: Allocator) !void {
@@ -348,7 +348,540 @@ const Renderer = struct {
         }
     }
 
+    fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32, end_y: f32 } {
+        const ascent: f32 = @floatCast(self.atlas.ascent);
+        const descent: f32 = @floatCast(self.atlas.descent);
+
+        const lines_len = self.editor.rope.nodes.len;
+        const top = screeny;
+        const bot = 0.0;
+
+        // var y: f32 = top + self.ty - @as(f32, @floatFromInt(self.atlas.max_glyph_height));
+        var y: f32 = top + self.ty - ascent;
+
+        var i: u32 = 0;
+        var start_y: f32 = 0.0;
+        const start: u32 = start: {
+            while (i < lines_len) : (i += 1) {
+                if (y - descent <= top) {
+                    start_y = y - self.ty;
+                    break :start @intCast(i);
+                }
+                y -= descent + ascent;
+            }
+            @panic("SHIT");
+        };
+
+        var end_y: f32 = 0.0;
+        const end: u32 = end: {
+            while (i < lines_len) : (i += 1) {
+                if (y + ascent < bot) {
+                    end_y = y;
+                    break :end @intCast(i);
+                }
+                y -= descent + ascent;
+            }
+            @panic("SHIT");
+        };
+
+        return .{ .start = start, .end = end, .start_y = start_y, .end_y = end_y };
+    }
+
     pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+        var pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
+
+        const start_end = self.find_start_end_lines(screeny);
+        const offset: f32 = @floatFromInt(start_end.start);
+        _ = offset;
+
+        _ = screenx;
+        var charIdxToVertexIdx = try ArrayList(u32).initCapacity(frame_arena.allocator(), str.len);
+        charIdxToVertexIdx.items.len = str.len;
+        for (charIdxToVertexIdx.items[0..charIdxToVertexIdx.items.len]) |*b| b.* = std.math.maxInt(u32);
+
+        var cursor_vertices: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
+        // The index of the vertices where the cursor is
+        var cursor_vert_index: ?struct { str_index: u32, index: u32, c: u8, y: f32, xx: f32, width: f32 } = null;
+
+        const initial_x: f32 = text_start_x;
+        const starting_x: f32 = initial_x;
+        var starting_y: f32 = start_end.start_y;
+        var text_max_width: f32 = 0.0;
+
+        const atlas_w = @as(f32, @floatFromInt(self.atlas.width));
+        const atlas_h = @as(f32, @floatFromInt(self.atlas.height));
+
+        self.vertices.clearRetainingCapacity();
+
+        try self.vertices.appendSlice(alloc, cursor_vertices[0..]);
+
+        // TODO: This can be created once at startup
+        const text_attributes = self.text_attributed_string_dict(.Left);
+        defer text_attributes.msgSend(void, objc.sel("autorelease"), .{});
+
+        const starting_line: u32 = start_end.start;
+        var iter = self.editor.rope.iter_lines(self.editor.rope.node_at_line(starting_line) orelse return);
+
+        var cursor_line: u32 = starting_line;
+        var cursor_col: u32 = 0;
+        var index: u32 = 0;
+        while (iter.next()) |the_line| {
+            if (cursor_line > start_end.end) {
+                break;
+            }
+            print("end {d} LINE: {d} Y: {d} Height: {d} cond: {}\n", .{ start_end.end, cursor_line, starting_y, self.screen_size.height, starting_y + self.atlas.ascent < 0.0 + self.ty });
+
+            // empty line
+            if (the_line.len == 0) {
+                if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
+                    cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)), false);
+                }
+                starting_y -= self.atlas.descent + self.atlas.ascent;
+                cursor_line += 1;
+                cursor_col = 0;
+                continue;
+            }
+
+            const has_newline = strutil.is_newline(the_line[the_line.len - 1]);
+            // remove \n because it has no corresponding glyph
+            var line = if (has_newline) the_line[0 .. the_line.len - 1] else the_line;
+
+            var last_x: f32 = initial_x;
+            if (line.len > 0) {
+                // TODO: I think this can be created once before this loop, then
+                //       reused by calling init_with_bytes_no_copy
+                const nstring = metal.NSString.new_with_bytes_no_copy(line, .ascii);
+                defer nstring.autorelease();
+                // TODO: Same as above
+                const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
+                defer attributed_string.autorelease();
+
+                const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
+                defer objc.Object.fromId(ctline).msgSend(void, objc.sel("autorelease"), .{});
+                const runs = ct.CTLineGetGlyphRuns(ctline);
+                const run_count = ct.CFArrayGetCount(runs);
+                std.debug.assert(run_count <= 1);
+                if (run_count == 0) {
+                    @panic("This is bad");
+                }
+
+                const run = ct.CFArrayGetValueAtIndex(runs, 0);
+                const glyph_count = @as(usize, @intCast(ct.CTRunGetGlyphCount(run)));
+
+                var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), glyph_count);
+                var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), glyph_count);
+                var positions = try ArrayList(metal.CGPoint).initCapacity(frame_arena.allocator(), glyph_count);
+
+                glyphs.items.len = glyph_count;
+                glyph_rects.items.len = glyph_count;
+                positions.items.len = glyph_count;
+
+                ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
+                ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
+                self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
+                if (glyphs.items.len != line.len) {
+                    @panic("Houston we have a problem");
+                }
+
+                var i: usize = 0;
+                while (i < glyphs.items.len) : (i += 1) {
+                    defer {
+                        cursor_col += 1;
+                        index += 1;
+                    }
+
+                    const has_cursor = cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col;
+                    const color = TEXT_COLOR;
+
+                    const glyph = glyphs.items[i];
+                    const glyph_info = self.atlas.lookup(glyph);
+                    const rect = glyph_rects.items[i];
+                    const pos = positions.items[i];
+
+                    const vertices = Vertex.square_from_glyph(
+                        &rect,
+                        &pos,
+                        glyph_info,
+                        color,
+                        starting_x,
+                        starting_y,
+                        atlas_w,
+                        atlas_h,
+                    );
+                    const l = vertices[0].pos.x;
+
+                    charIdxToVertexIdx.items[index] = @as(u32, @intCast(self.vertices.items.len));
+                    if (has_cursor) {
+                        cursor_vertices = self.build_cursor_geometry(starting_y + @as(f32, @floatCast(pos.y)), starting_x + @as(f32, @floatCast(pos.x)), if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance, false);
+                        // TODO: This will break if there is no 1->1 mapping of character to glyphs (some ligatures)
+                        cursor_vert_index = .{
+                            .str_index = index,
+                            .index = @as(u32, @intCast(self.vertices.items.len)),
+                            .c = line[i],
+                            .y = starting_y + @as(f32, @floatCast(pos.y)),
+                            .xx = starting_x + @as(f32, @floatCast(pos.x)),
+                            .width = if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance,
+                        };
+                    }
+                    try self.vertices.appendSlice(alloc, &vertices);
+                    last_x = l + glyph_info.advance;
+                }
+            }
+
+            if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
+                cursor_vertices = self.build_cursor_geometry(starting_y, last_x, @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)), false);
+            }
+
+            text_max_width = @max(text_max_width, last_x + @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)));
+            starting_y -= self.atlas.descent + self.atlas.ascent;
+            cursor_line += 1;
+            cursor_col = 0;
+            if (has_newline) {
+                charIdxToVertexIdx.items[index] = @as(u32, @intCast(self.vertices.items.len));
+                try self.vertices.appendSlice(alloc, &[_]Vertex{Vertex.default()} ** 6);
+                index += 1;
+            }
+            // _ = frame_arena.reset(.retain_capacity);
+        }
+
+        self.text_width = text_max_width;
+        self.text_height = @fabs(starting_y);
+
+        // if (self.highlight) |*highlight| {
+        //     try highlight.highlight(str, charIdxToVertexIdx.items, self.vertices.items);
+        // }
+
+        if (cursor_vert_index) |cvi| {
+            const vi = cvi.index;
+            const black = math.Float4.new(0.0, 0.0, 0.0, 1.0);
+            self.vertices.items[vi].color = black;
+            self.vertices.items[vi + 1].color = black;
+            self.vertices.items[vi + 2].color = black;
+            self.vertices.items[vi + 3].color = black;
+            self.vertices.items[vi + 4].color = black;
+            self.vertices.items[vi + 5].color = black;
+            var is_opening = false;
+            if (self.editor.is_delimiter(cvi.c, &is_opening)) {
+                const border_cursor_ = self.build_cursor_geometry(cvi.y, cvi.xx, cvi.width, true);
+                try self.vertices.appendSlice(alloc, &border_cursor_);
+                if (is_opening) {
+                    var stack_count: u32 = 0;
+                    for (str[cvi.str_index..], cvi.str_index..) |c, i| {
+                        if (self.editor.matches_opening_delimiter(cvi.c, c)) {
+                            if (stack_count == 1) {
+                                const vert_index = charIdxToVertexIdx.items[i];
+                                const tl: *const Vertex = &self.vertices.items[vert_index];
+                                const br: *const Vertex = &self.vertices.items[vert_index + 4];
+                                const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x, br.pos.x, true);
+                                try self.vertices.appendSlice(alloc, &border_cursor);
+                                break;
+                            }
+                            stack_count -= 1;
+                        } else if (c == cvi.c) {
+                            stack_count += 1;
+                        }
+                    }
+                } else {
+                    var i: i64 = @intCast(cvi.str_index);
+                    var stack_count: u32 = 0;
+                    while (i >= 0) : (i -= 1) {
+                        const c = str[@intCast(i)];
+                        if (self.editor.matches_closing_delimiter(cvi.c, c)) {
+                            if (stack_count == 1) {
+                                const vert_index = charIdxToVertexIdx.items[@intCast(i)];
+                                const tl: *const Vertex = &self.vertices.items[vert_index];
+                                const br: *const Vertex = &self.vertices.items[vert_index + 4];
+                                const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
+                                try self.vertices.appendSlice(alloc, &border_cursor);
+                                break;
+                            }
+                            stack_count -= 1;
+                        } else if (c == cvi.c) {
+                            stack_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+        @memcpy(self.vertices.items[0..6], cursor_vertices[0..6]);
+
+        _ = frame_arena.reset(.retain_capacity);
+    }
+
+    pub fn build_line_numbers_geometry(
+        self: *Self,
+        alloc: Allocator,
+        frame_arena: *ArenaAllocator,
+        screenx: f32,
+        screeny: f32,
+        line_nb_col_width: f32,
+    ) !void {
+        var pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
+
+        const start_end = self.find_start_end_lines(screeny);
+        const offset: f32 = @floatFromInt(start_end.start);
+        _ = offset;
+
+        _ = screenx;
+        const line_count = self.editor.rope.nodes.len;
+        _ = line_count;
+        const text_attributes = self.text_attributed_string_dict(.Right);
+        defer text_attributes.msgSend(void, objc.sel("release"), .{});
+
+        const starting_x: f32 = 0.0 + self.atlas.max_adv_before_ligatures * 0.5;
+        var starting_y: f32 = start_end.start_y;
+
+        const atlas_w = @as(f32, @floatFromInt(self.atlas.width));
+        const atlas_h = @as(f32, @floatFromInt(self.atlas.height));
+
+        const p = self.atlas.max_adv_before_ligatures * 0.5;
+
+        var number_buf = [_]u8{0} ** 16;
+
+        var i: usize = start_end.start;
+        while (i < start_end.end) : (i += 1) {
+            defer {
+                starting_y -= self.atlas.descent + self.atlas.ascent;
+            }
+            var on_current_line = false;
+            const num = num: {
+                if (i == self.editor.cursor.line) {
+                    on_current_line = true;
+                    break :num @as(u32, @intCast(i));
+                }
+
+                break :num @as(u32, @intCast(std.math.absInt(@as(i64, @intCast(self.editor.cursor.line)) - @as(i64, @intCast(i))) catch @panic("oops")));
+            };
+            const digit_count = digits(num);
+            const str = strutil.number_to_str(num, digit_count, &number_buf);
+            const nstring = metal.NSString.new_with_bytes_no_copy(str, .ascii);
+            defer nstring.autorelease();
+            const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
+            defer attributed_string.autorelease();
+
+            const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
+            defer objc.Object.fromId(ctline).msgSend(void, objc.sel("autorelease"), .{});
+
+            const runs = ct.CTLineGetGlyphRuns(ctline);
+            const run_count = ct.CFArrayGetCount(runs);
+            std.debug.assert(run_count <= 1);
+            if (run_count == 0) {
+                @panic("This is bad");
+            }
+
+            const run = ct.CFArrayGetValueAtIndex(runs, 0);
+            const glyph_count = @as(usize, @intCast(ct.CTRunGetGlyphCount(run)));
+
+            var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), glyph_count);
+            var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), glyph_count);
+            var positions = try ArrayList(metal.CGPoint).initCapacity(frame_arena.allocator(), glyph_count);
+
+            glyphs.items.len = glyph_count;
+            glyph_rects.items.len = glyph_count;
+            positions.items.len = glyph_count;
+
+            ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
+            ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
+            self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
+            if (glyphs.items.len != str.len) {
+                @panic("Houston we have a problem");
+            }
+
+            const run_width: metal.CGFloat = run_width: {
+                if (glyph_rects.items.len == 0) continue;
+
+                const pos: metal.CGPoint = positions.items[glyph_rects.items.len - 1];
+                const glyph_info: *const Glyph = self.atlas.lookup(glyphs.items[glyph_rects.items.len - 1]);
+
+                break :run_width pos.x + if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance;
+            };
+
+            const origin_adjust = (line_nb_col_width - p * 2.0) - run_width;
+
+            var j: usize = 0;
+            while (j < glyphs.items.len) : (j += 1) {
+                const glyph = glyphs.items[j];
+                const glyph_info = self.atlas.lookup(glyph);
+                const rect: metal.CGRect = glyph_rects.items[j];
+
+                // Align text position to the right
+                var pos = positions.items[j];
+                pos.x += origin_adjust;
+
+                const color = if (on_current_line) math.hex4("#7279a1") else math.hex4("#353a52");
+
+                const vertices = Vertex.square_from_glyph(
+                    &rect,
+                    &pos,
+                    glyph_info,
+                    color,
+                    starting_x,
+                    starting_y,
+                    atlas_w,
+                    atlas_h,
+                );
+
+                try self.vertices.appendSlice(alloc, &vertices);
+            }
+        }
+    }
+
+    pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+        _ = screenx;
+        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
+        var bg = math.hex4("#b4f9f8");
+        bg.w = 0.2;
+        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
+        const color = bg;
+        const selection = self.editor.selection orelse return;
+
+        var y: f32 = screeny - @as(f32, @floatFromInt(self.atlas.max_glyph_height));
+        const starting_x: f32 = text_start_x;
+        var x: f32 = starting_x;
+        var text = text_;
+
+        var i: u32 = 0;
+        var line_state = false;
+        var yy: f32 = 0.0;
+        var l: f32 = 0.0;
+        var r: f32 = 0.0;
+        for (text) |char| {
+            defer i += 1;
+            if (i >= selection.end) break;
+            const glyph = self.atlas.lookup_char(char);
+
+            if (i < selection.start) {
+                if (char == 9) {
+                    x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                } else if (strutil.is_newline(char)) {
+                    x = starting_x;
+                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                    y -= self.atlas.descent + self.atlas.ascent;
+                } else {
+                    x += glyph.advance;
+                }
+                continue;
+            }
+
+            if (!line_state) {
+                yy = y;
+                l = x;
+                // r = x + @intToFloat(f32, self.atlas.max_glyph_width);
+                r = x + glyph.advance;
+                line_state = true;
+            } else {
+                r += glyph.advance;
+            }
+
+            if (char == 9) {
+                x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+            } else if (strutil.is_newline(char)) {
+                x = starting_x;
+                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
+                y -= self.atlas.descent + self.atlas.ascent;
+            } else {
+                x += glyph.advance;
+            }
+
+            // Push vertices if end of line or entire selection
+            if (strutil.is_newline(char) or i == selection.end -| 1) {
+                line_state = false;
+
+                try self.vertices.appendSlice(alloc, &Vertex.square(.{
+                    .t = yy + self.atlas.ascent,
+                    .b = yy - self.atlas.descent,
+                    .l = l,
+                    .r = r,
+                }, .{
+                    .t = self.atlas.cursor_ty,
+                    .b = self.atlas.cursor_ty - self.atlas.cursor_h,
+                    .l = self.atlas.cursor_tx,
+                    .r = self.atlas.cursor_tx + self.atlas.cursor_w,
+                }, color));
+            }
+        }
+    }
+
+    pub fn draw(self: *Self, view: metal.MTKView) void {
+        var pool = objc.AutoreleasePool.init();
+        defer pool.deinit();
+        const command_buffer = self.queue.command_buffer();
+        // for some reason this causes crash
+        // defer command_buffer.autorelease();
+
+        const render_pass_descriptor_id = view.obj.getProperty(objc.c.id, "currentRenderPassDescriptor");
+        const drawable_id = view.obj.getProperty(objc.c.id, "currentDrawable");
+        if (render_pass_descriptor_id == 0 or drawable_id == 0) return;
+
+        const render_pass_desc = objc.Object.fromId(render_pass_descriptor_id);
+        const drawable = objc.Object.fromId(drawable_id);
+
+        const attachments = render_pass_desc.getProperty(objc.Object, "colorAttachments");
+        const color_attachment_desc = attachments.msgSend(objc.Object, objc.sel("objectAtIndexedSubscript:"), .{@as(c_ulong, 0)});
+        color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.clear);
+        const bg = math.hex4("#1a1b26");
+        color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
+
+        const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // for some reason this causes crash
+        // defer command_encoder.autorelease();
+        const drawable_size = view.drawable_size();
+        command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
+
+        var model_matrix = math.Float4x4.scale_by(1.0);
+        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = -1.5 });
+        // var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = 0.0, .y = 0.0, .z = -1.5 });
+        const model_view_matrix = view_matrix.mul(&model_matrix);
+        const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
+        const uniforms = Uniforms{
+            .model_view_matrix = model_view_matrix,
+            .projection_matrix = projection_matrix,
+        };
+
+        command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&uniforms))[0..@sizeOf(Uniforms)], 1);
+        command_encoder.set_render_pipeline_state(self.pipeline);
+
+        command_encoder.set_vertex_buffer(self.vertex_buffer, 0, 0);
+
+        command_encoder.set_fragment_texture(self.texture, 0);
+        command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
+        command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
+        command_encoder.end_encoding();
+
+        command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
+        command_buffer.obj.msgSend(void, objc.sel("commit"), .{});
+
+        _ = self.frame_arena.reset(.retain_capacity);
+    }
+
+    pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
+        const key = Event.Key.from_nsevent(event) orelse return;
+        try self.editor.keydown(key);
+
+        try self.update_if_needed(alloc);
+    }
+
+    pub fn scroll(self: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
+        _ = dx;
+        if (phase == .Began) {
+            self.is_scrolling = true;
+        } else if (phase == .Cancelled or phase == .Ended) {
+            self.is_scrolling = false;
+        }
+        self.ty = self.ty + @as(f32, @floatCast(dy));
+        self.editor.draw_text = true;
+        self.update_if_needed(std.heap.c_allocator) catch @panic("test");
+        // const vertical = std.math.fabs(dy) > std.math.fabs(dx);
+        // if (vertical) {
+        //     self.ty = @min(self.text_height, @max(0.0, self.ty + @as(f32, @floatCast(dy))));
+        // } else {
+        //     self.tx = @min(self.text_width, @max(0.0, self.tx + @as(f32, @floatCast(dx))));
+        // }
+    }
+
+    pub fn build_text_geometry_old(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
 
@@ -560,65 +1093,89 @@ const Renderer = struct {
         _ = frame_arena.reset(.retain_capacity);
     }
 
-    pub fn build_line_numbers_geometry(
-        self: *Self,
-        alloc: Allocator,
-        frame_arena: *ArenaAllocator,
-        screenx: f32,
-        screeny: f32,
-        line_nb_col_width: f32,
-    ) !void {
+    // experiment gone wrong
+    pub fn build_text_geometry_ctframe(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+        _ = screeny;
+        _ = screenx;
+        self.vertices.clearRetainingCapacity();
+        const initial_x: f32 = text_start_x;
+        const starting_x: f32 = initial_x;
+
+        var charIdxToVertexIdx = try ArrayList(u32).initCapacity(frame_arena.allocator(), str.len);
+        charIdxToVertexIdx.items.len = str.len;
+        for (charIdxToVertexIdx.items[0..charIdxToVertexIdx.items.len]) |*b| b.* = std.math.maxInt(u32);
+
+        var cursor_vertices: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
+        _ = cursor_vertices;
+        // The index of the vertices where the cursor is
+        var cursor_vert_index: ?struct { str_index: u32, index: u32, c: u8, y: f32, xx: f32, width: f32 } = null;
+        _ = cursor_vert_index;
+
+        const atlas_w: f32 = @floatFromInt(self.atlas.width);
+        const atlas_h: f32 = @floatFromInt(self.atlas.height);
+
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
 
-        _ = screenx;
-        const line_count = self.editor.rope.nodes.len;
-        const text_attributes = self.text_attributed_string_dict(.Right);
-        defer text_attributes.msgSend(void, objc.sel("release"), .{});
+        const text_attributes = self.text_attributed_string_dict(.Left);
+        defer text_attributes.msgSend(void, objc.sel("autorelease"), .{});
 
-        const starting_x: f32 = 0.0 + self.atlas.max_adv_before_ligatures * 0.5;
-        var starting_y: f32 = screeny - @as(f32, @floatFromInt(self.atlas.max_glyph_height));
+        const nstring = metal.NSString.new_with_bytes_no_copy(str, .ascii);
+        defer nstring.autorelease();
+        // TODO: Same as above
+        const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
+        defer attributed_string.autorelease();
 
-        const atlas_w = @as(f32, @floatFromInt(self.atlas.width));
-        const atlas_h = @as(f32, @floatFromInt(self.atlas.height));
+        const framesetter = ct.CTFramesetterCreateWithAttributedString(attributed_string.obj.value);
+        defer objc.Object.fromId(framesetter).msgSend(void, objc.sel("autorelease"), .{});
 
-        const p = self.atlas.max_adv_before_ligatures * 0.5;
+        const path_rect: metal.CGRect = .{
+            .size = self.screen_size,
+            .origin = .{ .x = -self.tx, .y = self.ty },
+        };
 
-        var number_buf = [_]u8{0} ** 16;
+        const path = ct.CGPathCreateWithRect(path_rect, null);
+        defer objc.Object.fromId(path).msgSend(void, objc.sel("autorelease"), .{});
 
-        var i: usize = 0;
-        while (i < line_count) : (i += 1) {
+        const frame = ct.CTFramesetterCreateFrame(framesetter, .{ .location = 0, .length = 0 }, path, 0);
+        defer objc.Object.fromId(frame).msgSend(void, objc.sel("autorelease"), .{});
+
+        const lines = ct.CTFrameGetLines(frame);
+        const lines_count = ct.CFArrayGetCount(lines);
+        print("CoreText line count: {d}\n", .{lines_count});
+        print("Our line count: {d}\n", .{self.editor.rope.nodes.len});
+        var line_origins = try frame_arena.allocator().alloc(metal.CGPoint, @intCast(lines_count));
+        ct.CTFrameGetLineOrigins(frame, .{ .location = 0, .length = 0 }, line_origins.ptr);
+
+        var cursor_line: u32 = 0;
+        var cursor_col: u32 = 0;
+        var index: u32 = 0;
+        var text_max_width: f32 = 0.0;
+        var text_max_height: f32 = 0.0;
+        var line_node = self.editor.rope.nodes.first;
+        while (cursor_line < @as(u32, @intCast(lines_count))) : (cursor_line += 1) {
             defer {
-                starting_y -= self.atlas.descent + self.atlas.ascent;
+                line_node = line_node.?.next;
+                cursor_col = 0;
             }
-            var on_current_line = false;
-            const num = num: {
-                if (i == self.editor.cursor.line) {
-                    on_current_line = true;
-                    break :num @as(u32, @intCast(i));
-                }
-
-                break :num @as(u32, @intCast(std.math.absInt(@as(i64, @intCast(self.editor.cursor.line)) - @as(i64, @intCast(i))) catch @panic("oops")));
-            };
-            const digit_count = digits(num);
-            const str = strutil.number_to_str(num, digit_count, &number_buf);
-            const nstring = metal.NSString.new_with_bytes_no_copy(str, .ascii);
-            defer nstring.autorelease();
-            const attributed_string = metal.NSAttributedString.new_with_string(nstring, text_attributes);
-            defer attributed_string.autorelease();
-
-            const ctline = ct.CTLineCreateWithAttributedString(attributed_string.obj.value);
-            defer objc.Object.fromId(ctline).msgSend(void, objc.sel("autorelease"), .{});
+            const line = line_node.?.data.items;
+            var last_x: f32 = initial_x;
+            const ctline: ct.CTLineRef = ct.CFArrayGetValueAtIndex(lines, @intCast(cursor_line));
+            const line_origin = line_origins[cursor_line];
+            const starting_y: f32 = @floatCast(line_origin.y);
 
             const runs = ct.CTLineGetGlyphRuns(ctline);
             const run_count = ct.CFArrayGetCount(runs);
             std.debug.assert(run_count <= 1);
+            print("RUN COUNT: {d}\n", .{run_count});
             if (run_count == 0) {
                 @panic("This is bad");
             }
 
             const run = ct.CFArrayGetValueAtIndex(runs, 0);
+            print("GLYHP COUNT1: {d}\n", .{ct.CTRunGetGlyphCount(run)});
             const glyph_count = @as(usize, @intCast(ct.CTRunGetGlyphCount(run)));
+            print("GLYHP COUNT2: {d}\n", .{glyph_count});
 
             var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), glyph_count);
             var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), glyph_count);
@@ -631,32 +1188,27 @@ const Renderer = struct {
             ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
             ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
             self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
-            if (glyphs.items.len != str.len) {
+            if (glyphs.items.len != line.len) {
                 @panic("Houston we have a problem");
             }
 
-            const run_width: metal.CGFloat = run_width: {
-                if (glyph_rects.items.len == 0) continue;
+            print("ON LINE: {d}\n", .{cursor_line});
+            var i: usize = 0;
+            while (i < glyphs.items.len) : (i += 1) {
+                print("PROCESSING: index={d} line={d} col={d} char={c}\n", .{ index, cursor_line, cursor_col, line[i] });
+                defer {
+                    cursor_col += 1;
+                    index += 1;
+                }
 
-                const pos: metal.CGPoint = positions.items[glyph_rects.items.len - 1];
-                const glyph_info: *const Glyph = self.atlas.lookup(glyphs.items[glyph_rects.items.len - 1]);
+                const has_cursor = cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col;
+                _ = has_cursor;
+                const color = TEXT_COLOR;
 
-                break :run_width pos.x + if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance;
-            };
-
-            const origin_adjust = (line_nb_col_width - p * 2.0) - run_width;
-
-            var j: usize = 0;
-            while (j < glyphs.items.len) : (j += 1) {
-                const glyph = glyphs.items[j];
+                const glyph = glyphs.items[i];
                 const glyph_info = self.atlas.lookup(glyph);
-                const rect: metal.CGRect = glyph_rects.items[j];
-
-                // Align text position to the right
-                var pos = positions.items[j];
-                pos.x += origin_adjust;
-
-                const color = if (on_current_line) math.hex4("#7279a1") else math.hex4("#353a52");
+                const rect = glyph_rects.items[i];
+                const pos = positions.items[i];
 
                 const vertices = Vertex.square_from_glyph(
                     &rect,
@@ -668,164 +1220,42 @@ const Renderer = struct {
                     atlas_w,
                     atlas_h,
                 );
+                const l = vertices[0].pos.x;
 
+                charIdxToVertexIdx.items[index] = @as(u32, @intCast(self.vertices.items.len));
+                // if (has_cursor) {
+                //     cursor_vertices = self.build_cursor_geometry(starting_y + @as(f32, @floatCast(pos.y)), starting_x + @as(f32, @floatCast(pos.x)), if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance, false);
+                //     // TODO: This will break if there is no 1->1 mapping of character to glyphs (some ligatures)
+                //     cursor_vert_index = .{
+                //         .str_index = index,
+                //         .index = @as(u32, @intCast(self.vertices.items.len)),
+                //         .c = line[i],
+                //         .y = starting_y + @as(f32, @floatCast(pos.y)),
+                //         .xx = starting_x + @as(f32, @floatCast(pos.x)),
+                //         .width = if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance,
+                //     };
+                // }
                 try self.vertices.appendSlice(alloc, &vertices);
+                last_x = l + glyph_info.advance;
+                text_max_width = @max(text_max_width, last_x + @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)));
+                text_max_height = @max(text_max_height, @as(f32, @floatCast(@fabs(line_origin.y - (self.atlas.ascent + self.atlas.descent)))));
             }
         }
-    }
 
-    pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
-        _ = screenx;
-        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
-        var bg = math.hex4("#b4f9f8");
-        bg.w = 0.2;
-        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
-        const color = bg;
-        const selection = self.editor.selection orelse return;
+        self.text_width = text_max_width;
+        self.text_height = text_max_height;
 
-        var y: f32 = screeny - @as(f32, @floatFromInt(self.atlas.max_glyph_height));
-        const starting_x: f32 = text_start_x;
-        var x: f32 = starting_x;
-        var text = text_;
+        // if (self.highlight) |*highlight| {
+        //     try highlight.highlight(str, charIdxToVertexIdx.items, self.vertices.items);
+        // }
 
-        var i: u32 = 0;
-        var line_state = false;
-        var yy: f32 = 0.0;
-        var l: f32 = 0.0;
-        var r: f32 = 0.0;
-        for (text) |char| {
-            defer i += 1;
-            if (i >= selection.end) break;
-            const glyph = self.atlas.lookup_char(char);
-
-            if (i < selection.start) {
-                if (char == 9) {
-                    x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
-                } else if (strutil.is_newline(char)) {
-                    x = starting_x;
-                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                    y -= self.atlas.descent + self.atlas.ascent;
-                } else {
-                    x += glyph.advance;
-                }
-                continue;
-            }
-
-            if (!line_state) {
-                yy = y;
-                l = x;
-                // r = x + @intToFloat(f32, self.atlas.max_glyph_width);
-                r = x + glyph.advance;
-                line_state = true;
-            } else {
-                r += glyph.advance;
-            }
-
-            if (char == 9) {
-                x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
-            } else if (strutil.is_newline(char)) {
-                x = starting_x;
-                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                y -= self.atlas.descent + self.atlas.ascent;
-            } else {
-                x += glyph.advance;
-            }
-
-            // Push vertices if end of line or entire selection
-            if (strutil.is_newline(char) or i == selection.end -| 1) {
-                line_state = false;
-
-                try self.vertices.appendSlice(alloc, &Vertex.square(.{
-                    .t = yy + self.atlas.ascent,
-                    .b = yy - self.atlas.descent,
-                    .l = l,
-                    .r = r,
-                }, .{
-                    .t = self.atlas.cursor_ty,
-                    .b = self.atlas.cursor_ty - self.atlas.cursor_h,
-                    .l = self.atlas.cursor_tx,
-                    .r = self.atlas.cursor_tx + self.atlas.cursor_w,
-                }, color));
-            }
-        }
-    }
-
-    pub fn draw(self: *Self, view: metal.MTKView) void {
-        var pool = objc.AutoreleasePool.init();
-        defer pool.deinit();
-        const command_buffer = self.queue.command_buffer();
-        // for some reason this causes crash
-        // defer command_buffer.autorelease();
-
-        const render_pass_descriptor_id = view.obj.getProperty(objc.c.id, "currentRenderPassDescriptor");
-        const drawable_id = view.obj.getProperty(objc.c.id, "currentDrawable");
-        if (render_pass_descriptor_id == 0 or drawable_id == 0) return;
-
-        const render_pass_desc = objc.Object.fromId(render_pass_descriptor_id);
-        const drawable = objc.Object.fromId(drawable_id);
-
-        const attachments = render_pass_desc.getProperty(objc.Object, "colorAttachments");
-        const color_attachment_desc = attachments.msgSend(objc.Object, objc.sel("objectAtIndexedSubscript:"), .{@as(c_ulong, 0)});
-        color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.clear);
-        const bg = math.hex4("#1a1b26");
-        color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
-
-        const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
-        // for some reason this causes crash
-        // defer command_encoder.autorelease();
-        const drawable_size = view.drawable_size();
-        command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
-
-        var model_matrix = math.Float4x4.scale_by(1.0);
-        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = -1.5 });
-        const model_view_matrix = view_matrix.mul(&model_matrix);
-        const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
-        const uniforms = Uniforms{
-            .model_view_matrix = model_view_matrix,
-            .projection_matrix = projection_matrix,
-        };
-
-        command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&uniforms))[0..@sizeOf(Uniforms)], 1);
-        command_encoder.set_render_pipeline_state(self.pipeline);
-
-        command_encoder.set_vertex_buffer(self.vertex_buffer, 0, 0);
-
-        command_encoder.set_fragment_texture(self.texture, 0);
-        command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
-        command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
-        command_encoder.end_encoding();
-
-        command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
-        command_buffer.obj.msgSend(void, objc.sel("commit"), .{});
-
-        _ = self.frame_arena.reset(.retain_capacity);
-    }
-
-    pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
-        const key = Event.Key.from_nsevent(event) orelse return;
-        try self.editor.keydown(key);
-
-        try self.update_if_needed(alloc);
-    }
-
-    pub fn scroll(self: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
-        if (phase == .Began) {
-            self.is_scrolling = true;
-        } else if (phase == .Cancelled or phase == .Ended) {
-            self.is_scrolling = false;
-        }
-        const vertical = std.math.fabs(dy) > std.math.fabs(dx);
-        if (vertical) {
-            self.ty = @min(self.text_height, @max(0.0, self.ty + @as(f32, @floatCast(dy))));
-        } else {
-            self.tx = @min(self.text_width, @max(0.0, self.tx + @as(f32, @floatCast(dx))));
-        }
+        _ = frame_arena.reset(.retain_capacity);
     }
 };
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 48.0);
+    var atlas = font.Atlas.new(alloc, 32.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
@@ -853,7 +1283,8 @@ export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void
 }
 
 export fn renderer_handle_scroll(renderer: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
-    renderer.scroll(-dx * 10.0, -dy * 10.0, phase);
+    // renderer.scroll(-dx * 10.0, -dy * 10.0, phase);
+    renderer.scroll(-dx * 10.0, -dy, phase);
 }
 
 export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
