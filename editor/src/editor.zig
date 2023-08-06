@@ -15,6 +15,7 @@ const Event = @import("./event.zig");
 const Key = Event.Key;
 
 const Conf = @import("./conf.zig");
+const ts = @import("./treesitter.zig");
 
 const Self = @This();
 
@@ -22,6 +23,7 @@ rope: Rope = Rope{},
 // TODO: also store the node of the current line
 cursor: TextPos = .{ .line = 0, .col = 0 },
 draw_text: bool = false,
+text_dirty: bool = true,
 vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
@@ -402,6 +404,7 @@ pub fn insert(self: *Self, chars: []const u8) !void {
 }
 
 pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_delimiter_indentation: bool, indent_level_: ?IndentLevel) !void {
+    self.text_dirty = true;
     if (comptime fix_delimiter_indentation) {
         const indent_level = indent_level_.?;
         var char_buf = [_]u8{0} ** 256;
@@ -471,7 +474,19 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
         return;
     }
 
+    // const start_byte: u32 = @intCast(self.rope.pos_to_idx(self.cursor) orelse @panic("Woops"));
     const new_cursor = try self.rope.insert_text(cursor, chars);
+    // const edit: ts.Edit = .{
+    //     .start_point = @bitCast(self.cursor),
+    //     .old_end_point = @bitCast(self.cursor),
+    //     .new_end_point = @bitCast(new_cursor),
+
+    //     .start_byte = @intCast(start_byte),
+    //     .old_end_byte = @intCast(start_byte),
+    //     .new_end_byte = @intCast(self.rope.pos_to_idx(new_cursor) orelse @panic("Woops")),
+    // };
+    // _ = edit;
+
     self.cursor = new_cursor;
     self.draw_text = true;
 }
@@ -673,6 +688,7 @@ pub fn backspace(self: *Self) !void {
 
 fn delete_range(self: *Self, range: Selection) !void {
     try self.rope.remove_text(range.start, range.end);
+    self.text_dirty = true;
 }
 
 pub fn delete_line(self: *Self) !void {
@@ -682,6 +698,7 @@ pub fn delete_line(self: *Self) !void {
     }
 
     self.cursor.col = if (self.rope.nodes.last) |last| @min(self.cursor_eol_for_mode(last) -| 1, self.cursor.col) else 0;
+    self.text_dirty = true;
 }
 
 /// Normal mode        -> cursor can only be on the last char

@@ -84,30 +84,52 @@ class EditorViewController: NSViewController {
 
 class CustomMTKView: MTKView {
     var renderer: Renderer?
+    private var accumulatedDeltaY: CGFloat = 0.0
     
     var isScrolling = false
     
+    /*
     override func scrollWheel(with event: NSEvent) {
+//        return;
         guard let renderer = self.renderer else {
             return
         }
-//        switch (event.phase) {
-//        case NSEvent.Phase.began:
-//            print("NSEventPhaseBegan");
-//        case NSEvent.Phase.cancelled:
-//            print("NSEventPhaseCancelled");
-//        case NSEvent.Phase.changed:
-//            print("NSEventPhaseChanged");
-//        case NSEvent.Phase.ended:
-//            print("NSEventPhaseEnded");
-//        case NSEvent.Phase.mayBegin:
-//            print("NSEventPhaseMayBegin");
-//        case NSEvent.Phase.stationary:
-//            print("NSEventPhaseStationary");
-//        default:
-//            print("NSEventPhaseNone");
-//        }
+        print("SCROLL!");
+        //        switch (event.phase) {
+        //        case NSEvent.Phase.began:
+        //            print("NSEventPhaseBegan");
+        //        case NSEvent.Phase.cancelled:
+        //            print("NSEventPhaseCancelled");
+        //        case NSEvent.Phase.changed:
+        //            print("NSEventPhaseChanged");
+        //        case NSEvent.Phase.ended:
+        //            print("NSEventPhaseEnded");
+        //        case NSEvent.Phase.mayBegin:
+        //            print("NSEventPhaseMayBegin");
+        //        case NSEvent.Phase.stationary:
+        //            print("NSEventPhaseStationary");
+        //        default:
+        //            print("NSEventPhaseNone");
+        //        }
         renderer_handle_scroll(renderer, event.deltaX, event.deltaY, event.phase)
+    }
+     */
+    
+     override func scrollWheel(with event: NSEvent) {
+     //        super.scrollWheel(with: event)
+     accumulatedDeltaY += event.scrollingDeltaY
+     }
+    
+    func handleAccumulatedScroll() {
+        if accumulatedDeltaY != 0 {
+            // Process the accumulated scroll delta here
+            if let renderer = self.renderer {
+                renderer_handle_scroll(renderer, 0.0, accumulatedDeltaY, .cancelled);
+            }
+            
+            // Reset the accumulated delta after processing
+            accumulatedDeltaY = 0
+        }
     }
     
     override func keyDown(with event: NSEvent) {
@@ -142,8 +164,8 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)
         CGImageDestinationAddImage(destination!, image, nil)
         CGImageDestinationFinalize(destination!)
-//        let val = renderer_get_val(self.zig)
-//        print("VAL \(val)")
+        //        let val = renderer_get_val(self.zig)
+        //        print("VAL \(val)")
         
         super.init()
     }
@@ -154,13 +176,33 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
     }
     
     func draw(in view: MTKView) {
+        //        while let event = getNextEvent() {
+        //            handle(event: event)
+        //        }
+        self.mtkView.handleAccumulatedScroll()
+        
         renderer_draw(self.zig, view)
     }
     
-//    func lmao(command: MTLRenderCommandEncoder) {
-//        command.setVertexBytes(<#T##bytes: UnsafeRawPointer##UnsafeRawPointer#>, length: <#T##Int#>, index: <#T##Int#>)
-//    }
-}
+    func getNextEvent() -> NSEvent? {
+        return self.mtkView.window?.nextEvent(matching: .any, until: Date.distantPast, inMode: .default, dequeue: true)
+    }
+    
+    func handle(event: NSEvent) {
+        guard let renderer = self.zig else {
+            return
+        }
+        
+        switch event.type {
+        case .leftMouseDown:
+            break
+        case .scrollWheel:
+            renderer_handle_scroll(renderer, event.deltaX, event.deltaY, event.phase)
+            print("SCROLL! \(event.deltaX) \(event.deltaY)")
+        default:
+            break
+        }
+    }}
 
 extension [CChar] {
     func len() -> Int {

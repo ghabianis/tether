@@ -39,7 +39,7 @@ pub const Language = struct {
     }
 };
 
-pub const Tree = struct {
+pub const Tree = packed struct {
     ptr: *c.TSTree,
 
     pub fn from_ptr(p: *c.TSTree) Tree {
@@ -50,3 +50,5 @@ pub const Tree = struct {
         c.ts_tree_delete(self.ptr);
     }
 };
+
+pub const Edit = c.TSInputEdit;

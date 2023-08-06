@@ -1,10 +1,17 @@
 #+title: Todo
 
-* TODO Now [2/5]
+* TODO Now [0/5]
 ** TODO optimize treesitter highlighting
 right now we make treesitter parse new tree from scratch every time we rebuild geometry, this is obviously really bad.
 
 we can make the treesitter tree be an object we maintain in the Editor or even Rope struct, so we don't have to rebuild it every frame.
+
+probably best in Editor
+
+need to wrap all functions that edit/delete text to convert into TSInputEdit
+
+UPDATE LOOK AT THIS ZACK: probably is just easier to run
+*** TODO Create TSInputEdit
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::

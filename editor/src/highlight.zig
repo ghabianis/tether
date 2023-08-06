@@ -1,6 +1,7 @@
 const std = @import("std");
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayListUnmanaged;
 
 const ts = @import("./treesitter.zig");
 const c = ts.c;
@@ -94,12 +95,126 @@ const CaptureConfig = struct {
 const Highlight = @This();
 const HashMap = std.AutoHashMap;
 
+pub const HighlightBuf = struct {
+    const HighlightCapture = struct {
+        start: u32,
+        end: u32,
+        color: math.Float4,
+        const ctx = void;
+
+        pub fn new(start: u32, end: u32, color: math.Float4) HighlightCapture {
+            std.debug.assert(start < end);
+            return .{
+                .start = start,
+                .end = end,
+                .color = color,
+            };
+        }
+
+        pub fn less_than_ctx(asdasd: @TypeOf({}), self: HighlightCapture, other: HighlightCapture) bool {
+            _ = asdasd;
+            return self.less_than(other);
+        }
+
+        pub fn less_than(self: HighlightCapture, other: HighlightCapture) bool {
+            if (self.start < other.start) return true;
+            if (self.start > other.start) return false;
+            if (self.end < other.end) return true;
+            if (self.end > other.end) return false;
+            return false;
+        }
+
+        /// Invariants:
+        /// self.start < self.end
+        /// self.start >= window_start_byte
+        pub fn cpy_to_vertices(self: *const HighlightCapture, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32) bool {
+            if (self.end <= window_start_byte) return false;
+            if (self.start >= window_end_byte) return false;
+            for (self.start..self.end) |i| {
+                if (i < window_start_byte) continue;
+                if (i >= window_end_byte) break;
+                const vertIndex = (i - window_start_byte) * 6 + 6;
+                const color = self.color;
+                vertices[vertIndex].color = color;
+                vertices[vertIndex + 1].color = color;
+                vertices[vertIndex + 2].color = color;
+                vertices[vertIndex + 3].color = color;
+                vertices[vertIndex + 4].color = color;
+                vertices[vertIndex + 5].color = color;
+            }
+            return true;
+        }
+    };
+
+    list: ArrayList(HighlightCapture) = .{},
+
+    fn find_starting_insert_idx(self: *const HighlightBuf, start: u32) ?u32 {
+        var size: usize = self.list.items.len;
+        var left: usize = 0;
+        var right: usize = size;
+
+        while (left < right) {
+            const mid = left + size / 2;
+            const cap: HighlightCapture = self.list.items[mid];
+            if (cap.start == start) {
+                // Look left if there are anymore
+                var cur: i64 = @intCast(mid -| 1);
+                var prev: i64 = @intCast(mid);
+                while (cur >= 0) {
+                    if (self.list.items[@intCast(cur)].start != start) return @intCast(prev);
+                    prev = cur;
+                    cur -= 1;
+                }
+                return 0;
+            } else if (cap.start > start) {
+                right = mid;
+            } else {
+                left = mid + 1;
+            }
+            size = right - left;
+        }
+
+        return null;
+    }
+
+    pub fn cpy_to_vertices(self: *const HighlightBuf, vertices: []math.Vertex, start_byte: u32, end_byte: u32) void {
+        // const start_idx = self.find_starting_insert_idx(start_byte) orelse @panic("WTF");
+        // for (self.list.items[start_idx..], start_idx..self.list.items.len) |*h, i| {
+        //     _ = i;
+        //     if (!h.cpy_to_vertices(vertices, start_byte, end_byte)) {
+        //         return;
+        //     }
+        // }
+        for (self.list.items) |*h| {
+            _ = h.cpy_to_vertices(vertices, start_byte, end_byte);
+            // if (!h.cpy_to_vertices(vertices, start_byte, end_byte)) {
+            //     return;
+            // }
+        }
+    }
+
+    fn print_items(self: *const HighlightBuf) void {
+        print("HighlightBuf (\n", .{});
+        for (self.list.items) |*h| {
+            print("  HighlightCapture [\n", .{});
+            print("    start: {},\n", .{h.start});
+            print("    end: {},\n", .{h.end});
+            print("    color: {},\n", .{h.color});
+            print("  ],\n", .{});
+        }
+        print(")\n", .{});
+    }
+};
+
 parser: *c.TSParser,
 lang: *const ts.Language,
 query: *c.TSQuery,
 theme: []const ?math.Float4,
 /// tree-sitter value id -> regex
 regexes: HashMap(u32, r.regex_t),
+tree: ?*c.TSTree = null,
+
+buf: HighlightBuf = .{},
 
 /// Adapted with minor changes from:
 /// https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
@@ -231,18 +346,41 @@ pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const Capt
     @panic("Query error!");
 }
 
-pub fn highlight(self: *Highlight, str: []const u8, charIdxToVertexIdx: []const u32, vertices: []math.Vertex) !void {
+pub fn update_tree(self: *Highlight, str: []const u8) void {
+    if (self.tree) |ts_tree| {
+        defer c.ts_tree_delete(ts_tree);
+    }
+    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
+    self.tree = tree;
+}
+
+pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
+    defer c.ts_parser_reset(self.parser);
     if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
         @panic("Failed to set parser!");
     }
-    var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
-    defer c.ts_tree_delete(tree);
+    var tree = tree: {
+        if (self.tree) |ts_tree| {
+            break :tree ts_tree;
+        }
+        var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
+        break :tree tree;
+    };
+
     var root_node = c.ts_tree_root_node(tree);
     var query_cursor = c.ts_query_cursor_new();
     defer c.ts_query_cursor_delete(query_cursor);
     var match: c.TSQueryMatch = undefined;
 
     c.ts_query_cursor_exec(query_cursor, self.query, root_node);
+
+    var highlight_buf = &self.buf;
+    if (!text_dirty) {
+        // highlight_buf.print_items();
+        highlight_buf.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
+        return;
+    }
+    highlight_buf.list.clearRetainingCapacity();
 
     while (c.ts_query_cursor_next_match(query_cursor, &match)) {
         var last_match: ?u32 = null;
@@ -264,29 +402,16 @@ pub fn highlight(self: *Highlight, str: []const u8, charIdxToVertexIdx: []const 
 
             const start = c.ts_node_start_byte(capture.node);
             const end = c.ts_node_end_byte(capture.node);
+            // if ((start_byte < start and end_byte <= start) or start_byte >= end) continue;
+            // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
+            const color = self.theme[capture.index] orelse continue;
 
-            // print("THE FUCKING NODE: {s}\n", .{str[start..end]});
-
-            var j: u32 = start;
-            while (j < end) : (j += 1) {
-                const vertIndex = charIdxToVertexIdx[j];
-                if (vertIndex == std.math.maxInt(u32)) {
-                    continue;
-                }
-                // print("AT: {c} {d}\n", .{ str[j], j - start });
-                if (self.theme[capture.index]) |color| {
-                    vertices[vertIndex].color = color;
-                    vertices[vertIndex + 1].color = color;
-                    vertices[vertIndex + 2].color = color;
-                    vertices[vertIndex + 3].color = color;
-                    vertices[vertIndex + 4].color = color;
-                    vertices[vertIndex + 5].color = color;
-                }
-            }
+            const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);
+            _ = the_highlight.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
+            try highlight_buf.list.append(alloc, the_highlight);
+            // std.sort.insertion(HighlightBuf.HighlightCapture, highlight_buf.list.items, {}, HighlightBuf.HighlightCapture.less_than_ctx);
         }
     }
-
-    c.ts_parser_reset(self.parser);
 }
 
 fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture, src: []const u8, match: *c.TSQueryMatch) bool {

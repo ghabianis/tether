@@ -68,8 +68,8 @@ void SetTextMatrix(CGContextRef ctx, CGAffineTransform t) {
     CGContextSetTextMatrix(ctx, t);
 }
 
-void RandomTest(CFAttributedStringRef str) {
-//    CTFrameGetLines(jdlkf)
+void RandomTest(CFAttributedStringRef str, NSWindow *window) {
+    //    CTFrameGetLines(jdlkf)
     CTFramesetterRef frame_setter = CTFramesetterCreateWithAttributedString(str);
 //    CTFrameRef frame = CTFramesetterCreateFrame(frame_setter, CFRangeMake(0, 0), <#CGPathRef  _Nonnull path#>, <#CFDictionaryRef  _Nullable frameAttributes#>);
     

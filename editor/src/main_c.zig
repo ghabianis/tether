@@ -128,7 +128,7 @@ const Renderer = struct {
     }
 
     fn update_if_needed(self: *Self, alloc: Allocator) !void {
-        if (self.editor.draw_text) {
+        if (self.editor.draw_text or self.editor.text_dirty) {
             try self.update(alloc);
         }
         // self.adjust_scroll_to_cursor(@as(f32, @floatCast(self.screen_size.height)));
@@ -166,6 +166,13 @@ const Renderer = struct {
         defer {
             if (str.len > 0) {
                 std.heap.c_allocator.free(str);
+            }
+            self.editor.text_dirty = false;
+        }
+
+        if (self.editor.text_dirty) {
+            if (self.highlight) |*h| {
+                h.update_tree(str);
             }
         }
 
@@ -349,7 +356,7 @@ const Renderer = struct {
     }
 
     /// TODO: this can be made faster, just do multiplication bruh
-    fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32, end_y: f32 } {
+    fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32 } {
         const ascent: f32 = @floatCast(self.atlas.ascent);
         const descent: f32 = @floatCast(self.atlas.descent);
 
@@ -357,49 +364,55 @@ const Renderer = struct {
         const top = screeny;
         const bot = 0.0;
 
-        // var y: f32 = top + self.ty - @as(f32, @floatFromInt(self.atlas.max_glyph_height));
-        var y: f32 = top + self.ty - ascent;
+        const initial_y: f32 = top + self.ty - ascent;
+        var y: f32 = initial_y;
+
+        if (lines_len == 1) {
+            return .{
+                .start = 0,
+                .end = 1,
+                .start_y = y - self.ty,
+            };
+        }
 
         var i: u32 = 0;
         var start_y: f32 = 0.0;
         const start: u32 = start: {
-            while (i < lines_len) : (i += 1) {
+            while (i < lines_len) {
                 if (y - descent <= top) {
                     start_y = y - self.ty;
                     break :start @intCast(i);
                 }
                 y -= descent + ascent;
+                i += 1;
             }
-            @panic("SHIT");
+            start_y = initial_y - self.ty;
+            break :start @intCast(0);
         };
 
-        var end_y: f32 = 0.0;
         const end: u32 = end: {
-            while (i < lines_len) : (i += 1) {
-                if (y + ascent < bot) {
-                    end_y = y;
+            while (i < lines_len) {
+                if (y + ascent <= bot) {
                     break :end @intCast(i);
                 }
                 y -= descent + ascent;
+                i += 1;
             }
-            @panic("SHIT");
+            break :end @intCast(lines_len + 1);
         };
 
-        return .{ .start = start, .end = end, .start_y = start_y, .end_y = end_y };
+        return .{ .start = start, .end = end, .start_y = start_y };
     }
 
     pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+        print("text dirty: {}\n", .{self.editor.text_dirty});
+        _ = screenx;
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
 
         const start_end = self.find_start_end_lines(screeny);
         const offset: f32 = @floatFromInt(start_end.start);
         _ = offset;
-
-        _ = screenx;
-        var charIdxToVertexIdx = try ArrayList(u32).initCapacity(frame_arena.allocator(), str.len);
-        charIdxToVertexIdx.items.len = str.len;
-        for (charIdxToVertexIdx.items[0..charIdxToVertexIdx.items.len]) |*b| b.* = std.math.maxInt(u32);
 
         var cursor_vertices: [6]Vertex = [_]Vertex{Vertex.default()} ** 6;
         // The index of the vertices where the cursor is
@@ -424,6 +437,8 @@ const Renderer = struct {
         const starting_line: u32 = start_end.start;
         var iter = self.editor.rope.iter_lines(self.editor.rope.node_at_line(starting_line) orelse return);
 
+        var start_byte: u32 = @intCast(self.editor.rope.pos_to_idx(.{ .line = starting_line, .col = 0 }) orelse 0);
+        var end_byte: u32 = 0;
         var cursor_line: u32 = starting_line;
         var cursor_col: u32 = 0;
         var index: u32 = 0;
@@ -431,7 +446,7 @@ const Renderer = struct {
             if (cursor_line > start_end.end) {
                 break;
             }
-            print("end {d} LINE: {d} Y: {d} Height: {d} cond: {}\n", .{ start_end.end, cursor_line, starting_y, self.screen_size.height, starting_y + self.atlas.ascent < 0.0 + self.ty });
+            // print("end {d} LINE: {d} Y: {d} Height: {d} cond: {}\n", .{ start_end.end, cursor_line, starting_y, self.screen_size.height, starting_y + self.atlas.ascent < 0.0 + self.ty });
 
             // empty line
             if (the_line.len == 0) {
@@ -445,8 +460,10 @@ const Renderer = struct {
             }
 
             const has_newline = strutil.is_newline(the_line[the_line.len - 1]);
+            _ = has_newline;
             // remove \n because it has no corresponding glyph
-            var line = if (has_newline) the_line[0 .. the_line.len - 1] else the_line;
+            // var line = if (has_newline) the_line[0 .. the_line.len - 1] else the_line;
+            var line = the_line;
 
             var last_x: f32 = initial_x;
             if (line.len > 0) {
@@ -512,7 +529,6 @@ const Renderer = struct {
                     );
                     const l = vertices[0].pos.x;
 
-                    charIdxToVertexIdx.items[index] = @as(u32, @intCast(self.vertices.items.len));
                     if (has_cursor) {
                         cursor_vertices = self.build_cursor_geometry(starting_y + @as(f32, @floatCast(pos.y)), starting_x + @as(f32, @floatCast(pos.x)), if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance, false);
                         // TODO: This will break if there is no 1->1 mapping of character to glyphs (some ligatures)
@@ -538,20 +554,20 @@ const Renderer = struct {
             starting_y -= self.atlas.descent + self.atlas.ascent;
             cursor_line += 1;
             cursor_col = 0;
-            if (has_newline) {
-                charIdxToVertexIdx.items[index] = @as(u32, @intCast(self.vertices.items.len));
-                try self.vertices.appendSlice(alloc, &[_]Vertex{Vertex.default()} ** 6);
-                index += 1;
-            }
+            // if (has_newline) {
+            // try self.vertices.appendSlice(alloc, &[_]Vertex{Vertex.default()} ** 6);
+            // index += 1;
+            // }
             // _ = frame_arena.reset(.retain_capacity);
         }
+        end_byte = start_byte + index;
 
         self.text_width = text_max_width;
         self.text_height = @fabs(starting_y);
 
-        // if (self.highlight) |*highlight| {
-        //     try highlight.highlight(str, charIdxToVertexIdx.items, self.vertices.items);
-        // }
+        if (self.highlight) |*highlight| {
+            try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty);
+        }
 
         if (cursor_vert_index) |cvi| {
             const vi = cvi.index;
@@ -571,7 +587,7 @@ const Renderer = struct {
                     for (str[cvi.str_index..], cvi.str_index..) |c, i| {
                         if (self.editor.matches_opening_delimiter(cvi.c, c)) {
                             if (stack_count == 1) {
-                                const vert_index = charIdxToVertexIdx.items[i];
+                                const vert_index = i * 6;
                                 const tl: *const Vertex = &self.vertices.items[vert_index];
                                 const br: *const Vertex = &self.vertices.items[vert_index + 4];
                                 const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x, br.pos.x, true);
@@ -590,7 +606,8 @@ const Renderer = struct {
                         const c = str[@intCast(i)];
                         if (self.editor.matches_closing_delimiter(cvi.c, c)) {
                             if (stack_count == 1) {
-                                const vert_index = charIdxToVertexIdx.items[@intCast(i)];
+                                // const vert_index = charIdxToVertexIdx.items[@intCast(i)];
+                                const vert_index: u32 = @intCast(i * 6);
                                 const tl: *const Vertex = &self.vertices.items[vert_index];
                                 const br: *const Vertex = &self.vertices.items[vert_index + 4];
                                 const border_cursor = self.build_cursor_geometry_from_tbrl(tl.pos.y, br.pos.y, tl.pos.x - 1.5, br.pos.x, true);
