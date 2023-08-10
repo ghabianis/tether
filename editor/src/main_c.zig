@@ -1330,7 +1330,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 32.0);
+    var atlas = font.Atlas.new(alloc, 64.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

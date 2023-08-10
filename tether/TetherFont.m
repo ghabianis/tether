@@ -76,6 +76,3 @@ void RandomTest(CFAttributedStringRef str, NSWindow *window) {
     
 }
 
-void Lmao(NSNumber n) {
-    
-}

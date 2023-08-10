@@ -103,7 +103,7 @@ pub const HighlightBuf = struct {
         const ctx = void;
 
         pub fn new(start: u32, end: u32, color: math.Float4) HighlightCapture {
-            std.debug.assert(start < end);
+            std.debug.assert(start <= end);
             return .{
                 .start = start,
                 .end = end,
@@ -404,6 +404,10 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             const end = c.ts_node_end_byte(capture.node);
             // if ((start_byte < start and end_byte <= start) or start_byte >= end) continue;
             // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
+            var the_len: u32 = 0;
+            const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
+            print("FUCK: {s}\n", .{str_ptr[0..the_len]});
+            // print("THE NODE: {d}\n", .{});
             const color = self.theme[capture.index] orelse continue;
 
             const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);

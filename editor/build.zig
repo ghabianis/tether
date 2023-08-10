@@ -149,10 +149,11 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module
     }
 
     // treesitter stuff
-    // _ = treesitter;
     compile.addCSourceFile("src/syntax/tree-sitter-zig/src/parser.c", &.{});
     compile.addCSourceFile("src/syntax/tree-sitter-typescript/typescript/src/parser.c", &.{});
     compile.addCSourceFile("src/syntax/tree-sitter-typescript/typescript/src/scanner.c", &.{});
+    compile.addCSourceFile("src/syntax/tree-sitter-rust/src/parser.c", &.{});
+    compile.addCSourceFile("src/syntax/tree-sitter-rust/src/scanner.c", &.{});
     compile.linkLibrary(treesitter);
     compile.addIncludePath("lib/tree-sitter/lib/include");
     compile.step.dependOn(&treesitter.step);

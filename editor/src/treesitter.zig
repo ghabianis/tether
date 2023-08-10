@@ -3,7 +3,15 @@ pub const c = @cImport({
 });
 
 pub extern "C" fn tree_sitter_zig() *c.TSLanguage;
+pub extern "C" fn tree_sitter_rust() *c.TSLanguage;
 pub extern "C" fn tree_sitter_typescript() *c.TSLanguage;
+
+pub const RUST: Language = Language.comptime_new(
+    tree_sitter_rust, 
+    "./syntax/tree-sitter-rust/queries/highlights.scm", 
+    "./syntax/tree-sitter-rust/queries/highlights.scm", 
+    null
+);
 
 pub const ZIG: Language = Language.comptime_new(
     tree_sitter_zig,
