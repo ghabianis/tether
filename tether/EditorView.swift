@@ -85,6 +85,7 @@ class EditorViewController: NSViewController {
 class CustomMTKView: MTKView {
     var renderer: Renderer?
     private var accumulatedDeltaY: CGFloat = 0.0
+    private var phase: NSEvent.Phase? = nil
     
     var isScrolling = false
     
@@ -118,17 +119,19 @@ class CustomMTKView: MTKView {
      override func scrollWheel(with event: NSEvent) {
      //        super.scrollWheel(with: event)
      accumulatedDeltaY += event.scrollingDeltaY
+         phase = event.phase
      }
     
     func handleAccumulatedScroll() {
-        if accumulatedDeltaY != 0 {
+        if let thePhase = self.phase {
             // Process the accumulated scroll delta here
             if let renderer = self.renderer {
-                renderer_handle_scroll(renderer, 0.0, accumulatedDeltaY, .cancelled);
+                renderer_handle_scroll(renderer, 0.0, accumulatedDeltaY, thePhase);
             }
             
             // Reset the accumulated delta after processing
             accumulatedDeltaY = 0
+            phase = nil
         }
     }
     

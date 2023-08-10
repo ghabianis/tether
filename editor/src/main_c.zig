@@ -50,7 +50,7 @@ const Renderer = struct {
     screen_size: metal.CGSize,
     tx: f32,
     ty: f32,
-    is_scrolling: bool = false,
+    scroll_phase: ?metal.NSEvent.Phase = null,
     text_width: f32,
     text_height: f32,
     some_val: u64,
@@ -129,9 +129,9 @@ const Renderer = struct {
 
     fn update_if_needed(self: *Self, alloc: Allocator) !void {
         if (self.editor.draw_text or self.editor.text_dirty) {
+            self.adjust_scroll_to_cursor(@floatCast(self.screen_size.height));
             try self.update(alloc);
         }
-        // self.adjust_scroll_to_cursor(@as(f32, @floatCast(self.screen_size.height)));
     }
 
     fn update(self: *Self, alloc: Allocator) !void {
@@ -338,13 +338,69 @@ const Renderer = struct {
 
     /// If the cursor is partially obscured, adjust the screen scroll
     fn adjust_scroll_to_cursor(self: *Self, screeny: f32) void {
+        print("IS SCROLLING: {any} {d}\n", .{ self.scroll_phase, self.ty });
+        if (self.scroll_phase) |phase| {
+            // Skip if scrolling
+            switch (phase) {
+                .None, .Ended, .Cancelled => {
+                    self.scroll_phase = null;
+                    return;
+                },
+                .Changed, .Began, .MayBegin, .Stationary => {
+                    return;
+                },
+            }
+        }
+        const cursor_line = self.editor.cursor.line;
+        const start_end = self.find_start_end_lines(screeny);
+        if (cursor_line < start_end.start) {
+            const ascent: f32 = @floatCast(self.atlas.ascent);
+            const descent: f32 = @floatCast(self.atlas.descent);
+            var i: u32 = start_end.start;
+            var new_ty = start_end.start_y;
+            print("START Y: {d}\n", .{start_end.start_y});
+            while (i > cursor_line) : (i -= 1) {
+                new_ty += ascent + descent;
+            }
+            // new_ty -= ascent;
+            self.ty = new_ty;
+            return;
+        }
+        if (cursor_line >= start_end.end) {
+            return;
+            // const ascent: f32 = @floatCast(self.atlas.ascent);
+            // const descent: f32 = @floatCast(self.atlas.descent);
+            // var i: u32 = start_end.start;
+            // var new_ty = start_end.start_y;
+            // while (i < start_end.end) : (i += 1) {
+            //     new_ty += descent + ascent;
+            // }
+            // while (i < cursor_line) : (i += 1) {
+            //     new_ty += descent + ascent;
+            // }
+            // // self.ty += descent;
+            // return;
+        }
+    }
+
+    /// If the cursor is partially obscured, adjust the screen scroll
+    fn adjust_scroll_to_cursor_old(self: *Self, screeny: f32) void {
         if (self.is_scrolling) return;
         const cursor_vertices: []Vertex = self.vertices.items[0..6];
+        // Means outside of the screen
+        if (cursor_vertices[0].is_default()) {
+            // const line = self
+            self.editor.draw_text = true;
+            return;
+        }
         const maxy_cursor = cursor_vertices[0].pos.y + self.ty;
         const miny_cursor = cursor_vertices[2].pos.y + self.ty;
 
         const maxy_screen = screeny;
         const miny_screen = 0.0;
+
+        print("CURSOR TOP: {d} CURSOR BOT: {d}\n", .{ maxy_cursor, miny_cursor });
+        print("MAX SCREEN: {d} MIN SCREEN: {d}\n", .{ maxy_screen, miny_screen });
 
         if (maxy_cursor > maxy_screen) {
             const delta = maxy_cursor - maxy_screen;
@@ -355,6 +411,11 @@ const Renderer = struct {
         }
     }
 
+    /// Returns the indices of the first and last (exclusive) lines that
+    /// are visible on the screen. Also returns y pos of first line.
+    ///
+    /// The y pos is BEFORE scroll translation.
+    ///
     /// TODO: this can be made faster, just do multiplication bruh
     fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32 } {
         const ascent: f32 = @floatCast(self.atlas.ascent);
@@ -405,7 +466,6 @@ const Renderer = struct {
     }
 
     pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
-        print("text dirty: {}\n", .{self.editor.text_dirty});
         _ = screenx;
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
@@ -883,11 +943,8 @@ const Renderer = struct {
 
     pub fn scroll(self: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
         _ = dx;
-        if (phase == .Began) {
-            self.is_scrolling = true;
-        } else if (phase == .Cancelled or phase == .Ended) {
-            self.is_scrolling = false;
-        }
+        print("PHASE: {s}\n", .{@tagName(phase)});
+        self.scroll_phase = phase;
         self.ty = self.ty + @as(f32, @floatCast(dy));
         self.editor.draw_text = true;
         self.update_if_needed(std.heap.c_allocator) catch @panic("test");

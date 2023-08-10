@@ -7,9 +7,13 @@ WIP high-performance code editor written in Zig. Inspired by Doom Emacs and neov
 
 ![Example with ligatures](./pics/1.png)
 
-## Currently implemented
+## Features
 - GPU accelerated text rendering using Metal + CoreText
 - Smooth & swanky anti-aliased text rendering
 - Font ligatures support
-- Vim functionality
+- Vim keybindings / modal editing
 - Syntax highlighting with tree-sitter
+
+## In-progress
+- LSP support
+- JS/TS scripting support

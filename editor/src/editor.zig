@@ -35,7 +35,7 @@ pub fn init(self: *Self) !void {
     self.clipboard = Clipboard.init();
     if (comptime Conf.ENABLE_TEST_TEXT) {
         // const str = @embedFile("./lines.txt");
-        const str = @embedFile("./main_c.zig");
+        const str = @embedFile("./editor.zig");
         self.cursor = try self.rope.insert_text(self.cursor, str);
     }
 }

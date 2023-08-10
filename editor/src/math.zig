@@ -11,6 +11,10 @@ pub const Vertex = extern struct {
         return .{ .pos = .{ .x = 0.0, .y = 0.0 }, .tex_coords = .{ .x = 0.0, .y = 0.0 }, .color = .{ .x = 0.0, .y = 0.0, .w = 0.0, .z = 0.0 } };
     }
 
+    pub fn is_default(self: *const Vertex) bool {
+        return self.pos.x == 0 and self.pos.y == 0 and self.tex_coords.x == 0 and self.tex_coords.y == 0 and self.color.x == 0 and self.color.y == 0 and self.color.z == 0 and self.color.w == 0;
+    }
+
     pub fn square_from_glyph(
         rect: *const metal.CGRect,
         pos: *const metal.CGPoint,
