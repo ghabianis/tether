@@ -338,7 +338,6 @@ const Renderer = struct {
 
     /// If the cursor is partially obscured, adjust the screen scroll
     fn adjust_scroll_to_cursor(self: *Self, screeny: f32) void {
-        print("IS SCROLLING: {any} {d}\n", .{ self.scroll_phase, self.ty });
         if (self.scroll_phase) |phase| {
             // Skip if scrolling
             switch (phase) {
@@ -351,62 +350,42 @@ const Renderer = struct {
                 },
             }
         }
-        const cursor_line = self.editor.cursor.line;
-        const start_end = self.find_start_end_lines(screeny);
-        if (cursor_line < start_end.start) {
-            const ascent: f32 = @floatCast(self.atlas.ascent);
-            const descent: f32 = @floatCast(self.atlas.descent);
-            var i: u32 = start_end.start;
-            var new_ty = start_end.start_y;
-            print("START Y: {d}\n", .{start_end.start_y});
-            while (i > cursor_line) : (i -= 1) {
-                new_ty += ascent + descent;
-            }
-            // new_ty -= ascent;
-            self.ty = new_ty;
-            return;
-        }
-        if (cursor_line >= start_end.end) {
-            return;
-            // const ascent: f32 = @floatCast(self.atlas.ascent);
-            // const descent: f32 = @floatCast(self.atlas.descent);
-            // var i: u32 = start_end.start;
-            // var new_ty = start_end.start_y;
-            // while (i < start_end.end) : (i += 1) {
-            //     new_ty += descent + ascent;
-            // }
-            // while (i < cursor_line) : (i += 1) {
-            //     new_ty += descent + ascent;
-            // }
-            // // self.ty += descent;
-            // return;
-        }
-    }
 
-    /// If the cursor is partially obscured, adjust the screen scroll
-    fn adjust_scroll_to_cursor_old(self: *Self, screeny: f32) void {
-        if (self.is_scrolling) return;
-        const cursor_vertices: []Vertex = self.vertices.items[0..6];
-        // Means outside of the screen
-        if (cursor_vertices[0].is_default()) {
-            // const line = self
-            self.editor.draw_text = true;
-            return;
-        }
-        const maxy_cursor = cursor_vertices[0].pos.y + self.ty;
-        const miny_cursor = cursor_vertices[2].pos.y + self.ty;
+        // 1. Get y of start of screen
+        // 2. Get y of end of screen
+        // 3. Get y of cursor top and bot
+        // 4. Check if cursor is within those bounds.
+        const ascent: f32 = @floatCast(self.atlas.ascent);
+        const descent: f32 = @floatCast(self.atlas.descent);
+
+        const cursor_line = self.editor.cursor.line;
+
+        const start_end = self.find_start_end_lines(screeny);
+
+        if (cursor_line > start_end.start and cursor_line < start_end.end -| 1) return;
+
+        const cursor_y = cursor_y: {
+            const initial_y: f32 = screeny + self.ty - ascent;
+            var y: f32 = initial_y;
+            var i: usize = 0;
+            while (i < cursor_line) {
+                y -= ascent + descent;
+                i += 1;
+            }
+            break :cursor_y y;
+        };
+
+        const cursor_top = cursor_y + ascent;
+        const cursor_bot = cursor_y - descent;
 
         const maxy_screen = screeny;
         const miny_screen = 0.0;
 
-        print("CURSOR TOP: {d} CURSOR BOT: {d}\n", .{ maxy_cursor, miny_cursor });
-        print("MAX SCREEN: {d} MIN SCREEN: {d}\n", .{ maxy_screen, miny_screen });
-
-        if (maxy_cursor > maxy_screen) {
-            const delta = maxy_cursor - maxy_screen;
+        if (cursor_top > maxy_screen) {
+            const delta = cursor_top - maxy_screen;
             self.ty -= delta;
-        } else if (miny_cursor < miny_screen) {
-            const delta = miny_cursor - miny_screen;
+        } else if (cursor_bot < miny_screen) {
+            const delta = cursor_bot - miny_screen;
             self.ty -= delta;
         }
     }
@@ -414,10 +393,11 @@ const Renderer = struct {
     /// Returns the indices of the first and last (exclusive) lines that
     /// are visible on the screen. Also returns y pos of first line.
     ///
-    /// The y pos is BEFORE scroll translation.
+    /// The y pos is BEFORE scroll translation, and is the BASELINE of the line,
+    /// meaning (y + ascent = top of line, y - descent = bot of line)
     ///
     /// TODO: this can be made faster, just do multiplication bruh
-    fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32 } {
+    fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32, end_y: f32 } {
         const ascent: f32 = @floatCast(self.atlas.ascent);
         const descent: f32 = @floatCast(self.atlas.descent);
 
@@ -429,15 +409,13 @@ const Renderer = struct {
         var y: f32 = initial_y;
 
         if (lines_len == 1) {
-            return .{
-                .start = 0,
-                .end = 1,
-                .start_y = y - self.ty,
-            };
+            return .{ .start = 0, .end = 1, .start_y = y - self.ty, .end_y = y - (ascent + descent) - self.ty };
         }
 
         var i: u32 = 0;
         var start_y: f32 = 0.0;
+        var end_y: f32 = 0.0;
+
         const start: u32 = start: {
             while (i < lines_len) {
                 if (y - descent <= top) {
@@ -454,15 +432,19 @@ const Renderer = struct {
         const end: u32 = end: {
             while (i < lines_len) {
                 if (y + ascent <= bot) {
+                    end_y = y - self.ty;
+                    print("found it: {d}\n", .{end_y});
                     break :end @intCast(i);
                 }
                 y -= descent + ascent;
                 i += 1;
             }
+            end_y = start_y - (ascent + descent) - self.ty;
+            print("not found: {d}\n", .{end_y});
             break :end @intCast(lines_len + 1);
         };
 
-        return .{ .start = start, .end = end, .start_y = start_y };
+        return .{ .start = start, .end = end, .start_y = start_y, .end_y = end_y };
     }
 
     pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
