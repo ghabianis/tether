@@ -429,7 +429,7 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
             const indent_buf = new_indent.fill_str(char_buf[0..]);
             try self.rope.replace_line(node, indent_buf);
             self.cursor.col = @as(u32, @intCast(node.data.items.len));
-            self.cursor = try self.rope.insert_text(cursor, chars);
+            self.cursor = try self.rope.insert_text(self.cursor, chars);
             self.draw_text = true;
             return;
         }
