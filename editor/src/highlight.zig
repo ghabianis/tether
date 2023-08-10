@@ -354,6 +354,7 @@ pub fn update_tree(self: *Highlight, str: []const u8) void {
     self.tree = tree;
 }
 
+/// Invariants:
 pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
     defer c.ts_parser_reset(self.parser);
     if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
@@ -406,7 +407,9 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
             var the_len: u32 = 0;
             const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
-            print("FUCK: {s}\n", .{str_ptr[0..the_len]});
+            if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
+                print("In comment: @{s}\n", .{str_ptr[0..the_len]});
+            }
             // print("THE NODE: {d}\n", .{});
             const color = self.theme[capture.index] orelse continue;
 

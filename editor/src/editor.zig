@@ -23,6 +23,7 @@ rope: Rope = Rope{},
 // TODO: also store the node of the current line
 cursor: TextPos = .{ .line = 0, .col = 0 },
 draw_text: bool = false,
+/// Any time the text is modified, this is set to true.
 text_dirty: bool = true,
 vim: Vim = Vim{},
 selection: ?Selection = null,
@@ -684,6 +685,7 @@ pub fn backspace(self: *Self) !void {
     try self.rope.remove_text(idx_pos - 1, idx_pos);
 
     self.draw_text = true;
+    self.text_dirty = true;
 }
 
 fn delete_range(self: *Self, range: Selection) !void {
