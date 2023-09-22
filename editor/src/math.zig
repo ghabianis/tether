@@ -119,6 +119,10 @@ pub const Float2 = extern struct {
     pub fn as_slice_const(self: *const Float2) []const f32 {
         return @ptrCast(@as(*const [2]f32, @ptrCast(self)));
     }
+
+    pub fn add_float2(self: Float2, other: Float2) Float2 {
+        return float2(self.x + other.x, self.y + other.y);
+    }
 };
 
 pub const Float3 = extern struct {
@@ -213,6 +217,7 @@ pub fn hex4(comptime hex: []const u8) Float4 {
 }
 
 pub const Float4x4 = extern struct {
+    // THIS IS COLUMN MAJOR
     _0: Float4,
     _1: Float4,
     _2: Float4,
@@ -234,9 +239,10 @@ pub const Float4x4 = extern struct {
 
         const tx = -(right + left) / dx;
         const ty = -(top + bottom) / dy;
-        const tz = (far + near) / dz;
+        const tz = -near / dz;
 
-        return @This().new(float4(2 / dx, 0, 0, 0), float4(0, 2 / dy, 0, 0), float4(0, 0, 2 / dz, 0), float4(tx, ty, tz, 1));
+        return @This().new(float4(2 / dx, 0, 0, 0), float4(0, 2 / dy, 0, 0), float4(0, 0, 1 / dz, 0), // Adjusted the Z-scale term
+            float4(tx, ty, tz, 1));
     }
 
     pub fn scale_by(s: f32) Float4x4 {
@@ -272,8 +278,8 @@ pub const Float4x4 = extern struct {
         );
     }
 
-    pub fn row(self: *Float4x4, comptime row_idx: usize) *Float4 {
-        switch (row_idx) {
+    pub fn col(self: *Float4x4, comptime col_idx: usize) *Float4 {
+        switch (col_idx) {
             0 => return &self._0,
             1 => return &self._1,
             2 => return &self._2,
@@ -282,41 +288,71 @@ pub const Float4x4 = extern struct {
         }
     }
 
-    pub fn col(self: *Float4x4, comptime col_idx: usize) Float4 {
-        return Float4{
-            .x = self.row(0).col(col_idx),
-            .y = self.row(1).col(col_idx),
-            .z = self.row(2).col(col_idx),
-            .w = self.row(3).col(col_idx),
-        };
+    pub fn row(self: *Float4x4, comptime row_idx: usize) Float4 {
+        switch (row_idx) {
+            0 => return Float4{
+                .x = self.col(0).x,
+                .y = self.col(1).x,
+                .z = self.col(2).x,
+                .w = self.col(3).x,
+            },
+            1 => return Float4{
+                .x = self.col(0).y,
+                .y = self.col(1).y,
+                .z = self.col(2).y,
+                .w = self.col(3).y,
+            },
+            2 => return Float4{
+                .x = self.col(0).z,
+                .y = self.col(1).z,
+                .z = self.col(2).z,
+                .w = self.col(3).z,
+            },
+            3 => return Float4{
+                .x = self.col(0).w,
+                .y = self.col(1).w,
+                .z = self.col(2).w,
+                .w = self.col(3).w,
+            },
+            else => unreachable,
+        }
     }
 
     pub fn mul(self: *Float4x4, other: *Float4x4) Float4x4 {
         return Float4x4.new(
             Float4.new(
-                self.row(0).dot(other.col(0)),
-                self.row(0).dot(other.col(1)),
-                self.row(0).dot(other.col(2)),
-                self.row(0).dot(other.col(3)),
+                self.col(0).dot(other.row(0)),
+                self.col(0).dot(other.row(1)),
+                self.col(0).dot(other.row(2)),
+                self.col(0).dot(other.row(3)),
             ),
             Float4.new(
-                self.row(1).dot(other.col(0)),
-                self.row(1).dot(other.col(1)),
-                self.row(1).dot(other.col(2)),
-                self.row(1).dot(other.col(3)),
+                self.col(1).dot(other.row(0)),
+                self.col(1).dot(other.row(1)),
+                self.col(1).dot(other.row(2)),
+                self.col(1).dot(other.row(3)),
             ),
             Float4.new(
-                self.row(2).dot(other.col(0)),
-                self.row(2).dot(other.col(1)),
-                self.row(2).dot(other.col(2)),
-                self.row(2).dot(other.col(3)),
+                self.col(2).dot(other.row(0)),
+                self.col(2).dot(other.row(1)),
+                self.col(2).dot(other.row(2)),
+                self.col(2).dot(other.row(3)),
             ),
             Float4.new(
-                self.row(3).dot(other.col(0)),
-                self.row(3).dot(other.col(1)),
-                self.row(3).dot(other.col(2)),
-                self.row(3).dot(other.col(3)),
+                self.col(3).dot(other.row(0)),
+                self.col(3).dot(other.row(1)),
+                self.col(3).dot(other.row(2)),
+                self.col(3).dot(other.row(3)),
             ),
+        );
+    }
+
+    pub fn mul_f4(self: *Float4x4, vec: Float4) Float4 {
+        return Float4.new(
+            self.row(0).dot(vec),
+            self.row(1).dot(vec),
+            self.row(2).dot(vec),
+            self.row(3).dot(vec),
         );
     }
 };
