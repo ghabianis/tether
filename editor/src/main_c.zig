@@ -15,6 +15,7 @@ const strutil = @import("./strutil.zig");
 const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
+const earcut = @import("earcut");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -784,10 +785,12 @@ const Renderer = struct {
 
     pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
         _ = screenx;
-        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
+        var processor = earcut.Processor(f32){};
+        var vertices = ArrayList(f32){};
+        defer processor.deinit(alloc);
+        defer vertices.deinit(alloc);
+
         var bg = math.hex4("#b4f9f8");
-        bg.w = 0.2;
-        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         const color = bg;
         const selection = self.editor.selection orelse return;
 
@@ -796,11 +799,32 @@ const Renderer = struct {
         var x: f32 = starting_x;
         var text = text_;
 
+        const ascent = self.atlas.ascent;
+        const descent = self.atlas.descent;
+
+        const LineState = struct {
+            y: f32 = 0.0,
+            r: f32 = 0.0,
+
+            fn top(ls: @This(), a: f32) f32 {
+                return ls.y + a;
+            }
+            fn bot(ls: @This(), d: f32) f32 {
+                return ls.y - d;
+            }
+            fn right(ls: @This()) f32 {
+                return ls.r;
+            }
+        };
+
         var i: u32 = 0;
-        var line_state = false;
-        var yy: f32 = 0.0;
-        var l: f32 = 0.0;
-        var r: f32 = 0.0;
+        var line_state: ?LineState = null;
+        var first_point = true;
+        var first_x = starting_x;
+        var last_is_newline = false;
+
+        // try vertices.appendSlice(alloc, &.{ x, y + ascent });
+
         for (text) |char| {
             defer i += 1;
             if (i >= selection.end) break;
@@ -819,42 +843,81 @@ const Renderer = struct {
                 continue;
             }
 
-            if (!line_state) {
-                yy = y;
-                l = x;
-                // r = x + @intToFloat(f32, self.atlas.max_glyph_width);
-                r = x + glyph.advance;
-                line_state = true;
-            } else {
-                r += glyph.advance;
+            if (first_point) {
+                try vertices.appendSlice(alloc, &.{ x, y + ascent });
+                first_x = x;
+                first_point = false;
             }
 
+            if (line_state) |*ls| {
+                ls.r += glyph.advance;
+            } else {
+                line_state = .{
+                    .y = y,
+                    .r = x + glyph.advance,
+                };
+            }
+
+            // space
             if (char == 9) {
                 x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                last_is_newline = false;
             } else if (strutil.is_newline(char)) {
                 x = starting_x;
                 // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
                 y -= self.atlas.descent + self.atlas.ascent;
+                last_is_newline = true;
             } else {
                 x += glyph.advance;
+                last_is_newline = false;
             }
 
             // Push vertices if end of line or entire selection
             if (strutil.is_newline(char) or i == selection.end -| 1) {
-                line_state = false;
+                const ls = line_state.?;
 
-                try self.vertices.appendSlice(alloc, &Vertex.square(.{
-                    .t = yy + self.atlas.ascent,
-                    .b = yy - self.atlas.descent,
-                    .l = l,
-                    .r = r,
-                }, .{
-                    .t = self.atlas.cursor_ty,
-                    .b = self.atlas.cursor_ty - self.atlas.cursor_h,
-                    .l = self.atlas.cursor_tx,
-                    .r = self.atlas.cursor_tx + self.atlas.cursor_w,
-                }, color));
+                var top_point = math.Float2.new(ls.r, ls.top(ascent));
+                var bot_point = math.Float2.new(ls.r, ls.bot(descent));
+                try vertices.appendSlice(alloc, top_point.as_slice());
+                try vertices.appendSlice(alloc, bot_point.as_slice());
+
+
+                line_state = null;
             }
+        }
+        // if (last_is_newline) {
+        //     try vertices.appendSlice(alloc, math.Float2.new(first_x, y - descent).as_slice_const());
+        // } else {
+            try vertices.appendSlice(alloc, math.Float2.new(first_x, y ).as_slice_const());
+        // }
+
+        try processor.process(alloc, vertices.items, null, 2);
+        // var triangles: []m = @ptrCast(processor.triangles.items);
+        var j: usize = 0;
+        while (j < processor.triangles.items.len) : (j += 3) {
+            const idx0 = processor.triangles.items[j] * 2;
+            const idx1 = processor.triangles.items[j + 1] * 2;
+            const idx2 = processor.triangles.items[j + 2] * 2;
+            const v0 = math.Float2.new(vertices.items[idx0], vertices.items[idx0 + 1]);
+            const v1 = math.Float2.new(vertices.items[idx1], vertices.items[idx1 + 1]);
+            const v2 = math.Float2.new(vertices.items[idx2], vertices.items[idx2 + 1]);
+
+            const texcoord = math.Float2.new(self.atlas.cursor_tx, self.atlas.cursor_ty);
+            try self.vertices.append(alloc, Vertex{
+                .pos = v0,
+                .tex_coords = texcoord,
+                .color = color,
+            });
+            try self.vertices.append(alloc, Vertex{
+                .pos = v1,
+                .tex_coords = texcoord,
+                .color = color,
+            });
+            try self.vertices.append(alloc, Vertex{
+                .pos = v2,
+                .tex_coords = texcoord,
+                .color = color,
+            });
         }
     }
 
@@ -919,7 +982,6 @@ const Renderer = struct {
 
     pub fn scroll(self: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
         _ = dx;
-        print("PHASE: {s}\n", .{@tagName(phase)});
         self.scroll_phase = phase;
         self.ty = self.ty + @as(f32, @floatCast(dy));
         self.editor.draw_text = true;
@@ -935,7 +997,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 64.0);
+    var atlas = font.Atlas.new(alloc, 48.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
@@ -973,4 +1035,36 @@ export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
 
 export fn renderer_get_val(renderer: *Renderer) u64 {
     return renderer.some_val;
+}
+
+test "selection triangulation" {
+    const alloc = std.heap.c_allocator;
+    var processor = earcut.Processor(f32){};
+    var vertices = ArrayList(f32){};
+
+    try vertices.appendSlice(alloc, &.{
+        // line 1
+        0.0,  100.0, 40.0, 100.0, 40.0, 90.0,
+        // line 2
+        20.0, 90.0,  20.0, 80.0,
+        // last point
+         0.0,  80.0,
+    });
+
+    try processor.process(alloc, vertices.items, null, 2);
+
+    var j: usize = 0;
+    while (j < processor.triangles.items.len) : (j += 3) {
+        print("TRI\n", .{});
+        const idx0 = processor.triangles.items[j] * 2;
+        const idx1 = processor.triangles.items[j + 1] * 2;
+        const idx2 = processor.triangles.items[j + 2] * 2;
+        const v0 = math.Float2.new(vertices.items[idx0], vertices.items[idx0 + 1]);
+        const v1 = math.Float2.new(vertices.items[idx1], vertices.items[idx1 + 1]);
+        const v2 = math.Float2.new(vertices.items[idx2], vertices.items[idx2 + 1]);
+        v0.debug();
+        v1.debug();
+        v2.debug();
+        print("\n", .{});
+    }
 }

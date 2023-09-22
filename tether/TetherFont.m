@@ -15,6 +15,8 @@
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <CoreGraphics/CGFont.h>
+#import <Foundation/NSGeometry.h>
+
 
 @implementation TetherFont
 - (void) dealloc {

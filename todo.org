@@ -1,8 +1,25 @@
 #+title: Todo
 
 * TODO Now [0/5]
-** TODO fix pair cursor highlighting
-i fucked it up somehow
+** TODO Bug bash [0/3]
+*** TODO selection rendering messed up
+*** TODO deleting text
+#+begin_src zig
+fn testFn(self: *Self) void {
+    switch (self) {
+        .Foo => {
+
+        },
+    }
+}
+#+end_src
+
+start selection on comma
+move to the =.= on the line with =.Foo=
+delete
+
+it crashes
+*** TODO backspacing on start of line fucked
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::

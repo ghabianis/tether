@@ -100,6 +100,25 @@ pub const Vertex = extern struct {
 pub const Float2 = extern struct {
     x: f32,
     y: f32,
+
+    pub fn debug(self: *const Float2) void {
+        std.debug.print("Float2[x = {d}, y = {d}]\n", .{ self.x, self.y });
+    }
+
+    pub inline fn new(x: f32, y: f32) Float2 {
+        return .{
+            .x = x,
+            .y = y,
+        };
+    }
+
+    pub fn as_slice(self: *Float2) []f32 {
+        return @ptrCast(@as(*[2]f32, @ptrCast(self)));
+    }
+
+    pub fn as_slice_const(self: *const Float2) []const f32 {
+        return @ptrCast(@as(*const [2]f32, @ptrCast(self)));
+    }
 };
 
 pub const Float3 = extern struct {

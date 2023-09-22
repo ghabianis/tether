@@ -8,6 +8,11 @@ const TreeSitterHighlightStep = @import("build/tree_sitter_highlight_step.zig");
 const alloc = std.heap.c_allocator;
 const FileSource = std.build.FileSource;
 
+const ModuleDef = struct {
+    mod: *std.build.Module,
+    name: []const u8,
+};
+
 /// From https://mitchellh.com/writing/zig-and-swiftui#merging-all-dependencies
 pub fn build(b: *std.build.Builder) !void {
     const target = b.standardTargetOptions(.{});
@@ -16,7 +21,10 @@ pub fn build(b: *std.build.Builder) !void {
     const zigobjc = b.createModule(.{
         .source_file = .{ .path = "lib/zig-objc/src/main.zig" },
     });
-    const modules = [_]*std.build.Module{zigobjc};
+    const earcut = b.createModule(.{
+        .source_file = .{ .path = "lib/mach-earcut/src/main.zig" },
+    });
+    const modules = [_]ModuleDef{ .{ .mod = zigobjc, .name = "zig-objc" }, .{ .mod = earcut, .name = "earcut" } };
 
     build_tests(b, &modules, target, optimize);
 
@@ -85,7 +93,7 @@ fn build_static_lib(
     bundle_name: []const u8,
     cpu_arch: std.Target.Cpu.Arch,
     // Zig modules
-    modules: []const *std.build.Module,
+    modules: []const ModuleDef,
 ) !struct { out: FileSource, step: *std.build.Step } {
     const treesitter = build_treesitter(b, target, optimize, cpu_arch);
 
@@ -131,7 +139,7 @@ fn build_static_lib(
     return .{ .out = libtool.output, .step = libtool.step };
 }
 
-fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module, treesitter: *std.build.Step.Compile) void {
+fn add_libs(compile: *std.build.Step.Compile, modules: []const ModuleDef, treesitter: *std.build.Step.Compile) void {
     compile.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks");
     compile.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     compile.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
@@ -145,7 +153,7 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module
 
     compile.bundle_compiler_rt = true;
     for (modules) |module| {
-        compile.addModule("zig-objc", module);
+        compile.addModule(module.name, module.mod);
     }
 
     // treesitter stuff
@@ -159,48 +167,55 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const *std.build.Module
     compile.step.dependOn(&treesitter.step);
 }
 
-fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target: std.zig.CrossTarget, optimize: std.builtin.Mode) void {
+fn build_tests(b: *std.build.Builder, modules: []const ModuleDef, target: std.zig.CrossTarget, optimize: std.builtin.Mode) void {
     const test_step = b.step("test", "Run tests");
     const treesitter = build_treesitter(b, target, optimize, .aarch64);
 
     const tests = [_]std.build.TestOptions{
         .{
-            .name = "rope_tests",
-            .root_source_file = .{ .path = "src/rope.zig" },
+            .name = "main_tests",
+            .root_source_file = .{ .path = "src/main_c.zig" },
             .target = target,
             .optimize = optimize,
             // .filter = "simd rope char iter",
         },
-        .{
-            .name = "vim_tests",
-            .root_source_file = .{ .path = "src/vim.zig" },
-            .target = target,
-            .optimize = optimize,
-        },
-        .{
-            .name = "editor_tests",
-            .root_source_file = .{ .path = "src/editor.zig" },
-            .target = target,
-            .optimize = optimize,
-        },
-        .{
-            .name = "math_tests",
-            .root_source_file = .{ .path = "src/math.zig" },
-            .target = target,
-            .optimize = optimize,
-        },
-        .{
-            .name = "highlight_tests",
-            .root_source_file = .{ .path = "src/highlight.zig" },
-            .target = target,
-            .optimize = optimize,
-        },
-        .{
-            .name = "strutil_tests",
-            .root_source_file = .{ .path = "src/highlight.zig" },
-            .target = target,
-            .optimize = optimize,
-        },
+        // .{
+        //     .name = "rope_tests",
+        //     .root_source_file = .{ .path = "src/rope.zig" },
+        //     .target = target,
+        //     .optimize = optimize,
+        //     // .filter = "simd rope char iter",
+        // },
+        // .{
+        //     .name = "vim_tests",
+        //     .root_source_file = .{ .path = "src/vim.zig" },
+        //     .target = target,
+        //     .optimize = optimize,
+        // },
+        // .{
+        //     .name = "editor_tests",
+        //     .root_source_file = .{ .path = "src/editor.zig" },
+        //     .target = target,
+        //     .optimize = optimize,
+        // },
+        // .{
+        //     .name = "math_tests",
+        //     .root_source_file = .{ .path = "src/math.zig" },
+        //     .target = target,
+        //     .optimize = optimize,
+        // },
+        // .{
+        //     .name = "highlight_tests",
+        //     .root_source_file = .{ .path = "src/highlight.zig" },
+        //     .target = target,
+        //     .optimize = optimize,
+        // },
+        // .{
+        //     .name = "strutil_tests",
+        //     .root_source_file = .{ .path = "src/highlight.zig" },
+        //     .target = target,
+        //     .optimize = optimize,
+        // },
     };
 
     for (tests) |t| {
@@ -208,7 +223,7 @@ fn build_tests(b: *std.build.Builder, modules: []const *std.build.Module, target
     }
 }
 
-fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const *std.build.Module, treesitter: *std.build.Step.Compile, opts: std.build.TestOptions) void {
+fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []const ModuleDef, treesitter: *std.build.Step.Compile, opts: std.build.TestOptions) void {
     const the_test = b.addTest(opts);
     add_libs(the_test, modules, treesitter);
     the_test.linkLibC();
