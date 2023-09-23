@@ -97,6 +97,34 @@ pub const Vertex = extern struct {
     }
 };
 
+pub const Scalar = extern struct {
+    val: f32,
+
+    pub fn new(v: f32) Scalar {
+        return .{.val = v};
+    }
+
+    pub fn interpolate(start: Scalar, end: Scalar, t: f32) Scalar {
+        return .{ .val = start.val + (end.val - start.val) * t };
+    }
+
+    pub fn mul_f(self: Scalar, f: f32) Scalar {
+        return .{ .val = self.val * f };
+    }
+
+    pub fn add(self: Scalar, other: Scalar) Scalar {
+        return .{ .val = self.val + other.val };
+    }
+
+    pub fn hermite(t: f32, p1: Scalar, s1: Scalar, p2: Scalar, s2: Scalar) Scalar {
+        return hermite_generic(Scalar, t, p1, s1, p2, s2);
+    }
+
+    pub fn default() Scalar {
+        return .{ .val = 0 };
+    }
+};
+
 pub const Float2 = extern struct {
     x: f32,
     y: f32,
@@ -120,12 +148,24 @@ pub const Float2 = extern struct {
         return @ptrCast(@as(*const [2]f32, @ptrCast(self)));
     }
 
-    pub fn add_float2(self: Float2, other: Float2) Float2 {
+    pub fn add(self: Float2, other: Float2) Float2 {
         return float2(self.x + other.x, self.y + other.y);
     }
     
-    pub fn mulf(self: Float2, scalar: f32) Float2 {
+    pub fn mul_f(self: Float2, scalar: f32) Float2 {
         return float2(self.x * scalar, self.y * scalar);
+    }
+
+    pub fn default() Float2 {
+        return float2(0, 0);
+    }
+
+    pub fn interpolate(start: Float2, end: Float2, t: f32) Float2 {
+        return float3(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t);
+    }
+
+    pub fn hermite(t: f32, p1: Float2, s1: Float2, p2: Float2, s2: Float2) Float2 {
+        return hermite_generic(Float2, t, p1, s1, p2, s2);
     }
 };
 
@@ -133,6 +173,31 @@ pub const Float3 = extern struct {
     x: f32,
     y: f32,
     z: f32,
+
+    pub fn interpolate(start: Float3, end: Float3, t: f32) Float3 {
+        return float3(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t,
+                  start.z + (end.z - start.z) * t);
+    }
+
+    pub fn mul_f(self: Float3, scalar: f32) Float3 {
+        return float3(self.x * scalar, self.y * scalar, self.z * scalar);
+    }
+
+    pub fn add(self: Float3, other: Float3) Float3 {
+        return .{
+            .x = self.x + other.x,
+            .y = self.y + other.y,
+            .z = self.z + other.z,
+        };
+    }
+
+    pub fn hermite(t: f32, p1: Float3, s1: Float3, p2: Float3, s2: Float3) Float3 {
+        return hermite_generic(Float3, t, p1, s1, p2, s2);
+    }
+
+    pub fn default() Float3 {
+        return float3(0, 0, 0);
+    }
 };
 
 pub const Float4 = extern struct {
@@ -164,6 +229,10 @@ pub const Float4 = extern struct {
             (hex_to_decimal(hex_str[4]) * 16.0 + hex_to_decimal(hex_str[5])) / 255.0,
             1.0,
         );
+    }
+
+    pub fn add(self: Float4, other: Float4) Float4 {
+        return float4(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w);
     }
 
     pub fn to_hex(self: Float4) [7]u8 {
@@ -360,6 +429,83 @@ pub const Float4x4 = extern struct {
         );
     }
 };
+
+pub const Quat = struct {
+    v: Float4,
+
+    const EPSILON: f32 = 0.000001;
+
+    pub fn mul_f(self: Quat, scalar: f32) Quat {
+        return Quat{
+            .v = float4(self.v.x * scalar, self.v.y * scalar, self.v.z * scalar, self.v.w * scalar)
+        };
+    }
+
+    pub fn add(self: Quat, other: Quat) Quat {
+        return Quat{
+            .v = self.v.add(other.v)
+        };
+    }
+
+    pub fn dot(self: Quat, other: Quat) Quat {
+        return Quat{
+            .v = self.v.dot(other.v)
+        };
+    }
+
+    pub fn norm(self: Quat) Quat {
+        const lensq = self.v.x * self.v.x + self.v.y * self.v.y + self.v.z * self.v.z + self.v.w * self.v.w;
+        if (lensq < Quat.EPSILON) {
+            return self;
+        }
+        const i_len = 1.0 / @sqrt(lensq);
+
+        self.v.x *= i_len;
+        self.v.y *= i_len;
+        self.v.z *= i_len;
+        self.v.w *= i_len;
+        return self;
+    }
+
+    pub fn mix(from: Quat, to: Quat, t: f32) Quat {
+        return from.mul_f(1.0 - t).add(to.mul_f(t));
+    }
+
+    pub fn interpolate(a: Quat, b: Quat, t: f32) Quat {
+        var result = Quat.mix(a, b, t);
+        if (Quat.dot(a, b) < 0) {
+            result = Quat.mix(a, b.mul_f(-1), t);
+        }
+        result = result.norm();
+        return result;
+    }
+
+    pub fn hermite(t: f32, p1: Quat, s1: Quat, p2: Quat, s2: Quat) Quat {
+        return hermite_generic(Quat, t, p1, s1, p2, s2);
+    }
+
+    pub fn default() Quat {
+        return .{
+            .v = float4(0, 0, 0, 1),
+        };
+    }
+};
+
+fn hermite_generic(comptime T: type, t: f32, p1: T, s1: T, _p2: T, s2: T) T {
+    const tt = t * t;
+    const ttt = tt * t;
+    
+    var p2 = _p2;
+
+    const h1 = 2.0 * ttt - 3.0 * tt + 1.0;
+    const h2 = -2.0 * ttt + 3.0 * tt;
+    const h3 = ttt - 2.0 * tt + t;
+    const h4 = ttt - tt;
+
+    //   float result = p1 * h1 + p2 * h2 + s1 * h3 + s2 * h4;
+    return p1.mul_f(h1).add(p2.mul_f(h2)).add(s1.mul_f(h3)).add(s2.mul_f(h4));
+    // return p1.mul_f(h1).add(p2.mul_f(h2)).add(s1.mul_f(h3).add(s2.mul_f(h4)));
+}
 
 fn hex_to_decimal(hex: u8) f32 {
     switch (hex) {

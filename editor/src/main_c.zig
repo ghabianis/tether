@@ -17,6 +17,7 @@ const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
 const earcut = @import("earcut");
 const FullThrottle = @import("./full_throttle.zig").FullThrottleMode;
+const Time = @import("time.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -63,6 +64,8 @@ const Renderer = struct {
     highlight: ?Highlight = null,
     fullthrottle: FullThrottle,
 
+    last_clock: ?c_ulong,
+
     pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
@@ -90,6 +93,8 @@ const Renderer = struct {
             .editor = Editor{},
             .highlight = highlight,
             .fullthrottle = FullThrottle.init(device, view),
+
+            .last_clock = null,
         };
         renderer.editor.init() catch @panic("oops");
 
@@ -925,6 +930,17 @@ const Renderer = struct {
     }
 
     pub fn draw(self: *Self, view: metal.MTKView) void {
+        const dt: f32 = dt: {
+            if (self.last_clock) |lc| {
+                const now = Time.clock();
+                self.last_clock = now;
+                break :dt @floatCast((@as(f64, @floatFromInt(now - lc)) * 10.0) / @as(f64, @floatFromInt(Time.CLOCKS_PER_SEC)));
+            } else {
+                self.last_clock = Time.clock();
+                break :dt 0.0;
+            }
+        };
+        
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
         const command_buffer = self.queue.command_buffer();
@@ -971,7 +987,7 @@ const Renderer = struct {
         command_encoder.end_encoding();
 
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
-        self.fullthrottle.render(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height));
+        self.fullthrottle.render(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height));
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
         command_buffer.obj.msgSend(void, objc.sel("commit"), .{});

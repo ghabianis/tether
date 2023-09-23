@@ -2,10 +2,13 @@ const std = @import("std");
 const metal = @import("./metal.zig");
 const objc = @import("zig-objc");
 const math = @import("math.zig");
+const anim = @import("anim.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
 const ArenaAllocator = std.heap.ArenaAllocator;
+
+const Scalar = math.Scalar;
 
 const Vertex = extern struct {
     pos: math.Float2,
@@ -21,6 +24,18 @@ const Particle = extern struct {
 
 const MAX_PARTICLES = 1024;
 
+const opacity_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
+                    .{
+                        .time = 0.0, .value = Scalar.new(0.8), .in = Scalar.new(0.0), .out = Scalar.new(4.0)
+                    },
+                    .{
+                        .time = 0.1, .value = Scalar.new(1.2), .in = Scalar.new(0.0), .out = Scalar.new(0.0)
+                    },
+                    .{
+                        .time = 1.0, .value = Scalar.new(0.0), .in = Scalar.new(-4.0), .out = Scalar.new(0.0)
+                    }
+                };
+
 pub const FullThrottleMode = struct {
     pipeline: metal.MTLRenderPipelineState,
     instance_buffer: metal.MTLBuffer,
@@ -29,8 +44,11 @@ pub const FullThrottleMode = struct {
     indices: [6]u16,
 
     particles: [MAX_PARTICLES]Particle,
-    directions: [MAX_PARTICLES]math.Float2,
+    opacity: anim.ScalarTrack,
+    // velocity: [MAX_PARTICLES]anim.Float2Track,
+    velocity: [MAX_PARTICLES]math.Float2,
     particles_count: u16,
+    time: f32,
 
     pub fn init(device: metal.MTLDevice, view: metal.MTKView) FullThrottleMode {
         var full_throttle: FullThrottleMode = .{
@@ -64,8 +82,13 @@ pub const FullThrottleMode = struct {
             },
 
             .particles = undefined,
-            .directions = undefined,
+            .velocity = undefined,
+            .opacity = .{
+                .frames = opacity_frames,
+                .interp = .Cubic,
+            },
             .particles_count = 0,
+            .time = 0.0,
         };
 
         const RndGen = std.rand.DefaultPrng;
@@ -81,7 +104,7 @@ pub const FullThrottleMode = struct {
             full_throttle.particles[i].offset = math.float2(0.0, 0.0);
             // full_throttle.particles[i].offset = math.float2(69.0, 69.0);
             full_throttle.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
-            full_throttle.directions[i] = math.float2(anglex * speed, angley * speed);
+            full_throttle.velocity[i] = math.float2(anglex * speed, angley * speed);
         }
 
         full_throttle.build_pipeline(device, view);
@@ -96,16 +119,17 @@ pub const FullThrottleMode = struct {
     }
 
     pub fn update(self: *FullThrottleMode, dt: f32) void {
-        _ = dt;
+        const new_opacity = self.opacity.sample(self.time + dt, false);
         for (0..self.particles_count) |i| {
             const p: *Particle = &self.particles[i];
-            const dir: math.Float2 = self.directions[i];
-            p.offset = p.offset.add_float2(dir.mulf(1.0));
+            const dir: math.Float2 = self.velocity[i];
+            p.offset = p.offset.add(dir.mul_f(1.0));
             if (i == 0) {
             }
-            // p.color.w -= 0.01;
+            p.color.w = new_opacity.val;
         }
         self.update_instance_buffer(0, self.particles_count);
+        self.time += dt;
     }
 
     pub fn build_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
@@ -209,8 +233,8 @@ pub const FullThrottleMode = struct {
         // );
     }
 
-    pub fn render(self: *FullThrottleMode, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64) void {
-        self.update(420.0);
+    pub fn render(self: *FullThrottleMode, dt: f32, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64) void {
+        self.update(dt);
         const w: f32 = @floatCast(width);
         const h: f32 = @floatCast(height);
         
