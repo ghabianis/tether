@@ -22,19 +22,30 @@ const Particle = extern struct {
     _pad: math.Float2,
 };
 
-const MAX_PARTICLES = 1024;
 
 const opacity_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
                     .{
                         .time = 0.0, .value = Scalar.new(0.8), .in = Scalar.new(0.0), .out = Scalar.new(4.0)
                     },
                     .{
-                        .time = 0.1, .value = Scalar.new(1.2), .in = Scalar.new(0.0), .out = Scalar.new(0.0)
+                        .time = 0.05, .value = Scalar.new(1.0), .in = Scalar.new(0.0), .out = Scalar.new(0.0)
                     },
                     .{
-                        .time = 1.0, .value = Scalar.new(0.0), .in = Scalar.new(-4.0), .out = Scalar.new(0.0)
+                        .time = 0.6, .value = Scalar.new(0.0), .in = Scalar.new(-0.5), .out = Scalar.new(0.0)
                     }
                 };
+
+
+const CLUSTER_PARTICLE_AMOUNT = 128;
+const MAX_PARTICLES = CLUSTER_PARTICLE_AMOUNT * 100;
+pub const ParticleCluster = struct {
+    time: f32,
+    buf: *const ParticleClusterBuf
+};
+
+pub const ParticleClusterBuf = struct {
+    velocity: [CLUSTER_PARTICLE_AMOUNT]anim.Float2Track.Frame,
+};
 
 pub const FullThrottleMode = struct {
     pipeline: metal.MTLRenderPipelineState,
@@ -95,31 +106,32 @@ pub const FullThrottleMode = struct {
         const RndGen = std.rand.DefaultPrng;
         var rnd = RndGen.init(0);
 
-        const initial_particles = 128;
-        full_throttle.particles_count = initial_particles;
-        for (0..initial_particles) |i| {
+        full_throttle.particles_count = CLUSTER_PARTICLE_AMOUNT;
+        for (0..CLUSTER_PARTICLE_AMOUNT) |i| {
             const anglex: f32 = rnd.random().float(f32) * 2.0 - 1.0;
             const angley: f32 = rnd.random().float(f32) * 2.0 - 1.0;
             const speed: f32 = rnd.random().float(f32) * 2.0;
-            _ = speed;
 
-            const dir = math.float2(anglex, angley);
+            const dir = math.float2(anglex, angley).mul_f(speed);
             full_throttle.particles[i].offset = math.float2(0.0, 0.0);
             // full_throttle.particles[i].offset = math.float2(69.0, 69.0);
             full_throttle.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
 
             const frames = [_]anim.Float2Track.Frame{
                     .{
-                        .time = 0.0, .value = dir.mul_f(4), .in = math.Float2.default(), .out = dir.mul_f(2.0),
+                        .time = 0.0, .value = dir.mul_f(2), .in = dir.mul_f(8.0), .out = dir.mul_f(8.0),
                     },
                     .{
-                        .time = 0.5, .value = dir.mul_f(2), .in = dir, .out = dir,
+                        .time = 0.03, .value = dir.mul_f(6), .in = dir, .out = dir,
                     },
                     .{
-                        .time = 1.0, .value = math.Float2.default(), .in = dir.mul_f(-1.0), .out = math.Float2.default()
+                        .time = 0.1, .value = dir.mul_f(1), .in = dir, .out = dir,
+                    },
+                    .{
+                        .time = 0.5, .value = math.Float2.default(), .in = dir.mul_f(-3.0), .out = math.Float2.default()
                     } 
             };
-            var frames_heap = std.heap.c_allocator.alloc(anim.Float2Track.Frame, 3) catch @panic("WTF");
+            var frames_heap = std.heap.c_allocator.alloc(anim.Float2Track.Frame, frames.len) catch @panic("WTF");
             @memcpy(frames_heap, frames[0..]);
             full_throttle.velocity[i] = anim.Float2Track{
                 .frames = frames_heap,
@@ -288,7 +300,7 @@ pub const FullThrottleMode = struct {
         const uniforms: Uniforms = .{
             .projection_matrix = ortho,
             // .model_view_matrix = scale,
-            .model_view_matrix = FullThrottleMode.model_matrix(8, w, h),
+            .model_view_matrix = FullThrottleMode.model_matrix(4, w, h),
         };
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
