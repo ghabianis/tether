@@ -20,6 +20,7 @@ pub fn Track(comptime T: type) type {
         const Self = @This();
         frames: []const Frame,
         interp: Interpolation,
+        speed: f32 = 1.0,
 
         pub const Frame = struct {
             time: f32,
@@ -93,7 +94,8 @@ pub fn Track(comptime T: type) type {
         }
 
 
-        pub fn sample(self: *const Self, time: f32, looping: bool) T {
+        pub fn sample(self: *const Self, time_: f32, looping: bool) T {
+            const time = self.speed * time_;
             const frame = self.frame_idx(time, looping) orelse return T.default();
             std.debug.assert(!(frame >= self.frames.len -| 1));
 

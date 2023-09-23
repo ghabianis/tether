@@ -86,6 +86,7 @@ pub const FullThrottleMode = struct {
             .opacity = .{
                 .frames = opacity_frames,
                 .interp = .Cubic,
+                .speed = 1.0,
             },
             .particles_count = 0,
             .time = 0.0,
@@ -123,6 +124,7 @@ pub const FullThrottleMode = struct {
             full_throttle.velocity[i] = anim.Float2Track{
                 .frames = frames_heap,
                 .interp = .Cubic,
+                .speed = 1.0,
             };
         }
 
