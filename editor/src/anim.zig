@@ -68,7 +68,7 @@ pub fn Track(comptime T: type) type {
                 const end_time = self.frames[len - 1].time;
                 const duration = end_time - start_time;
                 _ = duration;
-                time = @mod(time - start_time, end_time - end_time);
+                time = @mod(time - start_time, end_time - start_time);
                 if (time < 0.0) {
                     time += end_time - start_time;
                 }
@@ -82,10 +82,10 @@ pub fn Track(comptime T: type) type {
                 }
             }
 
-            var i = len - 1;
+            var i: i64 = @intCast(len - 1);
             while (i >= 0): (i -= 1) {
-                if (time >= self.frames[i].time) {
-                    return i;
+                if (time >= self.frames[@intCast(i)].time) {
+                    return @intCast(i);
                 }
             }
 

@@ -46,7 +46,7 @@ pub const FullThrottleMode = struct {
     particles: [MAX_PARTICLES]Particle,
     opacity: anim.ScalarTrack,
     // velocity: [MAX_PARTICLES]anim.Float2Track,
-    velocity: [MAX_PARTICLES]math.Float2,
+    velocity: [MAX_PARTICLES]anim.Float2Track,
     particles_count: u16,
     time: f32,
 
@@ -100,11 +100,30 @@ pub const FullThrottleMode = struct {
             const anglex: f32 = rnd.random().float(f32) * 2.0 - 1.0;
             const angley: f32 = rnd.random().float(f32) * 2.0 - 1.0;
             const speed: f32 = rnd.random().float(f32) * 2.0;
+            _ = speed;
 
+            const dir = math.float2(anglex, angley);
             full_throttle.particles[i].offset = math.float2(0.0, 0.0);
             // full_throttle.particles[i].offset = math.float2(69.0, 69.0);
             full_throttle.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
-            full_throttle.velocity[i] = math.float2(anglex * speed, angley * speed);
+
+            const frames = [_]anim.Float2Track.Frame{
+                    .{
+                        .time = 0.0, .value = dir.mul_f(4), .in = math.Float2.default(), .out = dir.mul_f(2.0),
+                    },
+                    .{
+                        .time = 0.5, .value = dir.mul_f(2), .in = dir, .out = dir,
+                    },
+                    .{
+                        .time = 1.0, .value = math.Float2.default(), .in = dir.mul_f(-1.0), .out = math.Float2.default()
+                    } 
+            };
+            var frames_heap = std.heap.c_allocator.alloc(anim.Float2Track.Frame, 3) catch @panic("WTF");
+            @memcpy(frames_heap, frames[0..]);
+            full_throttle.velocity[i] = anim.Float2Track{
+                .frames = frames_heap,
+                .interp = .Cubic,
+            };
         }
 
         full_throttle.build_pipeline(device, view);
@@ -122,8 +141,9 @@ pub const FullThrottleMode = struct {
         const new_opacity = self.opacity.sample(self.time + dt, false);
         for (0..self.particles_count) |i| {
             const p: *Particle = &self.particles[i];
-            const dir: math.Float2 = self.velocity[i];
-            p.offset = p.offset.add(dir.mul_f(1.0));
+            const vel = &self.velocity[i];
+            const offset = vel.sample(self.time + dt, false);
+            p.offset = p.offset.add(offset);
             if (i == 0) {
             }
             p.color.w = new_opacity.val;
@@ -266,7 +286,7 @@ pub const FullThrottleMode = struct {
         const uniforms: Uniforms = .{
             .projection_matrix = ortho,
             // .model_view_matrix = scale,
-            .model_view_matrix = FullThrottleMode.model_matrix(16, w, h),
+            .model_view_matrix = FullThrottleMode.model_matrix(8, w, h),
         };
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);

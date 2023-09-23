@@ -161,7 +161,7 @@ pub const Float2 = extern struct {
     }
 
     pub fn interpolate(start: Float2, end: Float2, t: f32) Float2 {
-        return float3(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t);
+        return float2(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t);
     }
 
     pub fn hermite(t: f32, p1: Float2, s1: Float2, p2: Float2, s2: Float2) Float2 {
