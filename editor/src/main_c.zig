@@ -16,6 +16,7 @@ const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
 const earcut = @import("earcut");
+const FullThrottle = @import("./full_throttle.zig").FullThrottleMode;
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -60,6 +61,7 @@ const Renderer = struct {
     frame_arena: std.heap.ArenaAllocator,
     editor: Editor,
     highlight: ?Highlight = null,
+    fullthrottle: FullThrottle,
 
     pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
         const device = metal.MTLDevice.from_id(device_);
@@ -87,6 +89,7 @@ const Renderer = struct {
             .frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .editor = Editor{},
             .highlight = highlight,
+            .fullthrottle = FullThrottle.init(device, view),
         };
         renderer.editor.init() catch @panic("oops");
 
@@ -948,7 +951,7 @@ const Renderer = struct {
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
         var model_matrix = math.Float4x4.scale_by(1.0);
-        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = -1.5 });
+        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
         // var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = 0.0, .y = 0.0, .z = -1.5 });
         const model_view_matrix = view_matrix.mul(&model_matrix);
         const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
@@ -966,6 +969,9 @@ const Renderer = struct {
         command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
         command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
         command_encoder.end_encoding();
+
+        color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
+        self.fullthrottle.render(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height));
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
         command_buffer.obj.msgSend(void, objc.sel("commit"), .{});

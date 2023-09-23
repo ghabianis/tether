@@ -123,6 +123,10 @@ pub const Float2 = extern struct {
     pub fn add_float2(self: Float2, other: Float2) Float2 {
         return float2(self.x + other.x, self.y + other.y);
     }
+    
+    pub fn mulf(self: Float2, scalar: f32) Float2 {
+        return float2(self.x * scalar, self.y * scalar);
+    }
 };
 
 pub const Float3 = extern struct {

@@ -9,6 +9,11 @@ pub fn is_tagged_pointer(id: objc.c.id) bool {
     return @as(isize, @bitCast(@intFromPtr(id))) < 0;
 }
 
+pub const NSRange = extern struct {
+    location: NSUInteger,
+    length: NSUInteger,
+};
+
 pub const NSMutableArray = struct {
     const Self = @This();
     obj: objc.Object,
@@ -389,6 +394,10 @@ pub const MTLRenderCommandEncoder = struct {
         self.obj.msgSend(void, objc.sel("drawPrimitives:vertexStart:vertexCount:"), .{ primitive_type, vertex_start, vertex_count });
     }
 
+    pub fn draw_indexed_primitives_instanced(self: Self, primitive_type: MTLPrimitiveType, index_count: NSUInteger, index_type: MTLIndexType, index_buffer: MTLBuffer, index_buffer_offset: NSUInteger, instance_count: NSUInteger) void {
+        self.obj.msgSend(void, objc.sel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:"), .{ primitive_type, index_count, index_type, index_buffer, index_buffer_offset, instance_count});
+    }
+
     pub fn end_encoding(self: Self) void {
         self.obj.msgSend(void, objc.sel("endEncoding"), .{});
     }
@@ -402,10 +411,23 @@ pub const MTLPrimitiveType = enum(NSUInteger) {
     triangle_strip = 4,
 };
 
+pub const MTLIndexType = enum(NSUInteger) {
+    UInt16 = 0,
+    UInt32 = 1,
+};
+
 pub const MTLBuffer = struct {
     const Self = @This();
     obj: objc.Object,
     pub usingnamespace DefineObject(Self);
+
+    pub fn did_modify_range(self: Self, range: NSRange) void {
+        self.obj.msgSend(void, objc.sel("didModifyRange:"), .{range});
+    }
+
+    pub fn contents(self: Self) [*]u8 {
+        return self.obj.getProperty([*]u8, "contents");
+    }
 };
 
 pub const MTLRenderPassDescriptor = struct {

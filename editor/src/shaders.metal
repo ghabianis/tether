@@ -29,7 +29,7 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]],
                              constant Uniforms &uniforms [[buffer(1)]])
 {
     VertexOut vertexOut;
-    vertexOut.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(vertexIn.position.xy, 0, 1);
+    vertexOut.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(vertexIn.position.xy, 0.9, 1);
     vertexOut.texCoords = vertexIn.texCoords.xy;
     vertexOut.color = vertexIn.color;
     return vertexOut;
