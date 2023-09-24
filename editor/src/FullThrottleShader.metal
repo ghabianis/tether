@@ -33,9 +33,10 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]],
                              uint instance_id [[instance_id]])
 {
     VertexOut vertexOut;
-    // float2 temp = float2(vertexIn.position.x, vertexIn.position.y * 2.7941176891326904) + instanceData[instance_id].offset;
     float2 temp = vertexIn.position.xy + instanceData[instance_id].offset;
     vertexOut.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(temp.xy, 0.9, 1);
+    // float2 temp = vertexIn.position.xy;
+    // vertexOut.position = uniforms.projectionMatrix * ((uniforms.modelViewMatrix * float4(temp.xy, 0.9, 1)) + float4(instanceData[instance_id].offset, 0, 0));
     vertexOut.color = instanceData[instance_id].color;
     return vertexOut;
 }

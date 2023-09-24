@@ -32,20 +32,45 @@ const opacity_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Fram
                     },
                     .{
                         .time = 0.6, .value = Scalar.new(0.0), .in = Scalar.new(-0.5), .out = Scalar.new(0.0)
+                        // .time = 2.6, .value = Scalar.new(0.0), .in = Scalar.new(-0.5), .out = Scalar.new(0.0)
                     }
                 };
 
+const velocity_factor_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
+        .{
+            .time = 0.0, .value = Scalar.new(2), .in = Scalar.new(8.0), .out = Scalar.new(8.0),
+        },
+        .{
+            .time = 0.03, .value = Scalar.new(6), .in = Scalar.new(1), .out = Scalar.new(1),
+        },
+        .{
+            .time = 0.1, .value = Scalar.new(1), .in = Scalar.new(1), .out = Scalar.new(1),
+        },
+        .{
+            .time = 0.5, .value = Scalar.default(), .in = Scalar.new(-3.0), .out = Scalar.default()
+        } 
+};
 
-const CLUSTER_PARTICLE_AMOUNT = 128;
-const MAX_PARTICLES = CLUSTER_PARTICLE_AMOUNT * 100;
+
+const MAX_CLUSTER_PARTICLE_AMOUNT = 128;
+const MAX_CLUSTERS = 100;
+const MAX_PARTICLES = MAX_CLUSTER_PARTICLE_AMOUNT * MAX_CLUSTERS;
 pub const ParticleCluster = struct {
     time: f32,
-    buf: *const ParticleClusterBuf
+    buf:  *align(8) Buf,
+
+    pub const Buf = struct {
+        particles: [MAX_CLUSTER_PARTICLE_AMOUNT]Particle,
+        velocity: [MAX_CLUSTER_PARTICLE_AMOUNT]math.Float2
+    };
 };
 
-pub const ParticleClusterBuf = struct {
-    velocity: [CLUSTER_PARTICLE_AMOUNT]anim.Float2Track.Frame,
-};
+
+const RndGen = std.rand.DefaultPrng;
+var rnd = RndGen.init(0);
+
+// const ClusterBufPool = std.heap.MemoryPool(ParticleCluster.Buf);
+const ClusterBufPool = std.heap.MemoryPoolExtra(ParticleCluster.Buf, .{ .alignment = @alignOf(ParticleCluster.Buf), .growable = false });
 
 pub const FullThrottleMode = struct {
     pipeline: metal.MTLRenderPipelineState,
@@ -54,12 +79,11 @@ pub const FullThrottleMode = struct {
     vertices: [4]Vertex,
     indices: [6]u16,
 
-    particles: [MAX_PARTICLES]Particle,
+    cluster_buf_pool: ClusterBufPool,
+    clusters: [MAX_CLUSTERS]ParticleCluster,
+    clusters_len: u8,
     opacity: anim.ScalarTrack,
-    // velocity: [MAX_PARTICLES]anim.Float2Track,
-    velocity: [MAX_PARTICLES]anim.Float2Track,
-    particles_count: u16,
-    time: f32,
+    velocity_factor: anim.ScalarTrack,
 
     pub fn init(device: metal.MTLDevice, view: metal.MTKView) FullThrottleMode {
         var full_throttle: FullThrottleMode = .{
@@ -68,19 +92,19 @@ pub const FullThrottleMode = struct {
             .index_buffer = undefined,
             .vertices = [4]Vertex{
                 .{
-                    .pos = math.float2(-1.0, 1.0),
+                    .pos = math.float2(-0.006, 0.006),
                 },
                 .{
                     .pos = math.float2(
-                        1.0,
-                        1.0,
+                        0.006,
+                        0.006,
                     ),
                 },
                 .{
-                    .pos = math.float2(1.0, -1.0),
+                    .pos = math.float2(0.006, -0.006),
                 },
                 .{
-                    .pos = math.float2(-1.0, -1.0),
+                    .pos = math.float2(-0.006, -0.006),
                 },
             },
             .indices = [6]u16{
@@ -92,78 +116,107 @@ pub const FullThrottleMode = struct {
                 0, // Top-left corner
             },
 
-            .particles = undefined,
-            .velocity = undefined,
+            .cluster_buf_pool = ClusterBufPool.initPreheated(std.heap.c_allocator, MAX_CLUSTERS) catch @panic("OOM"),
+            .clusters = undefined,
+            .clusters_len = 0,
+            .velocity_factor = .{
+                .frames = velocity_factor_frames,
+                .interp = .Cubic,
+            },
             .opacity = .{
                 .frames = opacity_frames,
                 .interp = .Cubic,
-                .speed = 1.0,
             },
-            .particles_count = 0,
-            .time = 0.0,
         };
 
-        const RndGen = std.rand.DefaultPrng;
-        var rnd = RndGen.init(0);
+        // const RndGen = std.rand.DefaultPrng;
+        // var rnd = RndGen.init(0);
 
-        full_throttle.particles_count = CLUSTER_PARTICLE_AMOUNT;
-        for (0..CLUSTER_PARTICLE_AMOUNT) |i| {
-            const anglex: f32 = rnd.random().float(f32) * 2.0 - 1.0;
-            const angley: f32 = rnd.random().float(f32) * 2.0 - 1.0;
-            const speed: f32 = rnd.random().float(f32) * 2.0;
+        // full_throttle.particles_count = MAX_CLUSTER_PARTICLE_AMOUNT;
+        // for (0..full_throttle.particles_count) |i| {
+        //     const anglex: f32 = rnd.random().float(f32) * 2.0 - 1.0;
+        //     const angley: f32 = rnd.random().float(f32) * 2.0 - 1.0;
+        //     const speed: f32 = rnd.random().float(f32) * 2.0;
 
-            const dir = math.float2(anglex, angley).mul_f(speed);
-            full_throttle.particles[i].offset = math.float2(0.0, 0.0);
-            // full_throttle.particles[i].offset = math.float2(69.0, 69.0);
-            full_throttle.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
-
-            const frames = [_]anim.Float2Track.Frame{
-                    .{
-                        .time = 0.0, .value = dir.mul_f(2), .in = dir.mul_f(8.0), .out = dir.mul_f(8.0),
-                    },
-                    .{
-                        .time = 0.03, .value = dir.mul_f(6), .in = dir, .out = dir,
-                    },
-                    .{
-                        .time = 0.1, .value = dir.mul_f(1), .in = dir, .out = dir,
-                    },
-                    .{
-                        .time = 0.5, .value = math.Float2.default(), .in = dir.mul_f(-3.0), .out = math.Float2.default()
-                    } 
-            };
-            var frames_heap = std.heap.c_allocator.alloc(anim.Float2Track.Frame, frames.len) catch @panic("WTF");
-            @memcpy(frames_heap, frames[0..]);
-            full_throttle.velocity[i] = anim.Float2Track{
-                .frames = frames_heap,
-                .interp = .Cubic,
-                .speed = 1.0,
-            };
-        }
+        //     const dir = math.float2(anglex, angley).mul_f(speed);
+        //     full_throttle.particles[i].offset = math.float2(0.0, 0.0);
+        //     // full_throttle.particles[i].offset = math.float2(69.0, 69.0);
+        //     full_throttle.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
+        //     full_throttle.velocity[i] = dir;
+        // }
 
         full_throttle.build_pipeline(device, view);
-
+        
         return full_throttle;
     }
 
-    pub fn update_instance_buffer(self: *FullThrottleMode, offset: usize, count: usize) void {
+    pub fn update_instance_buffer(self: *FullThrottleMode, offset: usize, particles: *const [MAX_CLUSTER_PARTICLE_AMOUNT]Particle) void {
         const contents = self.instance_buffer.contents();
-        @memcpy(@as([*]Particle, @ptrCast(@alignCast(contents)))[offset..count], self.particles[offset..count]);
-        self.instance_buffer.did_modify_range(.{.location = offset, .length = count * @sizeOf(Particle) });
+        @memcpy(@as([*]Particle, @ptrCast(@alignCast(contents)))[offset..offset + particles.len], particles[0..]);
+        self.instance_buffer.did_modify_range(.{.location = offset, .length = particles.len * @sizeOf(Particle) });
+    }
+
+    pub fn remove_cluster(self: *FullThrottleMode, idx: u8) void {
+        if (self.clusters_len == 0) return;
+        const swap_idx = self.clusters_len - 1;
+        const buf = self.clusters[idx].buf;
+        self.cluster_buf_pool.destroy(buf);
+        self.clusters[idx] = self.clusters[swap_idx];
+        self.clusters_len -= 1;
+    }
+
+    pub fn add_cluster(self: *FullThrottleMode, offset_screen: math.Float2, w: f32, h: f32) void {
+        const aspect = w / h;
+        var offset = math.float2((offset_screen.x - w * 0.5) / (w * 0.5), (offset_screen.y - h * 0.5) / (h * 0.5));
+        offset.x *= aspect;
+
+        const idx = self.clusters_len;
+        if (idx == MAX_CLUSTERS) @panic("Max clusters exceeded");
+        self.clusters_len += 1;
+        var cluster: *ParticleCluster = &self.clusters[idx];
+        cluster.time = 0;
+        cluster.buf = self.cluster_buf_pool.create() catch @panic("OOM");
+
+        const PARTICLE_SHAPE_CIRCLE = false;
+        
+        // const offsetx: f32 = rnd.random().float(f32) * 2.0 - 1.0;
+        // const offsety: f32 = rnd.random().float(f32) * 2.0 - 1.0;
+        for (0..MAX_CLUSTER_PARTICLE_AMOUNT) |i| {
+            const anglex: f32 = rnd.random().float(f32) * 2.0 - 1.0;
+            const angley: f32 = rnd.random().float(f32) * 2.0 - 1.0;
+            const speed: f32 = rnd.random().float(f32) * 2.0;
+            _ = speed;
+
+            if (comptime PARTICLE_SHAPE_CIRCLE) {
+                const variance = math.float2((rnd.random().float(f32) * 2.0 - 1.0) * 0.1, (rnd.random().float(f32) * 2.0 - 1.0) * 0.1);
+                const dir = math.float2(anglex, angley).norm().add(variance).mul_f(0.005);
+                cluster.buf.velocity[i] = dir;
+            } else {
+                const dir = math.float2(anglex, angley).mul_f(0.01);
+                cluster.buf.velocity[i] = dir;
+            }
+            cluster.buf.particles[i].offset = math.float2(offset.x, offset.y);
+            cluster.buf.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
+        }
     }
 
     pub fn update(self: *FullThrottleMode, dt: f32) void {
-        const new_opacity = self.opacity.sample(self.time + dt, false);
-        for (0..self.particles_count) |i| {
-            const p: *Particle = &self.particles[i];
-            const vel = &self.velocity[i];
-            const offset = vel.sample(self.time + dt, false);
-            p.offset = p.offset.add(offset);
-            if (i == 0) {
+        for (self.clusters[0..self.clusters_len], 0..) |*c_, ci| {
+            var cluster: *ParticleCluster = c_;
+            const new_opacity = self.opacity.sample(cluster.time + dt, false);
+            const new_factor = self.velocity_factor.sample(cluster.time + dt, false);
+            for (&cluster.buf.particles, 0..) |*p_, i| {
+                const p: *Particle = p_;
+                const vel = &cluster.buf.velocity[i];
+                p.offset = p.offset.add(vel.mul_f(new_factor.val));
+                p.color.w = new_opacity.val;
             }
-            p.color.w = new_opacity.val;
+            self.update_instance_buffer(ci * MAX_CLUSTER_PARTICLE_AMOUNT, &cluster.buf.particles);
+            cluster.time += dt;
+            if (new_opacity.val <= 0.0) {
+                self.remove_cluster(@intCast(ci));
+            }
         }
-        self.update_instance_buffer(0, self.particles_count);
-        self.time += dt;
     }
 
     pub fn build_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
@@ -245,30 +298,35 @@ pub const FullThrottleMode = struct {
         self.index_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.indices))[0..@sizeOf([6]u16)], .storage_mode_managed);
         print("SIZE: {d} {d}\n", .{@sizeOf([MAX_PARTICLES]Particle), @sizeOf(Particle)});
 
-        self.instance_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.particles))[0..@sizeOf([MAX_PARTICLES]Particle)], .storage_mode_managed);
-        // self.instance_buffer.did_modify_range(.{.location = 0, .length = @sizeOf([MAX_PARTICLES]Particle)});
+        self.instance_buffer = device.new_buffer_with_length(@sizeOf([MAX_CLUSTER_PARTICLE_AMOUNT]Particle) * MAX_CLUSTERS, .storage_mode_managed) orelse @panic("OOM"); 
     }
 
     fn model_matrix(side_length: f32, width: f32, height: f32) math.Float4x4 {
         const scale = side_length / @min(width, height);
-
-        return math.Float4x4.new(
-            math.float4(scale, 0.0, 0.0, 0.0),
-            math.float4(0.0, scale, 0.0, 0.0),
-            math.float4(0.0, 0.0, 1.0, 0.0),
-            math.float4(0.0, 0.0, 1.0, 1.0),
-        );
+        _ = scale;
 
         // return math.Float4x4.new(
-        //     math.float4(1.0, 0.0, 0.0, 0.0),
-        //     math.float4(0.0, 1.0, 0.0, 0.0),
+        //     math.float4(scale, 0.0, 0.0, 0.0),
+        //     math.float4(0.0, scale, 0.0, 0.0),
         //     math.float4(0.0, 0.0, 1.0, 0.0),
         //     math.float4(0.0, 0.0, 1.0, 1.0),
+        // );
+
+        // return math.Float4x4.scale_by(0.02);
+        return math.Float4x4.scale_by(1.0);
+        // return math.Float4x4.new(
+        //     math.float4(0.01, 0.0, 0.0, 0.0),
+        //     math.float4(0.0, 0.01, 0.0, 0.0),
+        //     math.float4(0.0, 0.0, 0.01, 0.0),
+        //     math.float4(0.0, 0.0, 1.0, 0.01),
         // );
     }
 
     pub fn render(self: *FullThrottleMode, dt: f32, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64) void {
         self.update(dt);
+        if (self.clusters_len == 0) {
+            return;
+        }
         const w: f32 = @floatCast(width);
         const h: f32 = @floatCast(height);
         
@@ -311,7 +369,7 @@ pub const FullThrottleMode = struct {
         command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&uniforms))[0..@sizeOf(Uniforms)], 2);
 
         command_encoder.set_render_pipeline_state(self.pipeline);
-        command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, self.particles_count);
+        command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, @as(usize, self.clusters_len) * MAX_CLUSTER_PARTICLE_AMOUNT);
         command_encoder.end_encoding();
     }
 };

@@ -56,6 +56,24 @@ pub fn keydown(self: *Self, key: Key) !void {
     }
 }
 
+pub fn keydown_fullthrottle(self: *Self, key: Key) !bool {
+    if (self.vim.parse(key)) |cmd| {
+        switch (self.vim.mode) {
+            .Insert => try self.handle_cmd_insert(cmd),
+            .Normal => try self.handle_cmd_normal(cmd),
+            .Visual => try self.handle_cmd_visual(cmd),
+        }
+        return false;
+    }
+
+    if (self.vim.mode == .Insert) {
+        try self.handle_key_insert(key);
+        return true;
+    }
+
+    return false;
+}
+
 pub fn handle_cmd_insert(self: *Self, cmd: Vim.Cmd) !void {
     switch (cmd.kind) {
         .SwitchMode => |m| {

@@ -167,6 +167,18 @@ pub const Float2 = extern struct {
     pub fn hermite(t: f32, p1: Float2, s1: Float2, p2: Float2, s2: Float2) Float2 {
         return hermite_generic(Float2, t, p1, s1, p2, s2);
     }
+
+    pub fn magnitude(self: Float2) f32 {
+        return @sqrt(self.x * self.x + self.y * self.y);
+    }
+
+    pub fn norm(self: Float2) Float2 {
+        const mag = self.magnitude();
+        if (mag > 0) {
+            return float2(self.x / mag, self.y / mag);
+        }
+        return self;
+    }
 };
 
 pub const Float3 = extern struct {

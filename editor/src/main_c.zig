@@ -997,9 +997,20 @@ const Renderer = struct {
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
         const key = Event.Key.from_nsevent(event) orelse return;
-        try self.editor.keydown(key);
+        const add_cluster = try self.editor.keydown_fullthrottle(key);
 
         try self.update_if_needed(alloc);
+        if (add_cluster) {
+            // cursor vertices are first 6 vertices of text
+            const tl: Vertex = self.vertices.items.ptr[0];
+            const br: Vertex = self.vertices.items.ptr[4];
+            const top = tl.pos.y;
+            const left = tl.pos.x;
+            const bot = br.pos.y;
+            const right = br.pos.x;
+            const center = math.float2((left + right) / 2, (top + bot) / 2);
+            self.fullthrottle.add_cluster(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
+        }
     }
 
     pub fn scroll(self: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
