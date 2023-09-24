@@ -210,6 +210,18 @@ pub const Float3 = extern struct {
     pub fn default() Float3 {
         return float3(0, 0, 0);
     }
+
+    pub fn magnitude(self: Float3) f32 {
+        return @sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
+    }
+
+    pub fn norm(self: Float3) Float3 {
+        const mag = self.magnitude();
+        if (mag > 0) {
+            return float3(self.x / mag, self.y / mag, self.z / mag);
+        }
+        return self;
+    }
 };
 
 pub const Float4 = extern struct {

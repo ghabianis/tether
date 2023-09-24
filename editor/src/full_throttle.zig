@@ -51,6 +51,18 @@ const velocity_factor_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTr
         } 
 };
 
+const screen_shake_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
+        .{
+            .time = 0.0, .value = Scalar.new(1.0), .in = Scalar.new(0.0), .out = Scalar.new(4.0)
+        },
+        .{
+            .time = 0.05, .value = Scalar.new(4.0), .in = Scalar.new(0.0), .out = Scalar.new(0.0)
+        },
+        .{
+            .time = 0.2, .value = Scalar.new(0.0), .in = Scalar.new(-2.5), .out = Scalar.new(0.0)
+        }
+};
+
 
 const MAX_CLUSTER_PARTICLE_AMOUNT = 128;
 const MAX_CLUSTERS = 100;
@@ -67,7 +79,7 @@ pub const ParticleCluster = struct {
 
 
 const RndGen = std.rand.DefaultPrng;
-var rnd = RndGen.init(0);
+pub var rnd = RndGen.init(0);
 
 // const ClusterBufPool = std.heap.MemoryPool(ParticleCluster.Buf);
 const ClusterBufPool = std.heap.MemoryPoolExtra(ParticleCluster.Buf, .{ .alignment = @alignOf(ParticleCluster.Buf), .growable = false });
@@ -84,6 +96,11 @@ pub const FullThrottleMode = struct {
     clusters_len: u8,
     opacity: anim.ScalarTrack,
     velocity_factor: anim.ScalarTrack,
+    screen_shake: anim.ScalarTrack,
+    screen_shake_matrix: math.Float4x4,
+    screen_shake_matrix_ndc: math.Float4x4,
+    time: f32,
+
 
     pub fn init(device: metal.MTLDevice, view: metal.MTKView) FullThrottleMode {
         var full_throttle: FullThrottleMode = .{
@@ -119,31 +136,23 @@ pub const FullThrottleMode = struct {
             .cluster_buf_pool = ClusterBufPool.initPreheated(std.heap.c_allocator, MAX_CLUSTERS) catch @panic("OOM"),
             .clusters = undefined,
             .clusters_len = 0,
-            .velocity_factor = .{
-                .frames = velocity_factor_frames,
-                .interp = .Cubic,
-            },
             .opacity = .{
                 .frames = opacity_frames,
                 .interp = .Cubic,
             },
+            .velocity_factor = .{
+                .frames = velocity_factor_frames,
+                .interp = .Cubic,
+            },
+            .screen_shake = .{
+                .frames = screen_shake_frames,
+                .interp = .Cubic,
+            },
+            .screen_shake_matrix = math.Float4x4.scale_by(1.0),
+            .screen_shake_matrix_ndc = math.Float4x4.scale_by(1.0),
+            // initialize to something very large so animation doesn't trigger on startup
+            .time = 10000.0,
         };
-
-        // const RndGen = std.rand.DefaultPrng;
-        // var rnd = RndGen.init(0);
-
-        // full_throttle.particles_count = MAX_CLUSTER_PARTICLE_AMOUNT;
-        // for (0..full_throttle.particles_count) |i| {
-        //     const anglex: f32 = rnd.random().float(f32) * 2.0 - 1.0;
-        //     const angley: f32 = rnd.random().float(f32) * 2.0 - 1.0;
-        //     const speed: f32 = rnd.random().float(f32) * 2.0;
-
-        //     const dir = math.float2(anglex, angley).mul_f(speed);
-        //     full_throttle.particles[i].offset = math.float2(0.0, 0.0);
-        //     // full_throttle.particles[i].offset = math.float2(69.0, 69.0);
-        //     full_throttle.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
-        //     full_throttle.velocity[i] = dir;
-        // }
 
         full_throttle.build_pipeline(device, view);
         
@@ -166,6 +175,7 @@ pub const FullThrottleMode = struct {
     }
 
     pub fn add_cluster(self: *FullThrottleMode, offset_screen: math.Float2, w: f32, h: f32) void {
+        self.time = 0;
         const aspect = w / h;
         var offset = math.float2((offset_screen.x - w * 0.5) / (w * 0.5), (offset_screen.y - h * 0.5) / (h * 0.5));
         offset.x *= aspect;
@@ -198,6 +208,21 @@ pub const FullThrottleMode = struct {
             cluster.buf.particles[i].offset = math.float2(offset.x, offset.y);
             cluster.buf.particles[i].color = math.float4(11.0 / 255.0, 197.0 / 255.0, 230.0 / 255.0, 1.0);
         }
+    }
+
+    pub fn compute_shake(self: *FullThrottleMode, dt: f32, w: f32, h: f32) void {
+        self.time += dt;
+        const intensity: f32 = self.screen_shake.sample(self.time, false).val;
+        var shake_dir = math.float3((rnd.random().float(f32) * 2.0 - 1.0), (rnd.random().float(f32) * 2.0 - 1.0), 0);
+        shake_dir = shake_dir.norm().mul_f(intensity);
+        self.screen_shake_matrix = math.Float4x4.translation_by(shake_dir);
+
+        // const aspect = w / h;
+        // var shake_dir_ndc = math.float3((shake_dir.x - w * 0.5) / (w * 0.5), (shake_dir.y - h * 0.5) / (h * 0.5), 0);
+        var shake_dir_ndc = shake_dir;
+        shake_dir_ndc.x /= w;
+        shake_dir_ndc.y /= h;
+        self.screen_shake_matrix_ndc = math.Float4x4.translation_by(shake_dir_ndc);
     }
 
     pub fn update(self: *FullThrottleMode, dt: f32) void {
@@ -296,12 +321,11 @@ pub const FullThrottleMode = struct {
         self.pipeline = pipeline;
 
         self.index_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.indices))[0..@sizeOf([6]u16)], .storage_mode_managed);
-        print("SIZE: {d} {d}\n", .{@sizeOf([MAX_PARTICLES]Particle), @sizeOf(Particle)});
 
         self.instance_buffer = device.new_buffer_with_length(@sizeOf([MAX_CLUSTER_PARTICLE_AMOUNT]Particle) * MAX_CLUSTERS, .storage_mode_managed) orelse @panic("OOM"); 
     }
 
-    fn model_matrix(side_length: f32, width: f32, height: f32) math.Float4x4 {
+    fn model_matrix(self: *FullThrottleMode, side_length: f32, width: f32, height: f32) math.Float4x4 {
         const scale = side_length / @min(width, height);
         _ = scale;
 
@@ -313,7 +337,8 @@ pub const FullThrottleMode = struct {
         // );
 
         // return math.Float4x4.scale_by(0.02);
-        return math.Float4x4.scale_by(1.0);
+        // return math.Float4x4.scale_by(1.0);
+        return self.screen_shake_matrix_ndc;
         // return math.Float4x4.new(
         //     math.float4(0.01, 0.0, 0.0, 0.0),
         //     math.float4(0.0, 0.01, 0.0, 0.0),
@@ -358,7 +383,7 @@ pub const FullThrottleMode = struct {
         const uniforms: Uniforms = .{
             .projection_matrix = ortho,
             // .model_view_matrix = scale,
-            .model_view_matrix = FullThrottleMode.model_matrix(4, w, h),
+            .model_view_matrix = self.model_matrix(4, w, h),
         };
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);

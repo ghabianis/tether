@@ -9,6 +9,11 @@ pub const Interpolation = enum {
     Cubic,
 };
 
+pub const ScalarTrack = Track(math.Scalar);
+pub const Float2Track = Track(math.Float2);
+pub const Float3Track = Track(math.Float3);
+pub const QuatTrack = Track(math.Quat);
+
 /// T must be a type with the following functions:
 /// - add(T, T) -> T
 /// - mul_f(T, f32) -> T
@@ -149,7 +154,8 @@ pub fn Track(comptime T: type) type {
     };
 }
 
-pub const ScalarTrack = Track(math.Scalar);
-pub const Float2Track = Track(math.Float2);
-pub const Float3Track = Track(math.Float3);
-pub const QuatTrack = Track(math.Quat);
+pub fn Mixer(comptime T: type, comptime max_targets: usize) type {
+    return struct {
+        targets: [max_targets]Track(T),
+    };
+}

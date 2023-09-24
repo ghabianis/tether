@@ -16,7 +16,7 @@ const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
 const earcut = @import("earcut");
-const FullThrottle = @import("./full_throttle.zig").FullThrottleMode;
+const fullthrottle = @import("./full_throttle.zig");
 const Time = @import("time.zig");
 
 const print = std.debug.print;
@@ -27,6 +27,7 @@ const TextPos = rope.TextPos;
 const Rope = rope.Rope;
 
 const Vertex = math.Vertex;
+const FullThrottle = fullthrottle.FullThrottleMode;
 
 var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 
@@ -940,6 +941,7 @@ const Renderer = struct {
                 break :dt 0.0;
             }
         };
+        self.fullthrottle.compute_shake(dt, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
         
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
@@ -968,7 +970,7 @@ const Renderer = struct {
 
         var model_matrix = math.Float4x4.scale_by(1.0);
         var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
-        // var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = 0.0, .y = 0.0, .z = -1.5 });
+        view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
         const model_view_matrix = view_matrix.mul(&model_matrix);
         const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
         const uniforms = Uniforms{
@@ -1030,7 +1032,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 48.0);
+    var atlas = font.Atlas.new(alloc, 64.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
