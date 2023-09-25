@@ -140,6 +140,13 @@ pub const Float2 = extern struct {
         };
     }
 
+    pub fn div(self: Float2, other: Float2) Float2 {
+        return float2(
+            self.x / other.x,
+            self.y / other.y,
+        );
+    }
+
     pub fn as_slice(self: *Float2) []f32 {
         return @ptrCast(@as(*[2]f32, @ptrCast(self)));
     }
@@ -185,6 +192,14 @@ pub const Float3 = extern struct {
     x: f32,
     y: f32,
     z: f32,
+
+    pub fn screen_to_ndc_vec(self: Float3, screen_size: Float2) Float3 {
+        return float3((2 * self.x / screen_size.x), (2 * self.y / screen_size.y), self.z);
+    }
+
+    pub fn screen_to_ndc_point(self: Float3, screen_size: Float2) Float3 {
+        return float3((2 * self.x / screen_size.x) - 1, (2 * self.y / screen_size.y) - 1, self.z);
+    }
 
     pub fn interpolate(start: Float3, end: Float3, t: f32) Float3 {
         return float3(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t,
@@ -375,7 +390,7 @@ pub const Float4x4 = extern struct {
         );
     }
 
-    pub fn col(self: *Float4x4, comptime col_idx: usize) *Float4 {
+    pub fn col(self: *const Float4x4, comptime col_idx: usize) *const Float4 {
         switch (col_idx) {
             0 => return &self._0,
             1 => return &self._1,
@@ -385,7 +400,7 @@ pub const Float4x4 = extern struct {
         }
     }
 
-    pub fn row(self: *Float4x4, comptime row_idx: usize) Float4 {
+    pub fn row(self: *const Float4x4, comptime row_idx: usize) Float4 {
         switch (row_idx) {
             0 => return Float4{
                 .x = self.col(0).x,
@@ -415,7 +430,7 @@ pub const Float4x4 = extern struct {
         }
     }
 
-    pub fn mul(self: *Float4x4, other: *Float4x4) Float4x4 {
+    pub fn mul(self: *const Float4x4, other: *const Float4x4) Float4x4 {
         return Float4x4.new(
             Float4.new(
                 self.col(0).dot(other.row(0)),

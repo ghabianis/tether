@@ -969,8 +969,8 @@ const Renderer = struct {
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
         var model_matrix = math.Float4x4.scale_by(1.0);
-        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
-        view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
+        var view_matrix_before_shake = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
+        var view_matrix = view_matrix_before_shake.mul(&self.fullthrottle.screen_shake_matrix);
         const model_view_matrix = view_matrix.mul(&model_matrix);
         const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
         const uniforms = Uniforms{
@@ -988,8 +988,10 @@ const Renderer = struct {
         command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
         command_encoder.end_encoding();
 
-        color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
-        self.fullthrottle.render(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height));
+        var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0};
+        var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
+        self.fullthrottle.render(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
         command_buffer.obj.msgSend(void, objc.sel("commit"), .{});
@@ -1011,6 +1013,10 @@ const Renderer = struct {
             const bot = br.pos.y;
             const right = br.pos.x;
             const center = math.float2((left + right) / 2, (top + bot) / 2);
+            if (@as(Event.KeyEnum, key) == Event.KeyEnum.Backspace) {
+                self.fullthrottle.add_explosion(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
+                return;
+            }
             self.fullthrottle.add_cluster(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
         }
     }
@@ -1032,7 +1038,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 64.0);
+    var atlas = font.Atlas.new(alloc, 48.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

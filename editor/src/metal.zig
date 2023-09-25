@@ -275,6 +275,25 @@ pub const NSDictionary = struct {
     }
 };
 
+pub const NSData = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn new_with_bytes_no_copy(bytes: []const u8, free_when_done: bool) Self {
+        const obj = Self.get_class().msgSend(objc.Object, objc.sel("dataWithBytesNoCopy:length:freeWhenDone:"), .{bytes.ptr, bytes.len, free_when_done});
+        return Self.from_obj(obj);
+    }
+};
+
+pub const MTKTextureLoader = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+
+};
+
 pub const MTKTextureLoaderOption = objc.c.id;
 pub extern "C" const MTKTextureLoaderOptionTextureUsage: MTKTextureLoaderOption;
 pub extern "C" const MTKTextureLoaderOptionTextureStorageMode: MTKTextureLoaderOption;
@@ -392,6 +411,10 @@ pub const MTLRenderCommandEncoder = struct {
 
     pub fn draw_primitives(self: Self, primitive_type: MTLPrimitiveType, vertex_start: NSUInteger, vertex_count: NSUInteger) void {
         self.obj.msgSend(void, objc.sel("drawPrimitives:vertexStart:vertexCount:"), .{ primitive_type, vertex_start, vertex_count });
+    }
+
+    pub fn draw_primitives_instanced(self: Self, primitive_type: MTLPrimitiveType, vertex_start: NSUInteger, vertex_count: NSUInteger, instance_count: NSUInteger) void {
+        self.obj.msgSend(void, objc.sel("drawPrimitives:vertexStart:vertexCount:instanceCount:"), .{ primitive_type, vertex_start, vertex_count, instance_count });
     }
 
     pub fn draw_indexed_primitives_instanced(self: Self, primitive_type: MTLPrimitiveType, index_count: NSUInteger, index_type: MTLIndexType, index_buffer: MTLBuffer, index_buffer_offset: NSUInteger, instance_count: NSUInteger) void {
