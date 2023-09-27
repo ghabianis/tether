@@ -24,7 +24,6 @@ const Particle = extern struct {
     offset: math.Float2,
 };
 
-
 const opacity_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
                     .{
                         .time = 0.0, .value = Scalar.new(0.8), .in = Scalar.new(0.0), .out = Scalar.new(4.0)
@@ -99,13 +98,11 @@ comptime {
     // @compileLog("SIZE", @sizeOf(Explosion), @sizeOf(Particle));
 }
 
-// 8 byte alignment
+// 16 byte alignment
 pub const Explosion = extern struct {
     pos: math.Float2 align(16),
     tex: math.Float2,
-    // float2 needs 8 byte alignment so we need to pad with 4 additional bytes
     time: f32 = 0.0,
-    // _pad: f32 = 0.0,
 };
 
 
