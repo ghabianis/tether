@@ -1,9 +1,14 @@
 #+title: Todo
 
-* TODO Now [0/5]
-** TODO Bug bash [0/3]
-*** TODO selection rendering messed up
-*** TODO deleting text
+* TODO Now [2/6]
+** TODO vertex buffer no need to create each time
+instead check if <= to current, if so just append
+otherwise create new
+** TODO move particle simulation to GPU
+cluster opacity/velocity can still be computed on the CPU, but the updating particles can be computed on the GPU.
+** DONE Bug bash [0/0]
+*** DONE selection rendering messed up
+*** DONE deleting text
 #+begin_src zig
 fn testFn(self: *Self) void {
     switch (self) {
@@ -19,7 +24,7 @@ move to the =.= on the line with =.Foo=
 delete
 
 it crashes
-*** TODO backspacing on start of line fucked
+*** DONE backspacing on start of line fucked
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::
@@ -29,8 +34,9 @@ it crashes
 
 ** TODO sweep thru code for objc memory leaks
 there are probably lots of places where i am not freeing objc objects
-** TODO bug: =cc= (change line) should preserve line and not delete it entirely
+** DONE bug: =cc= (change line) should preserve line and not delete it entirely
 * TODO Later [0/11]
+** TODO simd math data structures
 ** TODO (refactor) coalesce the text geometry building code for =build_text_geometry()= and =build_line_number_geometry()=
 ** TODO (perf) only build line number geometry for lines we see
 ** TODO (perf) only build text geometry for text we see?
@@ -51,6 +57,33 @@ but we are being lazy and not checking for this and adding redundant glyphs to t
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?
 ** TODO curves svg etc
+* TODO Content/Brainstorm [0/14]
+** TODO improve particles with glow
+look at these: https://www.shadertoy.com/view/lldGzr
+** TODO lightning effect
+** TODO sound effects
+https://x.com/lightbulbfeed/status/1706441132992057604?s=20
+** TODO squiggly lines effect
+** TODO what to do with the background?
+*** TODO cool effect
+*** TODO what about showing documentation or diagrams, and easily hide code to flip back and forth
+** TODO radial menu for LSP code actions
+#+caption: like this but for LSP code actions
+[[~/roam/images/49c0bf097a7f7df4b9889ba826c36fea.jpg]]
+** TODO better theme changing UI
+lets you click on a piece of text, and a GUI pops up to edit the theme right there
+** TODO motion blur effect on scroll
+will make a VIM user look insanely fast and coo l
+** TODO preview VIM command
+for example pressing "d e", you can prefix with some key and it will show you a preview of what will happen (like a GitHub inline diff, similar to what emacs does when you do search and replace)
+** TODO drag around syntax nodes
+would be cool to do this, for example swapping order of parameters
+** TODO WPM bottom right
+** TODO screen crack when going too hard
+https://x.com/GrahamFleming_/status/1706356048821620907?s=20
+** TODO autocomplete suggestions slam onto the screen
+** TODO errors should burn
+https://x.com/xldenis/status/1706552511925002537?s=20
 * Archive
 ** DONE Fix cursor [0/0]
 *** DONE not in front of text

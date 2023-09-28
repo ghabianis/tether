@@ -290,6 +290,18 @@ pub const Rope = struct {
         }
     }
 
+    pub fn modify_node_length(self: *Self, node: *Node, new_len: usize) void {
+        if (new_len >= node.data.items.len) {
+            const diff = new_len - node.data.items.len;
+            self.len += diff;
+        } else {
+            const diff = node.data.items.len - new_len;
+            self.len -= diff;
+        }
+
+        node.data.items.len = new_len;
+    }
+
     pub fn as_str(self: *const Self, alloc: Allocator) ![]const u8 {
         var str: []u8 = try alloc.alloc(u8, self.len);
         var cur: ?*Node = self.nodes.first;

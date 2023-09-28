@@ -1,3 +1,6 @@
+/// SOME IMPORTANT INVARIANTS:
+/// - `text_dirty` must be set to true anytime it is modified
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
@@ -189,6 +192,7 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
     }
     if (comptime cmd_kind == .Change) self.switch_mode(.Insert);
 
+    // Execute the delete/change/yank on the movement text range
     if (the_move) |mv| {
         var i: usize = 0;
         while (i < repeat) : (i += 1) {
@@ -218,9 +222,12 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
         return;
     }
 
+    // If there's no movement, it applies to the entire line
     var i: usize = 0;
     while (i < repeat) : (i += 1) {
-        if (comptime cmd_kind == .Change or cmd_kind == .Delete) {
+        if (comptime cmd_kind == .Change) {
+            try self.change_line(); 
+        } else if (cmd_kind == .Delete) {
             try self.delete_line();
         } else {
             try self.yank_line(self.cursor.line);
@@ -723,6 +730,24 @@ pub fn delete_line(self: *Self) !void {
     }
 
     self.cursor.col = if (self.rope.nodes.last) |last| @min(self.cursor_eol_for_mode(last) -| 1, self.cursor.col) else 0;
+    self.text_dirty = true;
+}
+
+pub fn change_line(self: *Self) !void {
+    const node = self.rope.node_at_line(self.cursor.line) orelse return;
+    // Nothing to do
+    if (node.data.items.len == 0) return;
+
+    if (strutil.is_newline(node.data.items[node.data.items.len - 1])) {
+        const last = node.data.items[node.data.items.len - 1];
+        self.rope.modify_node_length(node, 1);
+        node.data.items[0] = last;
+    } else {
+        self.rope.modify_node_length(node, 0);
+        node.data.items.len = 0;
+    }
+
+    self.cursor.col = 0;
     self.text_dirty = true;
 }
 
