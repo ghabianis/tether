@@ -681,6 +681,7 @@ pub fn is_opening_delimiter(self: *Self, c: u8) bool {
 }
 
 pub fn backspace(self: *Self) !void {
+    const old_len = self.rope.len;
     const pos = self.cursor;
     const idx_pos = self.rope.pos_to_idx(pos) orelse @panic("OOPS!");
 
@@ -701,6 +702,10 @@ pub fn backspace(self: *Self) !void {
     };
 
     try self.rope.remove_text(idx_pos - 1, idx_pos);
+    const new_len = self.rope.len;
+
+    // Sanity check in dev mode
+    std.debug.assert(new_len == old_len -| 1);
 
     self.draw_text = true;
     self.text_dirty = true;
@@ -1261,6 +1266,29 @@ test "indentation edge case" {
     editor.cursor.col = 4;
     try editor.insert("\n");
     expected = "fn testFn() void {\n    \n    \n}";
+
+    str = try editor.text(std.heap.c_allocator);
+    try std.testing.expectEqualStrings(expected[0..], str);
+}
+
+test "indentation then backspace edge case" {
+    var editor = Self{};
+    try editor.init();
+
+    var expected: []const u8 = "";
+    var str: []const u8 = "";
+
+    try editor.insert("hi {}");
+    editor.cursor.col = 4;
+    try editor.insert("\n");
+    expected = "hi {\n    \n}";
+
+    try editor.backspace();
+    try editor.backspace();
+    try editor.backspace();
+    try editor.backspace();
+    try editor.backspace();
+    expected = "hi {\n}";
 
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);

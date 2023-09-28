@@ -58,6 +58,32 @@ pub fn number_to_str(num: u32, digit_count: u32, buf: *[16]u8) []u8 {
     return buf[0..len];
 }
 
+pub fn escape_string(str: []const u8, buf: *[256]u8) []const u8 {
+    if (str.len > buf.len) @panic("OOM");
+
+    var len: u8 = 0;
+    for (str) |c| {
+        switch (c) {
+            '\n' => {
+                buf[len] = '\\';
+                buf[len + 1] = 'n';
+                len += 2;
+            },
+            '\r' => {
+                buf[len] = '\\';
+                buf[len + 1] = 'r';
+                len += 2;
+            },
+            else => {
+                buf[len] = c;
+                len += 1;
+            }
+        }
+    }
+
+    return buf[0..len];
+}
+
 test "number_to_str" {
     const Input = struct {
         val: u32,

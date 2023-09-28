@@ -179,43 +179,44 @@ fn build_tests(b: *std.build.Builder, modules: []const ModuleDef, target: std.zi
             .optimize = optimize,
             // .filter = "simd rope char iter",
         },
-        // .{
-        //     .name = "rope_tests",
-        //     .root_source_file = .{ .path = "src/rope.zig" },
-        //     .target = target,
-        //     .optimize = optimize,
-        //     // .filter = "simd rope char iter",
-        // },
-        // .{
-        //     .name = "vim_tests",
-        //     .root_source_file = .{ .path = "src/vim.zig" },
-        //     .target = target,
-        //     .optimize = optimize,
-        // },
-        // .{
-        //     .name = "editor_tests",
-        //     .root_source_file = .{ .path = "src/editor.zig" },
-        //     .target = target,
-        //     .optimize = optimize,
-        // },
-        // .{
-        //     .name = "math_tests",
-        //     .root_source_file = .{ .path = "src/math.zig" },
-        //     .target = target,
-        //     .optimize = optimize,
-        // },
-        // .{
-        //     .name = "highlight_tests",
-        //     .root_source_file = .{ .path = "src/highlight.zig" },
-        //     .target = target,
-        //     .optimize = optimize,
-        // },
-        // .{
-        //     .name = "strutil_tests",
-        //     .root_source_file = .{ .path = "src/highlight.zig" },
-        //     .target = target,
-        //     .optimize = optimize,
-        // },
+        .{
+            .name = "rope_tests",
+            .root_source_file = .{ .path = "src/rope.zig" },
+            .target = target,
+            .optimize = optimize,
+            // .filter = "simd rope char iter",
+        },
+        .{
+            .name = "vim_tests",
+            .root_source_file = .{ .path = "src/vim.zig" },
+            .target = target,
+            .optimize = optimize,
+        },
+        .{
+            .name = "editor_tests",
+            .root_source_file = .{ .path = "src/editor.zig" },
+            .target = target,
+            .optimize = optimize,
+            // .filter = "indentation then backspace edge case",
+        },
+        .{
+            .name = "math_tests",
+            .root_source_file = .{ .path = "src/math.zig" },
+            .target = target,
+            .optimize = optimize,
+        },
+        .{
+            .name = "highlight_tests",
+            .root_source_file = .{ .path = "src/highlight.zig" },
+            .target = target,
+            .optimize = optimize,
+        },
+        .{
+            .name = "strutil_tests",
+            .root_source_file = .{ .path = "src/highlight.zig" },
+            .target = target,
+            .optimize = optimize,
+        },
     };
 
     for (tests) |t| {

@@ -22,6 +22,10 @@ pub const TextPos = packed struct {
 
 /// Data structure to make text editing operations more efficient for longer text.
 /// This implementation uses a doubly linked list where each node is a line.
+/// 
+/// Some invariants:
+/// - There is at least always 1 node, even if text is empty that 1 node will have empty items
+/// - Each node = 1 line, the newline char is on the preceeding node
 pub const Rope = struct {
     const Self = @This();
     /// TODO: accessing data requires additional indirection, an optimization
@@ -54,11 +58,11 @@ pub const Rope = struct {
         var node = self.nodes.first;
         var i: usize = 0;
         while (node) |n| {
-            print("  {d}: {s}\n", .{ i, n.data.items });
+            print("  {d} (len={d}): \"{s}\"\n", .{ i, n.data.items.len, n.data.items });
             i += 1;
             node = n.next;
         }
-        print("]", .{});
+        print("]\n", .{});
     }
 
     pub fn next_line(text_: ?[]const u8) struct { line: ?[]const u8, rest: ?[]const u8, newline: bool } {
@@ -223,13 +227,20 @@ pub const Rope = struct {
 
         while (i < text_end) {
             const len = node.data.items.len;
+            // If within the cut range
             if (text_start >= i and text_start < i + len) {
+                // Convert global string index => local node string index
                 var node_cut_start = (text_start - i);
                 var node_cut_end: usize = if (text_end - i > len) len else text_end - i;
-                const cut_len = node_cut_end - node_cut_start;
 
+                const cut_len = node_cut_end - node_cut_start;
                 self.len -= cut_len;
+
                 node.data.items = remove_range(node.data.items, node_cut_start, node_cut_end);
+                // If the text range spans multiple nodes, incrementing
+                // `text_start` by `cut_len` will put `text_start` at the
+                // beginning of the next node (0), making the above
+                // `node_cut_start` calculation correct
                 text_start += cut_len;
             }
 
@@ -257,10 +268,11 @@ pub const Rope = struct {
         return new_node;
     }
 
+    /// Merge the given node with the one after it if it exists
     fn collapse_nodes(self: *Self, node: *Node) !void {
         const next = node.next orelse return;
         try node.data.appendSlice(self.text_alloc, next.data.items);
-        try self.remove_node(next);
+        try self.remove_node_dont_decrement_len(next);
     }
 
     fn remove_node(self: *Self, node: *Node) !void {
@@ -719,34 +731,6 @@ fn remove_range(src: []u8, start: usize, end: usize) []u8 {
     }
     return src[0..len];
 }
-
-// test "simd rope char iter" {
-//     var rope = Rope{};
-//     try rope.init();
-//     var cursor = try rope.insert_text(.{ .line = 0, .col = 0}, "wtf\ndude\nbroooooo!");
-//     cursor.col -= 1;
-//     var iter = SimdRopeCharIterator{
-//         .cursor = cursor,
-//         .node = rope.nodes.last,
-//     };
-
-//     const expected = [][]const u8{
-//         "roooooo!",
-//         "bdude\n"
-//     };
-
-//     // const empty = [_]u8{0} ** 8;
-//     var buf: [8]u8 = undefined;
-//     for (iter.next(), 0..) |simd, i| {
-//         buf = simd;
-//         print("simd: {s}\n", .{buf});
-//     }
-//     // var simd = iter.next();
-//     // buf = simd orelse empty;
-//     // print("BUF: {s}\n", .{buf});
-
-//     // try std.testing.expectEqualDeep("987\n6543"[0..], buf[0..]);
-// }
 
 test "linked list impl" {
     const alloc = std.heap.c_allocator;
