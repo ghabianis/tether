@@ -792,14 +792,13 @@ const Renderer = struct {
         }
     }
 
+    /// TODO: use frame scratch arena
     pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
         _ = screenx;
-        var processor = earcut.Processor(f32){};
-        var vertices = ArrayList(f32){};
-        defer processor.deinit(alloc);
-        defer vertices.deinit(alloc);
-
+        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         var bg = math.hex4("#b4f9f8");
+        bg.w = 0.2;
+        // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         const color = bg;
         const selection = self.editor.selection orelse return;
 
@@ -808,32 +807,11 @@ const Renderer = struct {
         var x: f32 = starting_x;
         var text = text_;
 
-        const ascent = self.atlas.ascent;
-        const descent = self.atlas.descent;
-
-        const LineState = struct {
-            y: f32 = 0.0,
-            r: f32 = 0.0,
-
-            fn top(ls: @This(), a: f32) f32 {
-                return ls.y + a;
-            }
-            fn bot(ls: @This(), d: f32) f32 {
-                return ls.y - d;
-            }
-            fn right(ls: @This()) f32 {
-                return ls.r;
-            }
-        };
-
         var i: u32 = 0;
-        var line_state: ?LineState = null;
-        var first_point = true;
-        var first_x = starting_x;
-        var last_is_newline = false;
-
-        // try vertices.appendSlice(alloc, &.{ x, y + ascent });
-
+        var line_state = false;
+        var yy: f32 = 0.0;
+        var l: f32 = 0.0;
+        var r: f32 = 0.0;
         for (text) |char| {
             defer i += 1;
             if (i >= selection.end) break;
@@ -852,81 +830,44 @@ const Renderer = struct {
                 continue;
             }
 
-            if (first_point) {
-                try vertices.appendSlice(alloc, &.{ x, y + ascent });
-                first_x = x;
-                first_point = false;
-            }
-
-            if (line_state) |*ls| {
-                ls.r += glyph.advance;
+            if (!line_state) {
+                yy = y;
+                l = x;
+                // r = x + @intToFloat(f32, self.atlas.max_glyph_width);
+                r = x + glyph.advance;
+                line_state = true;
             } else {
-                line_state = .{
-                    .y = y,
-                    .r = x + glyph.advance,
-                };
+                r += glyph.advance;
             }
 
-            // space
             if (char == 9) {
                 x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
-                last_is_newline = false;
             } else if (strutil.is_newline(char)) {
                 x = starting_x;
                 // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
                 y -= self.atlas.descent + self.atlas.ascent;
-                last_is_newline = true;
             } else {
                 x += glyph.advance;
-                last_is_newline = false;
             }
 
             // Push vertices if end of line or entire selection
             if (strutil.is_newline(char) or i == selection.end -| 1) {
-                const ls = line_state.?;
+                line_state = false;
 
-                var top_point = math.Float2.new(ls.r, ls.top(ascent));
-                var bot_point = math.Float2.new(ls.r, ls.bot(descent));
-                try vertices.appendSlice(alloc, top_point.as_slice());
-                try vertices.appendSlice(alloc, bot_point.as_slice());
-
-
-                line_state = null;
+                try self.vertices.appendSlice(alloc, &Vertex.square(.{
+                    .t = yy + self.atlas.ascent,
+                    .b = yy - self.atlas.descent,
+                    .l = l,
+                    .r = r,
+                }, .{
+                    // use the middle of the cursor glyph because there's some
+                    // texture sampling errors that make the selection fade into the background
+                    .t = self.atlas.cursor_ty + self.atlas.cursor_h / 2.0,
+                    .b = self.atlas.cursor_ty + self.atlas.cursor_h / 2.0,
+                    .l = self.atlas.cursor_tx + self.atlas.cursor_w / 2.0,
+                    .r = self.atlas.cursor_tx + self.atlas.cursor_w / 2.0,
+                }, color));
             }
-        }
-        // if (last_is_newline) {
-        //     try vertices.appendSlice(alloc, math.Float2.new(first_x, y - descent).as_slice_const());
-        // } else {
-            try vertices.appendSlice(alloc, math.Float2.new(first_x, y ).as_slice_const());
-        // }
-
-        try processor.process(alloc, vertices.items, null, 2);
-        // var triangles: []m = @ptrCast(processor.triangles.items);
-        var j: usize = 0;
-        while (j < processor.triangles.items.len) : (j += 3) {
-            const idx0 = processor.triangles.items[j] * 2;
-            const idx1 = processor.triangles.items[j + 1] * 2;
-            const idx2 = processor.triangles.items[j + 2] * 2;
-            const v0 = math.Float2.new(vertices.items[idx0], vertices.items[idx0 + 1]);
-            const v1 = math.Float2.new(vertices.items[idx1], vertices.items[idx1 + 1]);
-            const v2 = math.Float2.new(vertices.items[idx2], vertices.items[idx2 + 1]);
-
-            const texcoord = math.Float2.new(self.atlas.cursor_tx, self.atlas.cursor_ty);
-            try self.vertices.append(alloc, Vertex{
-                .pos = v0,
-                .tex_coords = texcoord,
-                .color = color,
-            });
-            try self.vertices.append(alloc, Vertex{
-                .pos = v1,
-                .tex_coords = texcoord,
-                .color = color,
-            });
-            try self.vertices.append(alloc, Vertex{
-                .pos = v2,
-                .tex_coords = texcoord,
-                .color = color,
-            });
         }
     }
 
