@@ -207,7 +207,7 @@ const Renderer = struct {
 
     fn build_pipeline(device: metal.MTLDevice, view: metal.MTKView) metal.MTLRenderPipelineState {
         var err: ?*anyopaque = null;
-        const shader_str = @embedFile("./shaders.metal");
+        const shader_str = @embedFile("./shaders/text.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
         defer shader_nsstring.release();
 

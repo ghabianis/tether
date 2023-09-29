@@ -393,7 +393,7 @@ pub const FullThrottleMode = struct {
 
     pub fn build_explosions_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
         var err: ?*anyopaque = null;
-        const shader_str = @embedFile("./explosion.metal");
+        const shader_str = @embedFile("./shaders/explosion.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
         defer shader_nsstring.release();
 
@@ -498,7 +498,7 @@ pub const FullThrottleMode = struct {
 
     pub fn build_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
         var err: ?*anyopaque = null;
-        const shader_str = @embedFile("./FullThrottleShader.metal");
+        const shader_str = @embedFile("./shaders/particle.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
         defer shader_nsstring.release();
 

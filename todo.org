@@ -57,10 +57,15 @@ but we are being lazy and not checking for this and adding redundant glyphs to t
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?
 ** TODO curves svg etc
-* TODO Content/Brainstorm [0/14]
+* TODO Brainstorm [0/14]
 ** TODO improve particles with glow
 look at these: https://www.shadertoy.com/view/lldGzr
 ** TODO lightning effect
+https://drilian.com/2009/02/25/lightning-bolts/
+
+https://www.shadertoy.com/view/3sXSD2
+
+https://github.com/mattdesl/lwjgl-basics/wiki/LightningEffect
 ** TODO sound effects
 https://x.com/lightbulbfeed/status/1706441132992057604?s=20
 ** TODO squiggly lines effect
