@@ -4,6 +4,7 @@ const objc = @import("zig-objc");
 const math = @import("math.zig");
 const anim = @import("anim.zig");
 const mempool = @import("./memory_pool.zig");
+const memutil = @import("./memutil.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -135,6 +136,7 @@ pub const FullThrottleMode = struct {
     velocity_factor: anim.ScalarTrack,
 
     explosions: Explosions,
+    fire: Fire,
 
     screen_shake: anim.ScalarTrack,
     screen_shake_matrix: math.Float4x4,
@@ -238,6 +240,8 @@ pub const FullThrottleMode = struct {
             .screen_shake_matrix_ndc = math.Float4x4.scale_by(1.0),
             // initialize to something very large so animation doesn't trigger on startup
             .time = 10000.0,
+
+            .fire = Fire.init(device, view, 10000),
         };
 
         full_throttle.explosions = .{
@@ -368,6 +372,9 @@ pub const FullThrottleMode = struct {
                 self.remove_cluster(@intCast(ci));
             }
         }
+        // for (self.clusters[0..self.clusters_len], 0..) |*c_,ci| {
+
+        // }
 
         var i: usize = 0;
         const EXPLOSION_DURATION: f32 = 0.5;
@@ -695,5 +702,280 @@ pub const FullThrottleMode = struct {
         command_encoder.set_render_pipeline_state(self.pipeline);
         command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, @as(usize, self.clusters_len) * MAX_CLUSTER_PARTICLE_AMOUNT);
         command_encoder.end_encoding();
+    }
+};
+
+const Fire = struct {
+    compute_pipeline: metal.MTLComputePipelineState,
+    render_pipeline: metal.MTLRenderPipelineState,
+    particle_buffer: metal.MTLBuffer,
+    time: f32,
+    vertices: [4]Fire.Vertex,
+    indices: [6]u16,
+    index_buffer: metal.MTLBuffer,
+    particle_count: usize,
+    texture: objc.Object,
+    sampler_state: objc.Object,
+
+    const Vertex = extern struct {
+        pos: math.Float2 align(8),
+        texcoords: math.Float2 align(8),
+    };
+
+    // time_buffer: metal.MTLBuffer,
+
+    const FireParticle = extern struct {
+        position: math.Float2 align(8),
+        color: math.Float3 align(16),
+        velocity: math.Float2 align(8),
+        gravity: math.Float2 align(8),
+        life: f32,
+        fade: f32,
+    };
+
+    pub fn init(device: metal.MTLDevice, view: metal.MTKView, particle_count: usize) Fire {
+        var fire: Fire = .{
+            .compute_pipeline = undefined,
+            .render_pipeline = undefined,
+            .particle_buffer = undefined,
+            // .time_buffer = undefined,
+            .time = 0.0,
+
+            .vertices = [4]Fire.Vertex{
+                .{
+                    .pos = math.float2(-0.6, 0.6),
+                    .texcoords = math.float2(0.0, 0.0),
+                },
+                .{
+                    .pos = math.float2(
+                        0.6,
+                        0.6,
+                    ),
+                    .texcoords = math.float2(1.0, 0.0),
+                },
+                .{
+                    .pos = math.float2(0.6, -0.6),
+                    .texcoords = math.float2(1.0, 1.0),
+                },
+                .{
+                    .pos = math.float2(-0.6, -0.6),
+                    .texcoords = math.float2(0.0, 1.0),
+                },
+            },
+            .indices = [6]u16{
+                0, // Top-left corner
+                1, // Top-right corner
+                2, // Bottom-right corner
+                2, // Bottom-right corner
+                3, // Bottom-left corner
+                0, // Top-left corner
+            },
+            .index_buffer = undefined,
+            .particle_count = particle_count,
+            .texture = undefined,
+            .sampler_state = undefined,
+        };
+
+        fire.build_pipelines(device, view);
+        fire.initialize_particles(device);
+
+        return fire;
+    }
+
+    pub fn render(self: *Fire, dt: f32, command_queue: metal.MTLCommandQueue, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+
+        self.time += dt;
+
+        color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
+        const compute_command_buffer = command_queue.command_buffer();
+        const compute_command_encoder = compute_command_buffer.compute_command_encoder();
+
+        compute_command_encoder.set_compute_pipeline_state(self.compute_pipeline);
+        compute_command_encoder.set_buffer(self.particle_buffer, 0, 0);
+        const time_bytes = memutil.as_bytes(&self.time);
+        std.debug.assert(time_bytes.len == @sizeOf(f32));
+        compute_command_encoder.set_bytes(time_bytes, 1);
+
+        const grid_size = metal.MTLSize.new(self.particle_count, 1, 1);
+        const thread_group_size = metal.MTLSize.new(1, 1, 1);
+        compute_command_encoder.dispatch_threadgroups(grid_size, thread_group_size);
+        compute_command_encoder.end_encoding();
+
+        compute_command_buffer.commit();
+        // wait for results to populate the particle buffer
+        // compute_command_buffer.wait_until_completed();
+
+        const render_command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        render_command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
+        render_command_encoder.set_render_pipeline_state(self.render_pipeline);
+
+        const w: f32 = @floatCast(width);
+        const h: f32 = @floatCast(height);
+        const aspect = w / h;
+        var ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
+        const uniforms: Uniforms = .{
+            .projection_matrix = ortho,
+            // .model_view_matrix = scale,
+            // .model_view_matrix = self.model_matrix(4, w, h).mul(camera_matrix),
+            .model_view_matrix = camera_matrix.*,
+        };
+
+        render_command_encoder.set_vertex_bytes(memutil.as_bytes(&self.vertices), 0);
+        render_command_encoder.set_vertex_buffer(self.particle_buffer, 0, 1);
+        render_command_encoder.set_vertex_bytes(memutil.as_bytes(&uniforms), 2);
+
+        render_command_encoder.set_fragment_texture(self.texture, 0);
+        render_command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
+
+        render_command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, self.particle_count);
+
+        render_command_encoder.end_encoding();
+    }
+
+    fn initialize_particles(self: *Fire, device: metal.MTLDevice) void {
+        // self.particle_buffer = device.new_buffer_with_bytes(particles_ptr[0..@sizeOf(FireParticle) * particles.len], .storage_mode_shared);
+        self.particle_buffer = device.new_buffer_with_length(self.particle_count * @sizeOf(FireParticle), .storage_mode_managed) orelse @panic("OOM!");
+        var particles = self.particle_buffer.contents_typed(FireParticle)[0..self.particle_count];
+        for (0..particles.len) |i| {
+            var p: *FireParticle = &particles[i];
+            p.position = math.float2(0.0, 0.0);
+            p.life = 1.0;
+            p.fade = (rnd.random().float(f32) * 100.0) / 1000.0 + 0.003;
+            p.color = math.Float3.WHITE;
+            p.velocity = math.float2(
+                (rnd.random().float(f32) * 50.0 - 25.0) * 10.0,
+                (rnd.random().float(f32) * 50.0 - 25.0) * 10.0
+
+                // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0,
+                // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0
+
+                // rnd.random().float(f32) * 2.0 - 1.0,
+                // rnd.random().float(f32) * 2.0 - 1.0
+            );
+            p.gravity = math.float2(0.0, 0.8);
+        }
+        self.particle_buffer.did_modify_range(.{.location = 0, .length = @sizeOf(FireParticle) * self.particle_count});
+    }
+
+    fn build_pipelines(self: *Fire, device: metal.MTLDevice, view: metal.MTKView) void {
+        var err: ?*anyopaque = null;
+        const shader_str = @embedFile("./shaders/fire.metal");
+        const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
+        defer shader_nsstring.release();
+
+        const library = device.obj.msgSend(objc.Object, objc.sel("newLibraryWithSource:options:error:"), .{ shader_nsstring, @as(?*anyopaque, null), &err });
+        metal.check_error(err) catch @panic("failed to build library");
+
+        const func_compute = func_compute: {
+             const str = metal.NSString.new_with_bytes(
+                "compute_main",
+                .utf8,
+            );
+            defer str.release();
+
+            const ptr = library.msgSend(?*anyopaque, objc.sel("newFunctionWithName:"), .{str});
+            break :func_compute objc.Object.fromId(ptr.?);
+        };
+
+        self.compute_pipeline = device.new_compute_pipeline_with_function(func_compute) catch @panic("Failed to make compute pipeline");
+
+        const func_vert = func_vert: {
+            const str = metal.NSString.new_with_bytes(
+                "vertex_main",
+                .utf8,
+            );
+            defer str.release();
+
+            const ptr = library.msgSend(?*anyopaque, objc.sel("newFunctionWithName:"), .{str});
+            break :func_vert objc.Object.fromId(ptr.?);
+        };
+
+        const func_frag = func_frag: {
+            const str = metal.NSString.new_with_bytes(
+                "fragment_main",
+                .utf8,
+            );
+            defer str.release();
+
+            const ptr = library.msgSend(?*anyopaque, objc.sel("newFunctionWithName:"), .{str});
+            break :func_frag objc.Object.fromId(ptr.?);
+        };
+        const vertex_desc = vertex_descriptor: {
+            var desc = metal.MTLVertexDescriptor.alloc();
+            desc = desc.init();
+            desc.set_attribute(0, .{ .format = .float2, .offset = @offsetOf(Fire.Vertex, "pos"), .buffer_index = 0 });
+            desc.set_attribute(1, .{ .format = .float2, .offset = @offsetOf(Fire.Vertex, "texcoords"), .buffer_index = 0 });
+            desc.set_attribute(2, .{ .format = .float2, .offset = @offsetOf(FireParticle, "position"), .buffer_index = 1 });
+            desc.set_attribute(3, .{ .format = .float2, .offset = @offsetOf(FireParticle, "color"), .buffer_index = 1 });
+            desc.set_layout(0, .{ .stride = @sizeOf(Fire.Vertex) });
+            desc.set_layout(1, .{ .stride = @sizeOf(FireParticle), .step_function = .PerInstance});
+            break :vertex_descriptor desc;
+        };
+
+        const pipeline_desc = pipeline_desc: {
+            var desc = metal.MTLRenderPipelineDescriptor.alloc();
+            desc = desc.init();
+            desc.set_vertex_function(func_vert);
+            desc.set_fragment_function(func_frag);
+            desc.set_vertex_descriptor(vertex_desc);
+            break :pipeline_desc desc;
+        };
+
+        const attachments = objc.Object.fromId(pipeline_desc.obj.getProperty(?*anyopaque, "colorAttachments"));
+        {
+            const attachment = attachments.msgSend(
+                objc.Object,
+                objc.sel("objectAtIndexedSubscript:"),
+                .{@as(c_ulong, 0)},
+            );
+
+            const pix_fmt = view.color_pixel_format();
+            // Value is MTLPixelFormatBGRA8Unorm
+            attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+
+            // Blending. This is required so that our text we render on top
+            // of our drawable properly blends into the bg.
+            attachment.setProperty("blendingEnabled", true);
+            attachment.setProperty("rgbBlendOperation", @intFromEnum(metal.MTLBlendOperation.add));
+            attachment.setProperty("alphaBlendOperation", @intFromEnum(metal.MTLBlendOperation.add));
+            attachment.setProperty("sourceRGBBlendFactor", @intFromEnum(metal.MTLBlendFactor.source_alpha));
+            attachment.setProperty("sourceAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.source_alpha));
+            // attachment.setProperty("destinationRGBBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
+            // attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
+            attachment.setProperty("destinationRGBBlendFactor", @intFromEnum(metal.MTLBlendFactor.one));
+            attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one));
+        }
+
+        const pipeline = device.new_render_pipeline(pipeline_desc) catch @panic("failed to make pipeline");
+        self.render_pipeline = pipeline;
+        self.index_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.indices))[0..@sizeOf([6]u16)], .storage_mode_managed);
+
+        const fire_texture_raw = @embedFile("./assets/Particle.bmp");
+        const fire_texture = metal.NSData.new_with_bytes_no_copy(fire_texture_raw[0..], false);
+        const tex_opts = metal.NSDictionary.new_mutable();
+        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
+        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
+        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(1), metal.MTKTextureLoaderOptionSRGB });
+        // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.MTLPixelFormatR8Unorm, metal.MTKTextureLoaderOptionPixelFormat });
+
+        const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
+        var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
+        tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
+
+        const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithData:options:error:"), .{
+            fire_texture,
+            tex_opts,
+        });
+        metal.check_error(err) catch @panic("failed to make texture");
+        self.texture = tex;
+
+        const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
+        sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
+        sampler_descriptor.setProperty("magFilter", metal.MTLSamplerMinMagFilter.linear);
+        sampler_descriptor.setProperty("sAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
+        sampler_descriptor.setProperty("tAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
+
+        const sampler_state = device.new_sampler_state(sampler_descriptor);
+        self.sampler_state = sampler_state;
     }
 };

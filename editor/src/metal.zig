@@ -168,6 +168,21 @@ pub const CGGlyph = u16;
 
 // defined as unsigned long in NSObjCRuntime.h
 pub const NSUInteger = usize;
+
+pub const MTLSize = extern struct {
+    width: NSUInteger,
+    height: NSUInteger,
+    depth: NSUInteger,
+
+    pub fn new(width: NSUInteger, height: NSUInteger, depth: NSUInteger) MTLSize {
+        return .{
+            .width = width,
+            .height = height,
+            .depth = depth,
+        };
+    }
+};
+
 pub const NSStringEncoding = enum(NSUInteger) {
     ascii = 1,
     utf8 = 4,
@@ -298,6 +313,7 @@ pub const MTKTextureLoaderOption = objc.c.id;
 pub extern "C" const MTKTextureLoaderOptionTextureUsage: MTKTextureLoaderOption;
 pub extern "C" const MTKTextureLoaderOptionTextureStorageMode: MTKTextureLoaderOption;
 pub extern "C" const MTKTextureLoaderOptionSRGB: MTKTextureLoaderOption;
+// pub extern "C" const MTKTextureLoaderOptionPixelFormat: MTKTextureLoaderOption;
 
 pub const MTLTextureUsage = enum(NSUInteger) {
     unknown = 0x0000,
@@ -367,6 +383,7 @@ pub const MTLBlendFactor = enum(NSUInteger) {
 
 // TODO: this is supposed to be an enum
 pub const MTLPixelFormat = NSUInteger;
+pub const MTLPixelFormatR8Unorm: NSUInteger = 10;
 
 pub const MTLViewport = extern struct { origin_x: f64, origin_y: f64, width: f64, height: f64, znear: f64, zfar: f64 };
 
@@ -377,6 +394,44 @@ pub const MTLCommandBuffer = struct {
 
     pub fn new_render_command_encoder(self: Self, render_pass_descriptor: objc.Object) MTLRenderCommandEncoder {
         return self.obj.msgSend(MTLRenderCommandEncoder, objc.sel("renderCommandEncoderWithDescriptor:"), .{render_pass_descriptor});
+    }
+
+    pub fn compute_command_encoder(self: Self) MTLComputeCommandEncoder {
+        return self.obj.msgSend(MTLComputeCommandEncoder, objc.sel("computeCommandEncoder"), .{});
+    }
+
+    pub fn wait_until_completed(self: Self) void {
+        return self.obj.msgSend(void, objc.sel("waitUntilCompleted"), .{});
+    }
+
+    pub fn commit(self: Self) void {
+        self.obj.msgSend(void, objc.sel("commit"), .{});
+    }
+};
+
+pub const MTLComputeCommandEncoder = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(Self);
+
+    pub fn set_compute_pipeline_state(self: Self, compute_pipeline: MTLComputePipelineState) void {
+        self.obj.msgSend(void, objc.sel("setComputePipelineState:"), .{compute_pipeline});
+    }
+
+    pub fn set_buffer(self: Self, buffer: MTLBuffer, offset: NSUInteger, idx: NSUInteger) void {
+        self.obj.msgSend(void, objc.sel("setBuffer:offset:atIndex:"), .{buffer, offset, idx});
+    }
+
+    pub fn dispatch_threadgroups(self: Self, threadgroups_per_grid: MTLSize, threads_per_threadgroup: MTLSize) void {
+        self.obj.msgSend(void, objc.sel("dispatchThreadgroups:threadsPerThreadgroup:"), .{threadgroups_per_grid, threads_per_threadgroup});
+    }
+
+    pub fn set_bytes(self: Self, bytes: []const u8, idx: NSUInteger) void {
+        self.obj.msgSend(void, objc.sel("setBytes:length:atIndex:"), .{bytes.ptr, bytes.len, idx});
+    }
+
+    pub fn end_encoding(self: Self) void {
+        self.obj.msgSend(void, objc.sel("endEncoding"), .{});
     }
 };
 
@@ -448,8 +503,19 @@ pub const MTLBuffer = struct {
         self.obj.msgSend(void, objc.sel("didModifyRange:"), .{range});
     }
 
+    pub fn update(self: Self, comptime T: type, data: []const T, offset: usize) void {
+        const contents_buf = self.contents();
+        const contents_t = @as([*]T, @ptrCast(@alignCast(contents_buf)));
+        @memcpy(contents_t[offset..offset + data.len], data[0..]);
+        self.did_modify_range(.{.location = offset * @sizeOf(T), .length = data.len * @sizeOf(T) });
+    }
+
     pub fn contents(self: Self) [*]u8 {
         return self.obj.getProperty([*]u8, "contents");
+    }
+
+    pub fn contents_typed(self: Self, comptime T: type) [*]T {
+        return @ptrCast(@alignCast(self.contents()));
     }
 
     pub fn length(self: Self) NSUInteger {
@@ -500,6 +566,13 @@ pub const MTLDevice = struct {
         return MTLRenderPipelineState.from_obj(pipeline_state);
     }
 
+    pub fn new_compute_pipeline_with_function(self: Self, function: objc.Object) !MTLComputePipelineState {
+        var err: ?*anyopaque = null;
+        const pipeline_state = self.obj.msgSend(objc.Object, objc.sel("newComputePipelineStateWithFunction:error:"), .{ function, err });
+        try check_error(err);
+        return MTLComputePipelineState.from_obj(pipeline_state);
+    }
+
     pub fn new_buffer_with_length(self: Self, len: NSUInteger, opts: MTLResourceOptions) ?MTLBuffer {
         const buf_id = self.obj.msgSend(objc.c.id, objc.sel("newBufferWithLength:options:"), .{ len, opts });
         if (buf_id == 0) {
@@ -510,6 +583,11 @@ pub const MTLDevice = struct {
 
     pub fn new_buffer_with_bytes(self: Self, bytes: []const u8, opts: MTLResourceOptions) MTLBuffer {
         const buf = self.obj.msgSend(MTLBuffer, objc.sel("newBufferWithBytes:length:options:"), .{ bytes.ptr, bytes.len, opts });
+        return buf;
+    }
+
+    pub fn new_buffer_with_bytes_no_copy(self: Self, bytes: []const u8, opts: MTLResourceOptions) MTLBuffer {
+        const buf = self.obj.msgSend(MTLBuffer, objc.sel("newBufferWithBytesNoCopy:length:options:deallocator:"), .{ bytes.ptr, bytes.len, opts, @as(c_ulong, 0) });
         return buf;
     }
 
@@ -570,6 +648,11 @@ pub const MTLCommandQueue = struct {
 };
 
 pub const MTLRenderPipelineState = struct {
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+};
+
+pub const MTLComputePipelineState = struct {
     obj: objc.Object,
     pub usingnamespace DefineObject(@This());
 };

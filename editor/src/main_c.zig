@@ -99,7 +99,7 @@ const Renderer = struct {
         };
         renderer.editor.init() catch @panic("oops");
 
-        renderer.vertex_buffer = device.new_buffer_with_length(32, metal.MTLResourceOptions.storage_mode_shared) orelse @panic("Failed to make buffer");
+        renderer.vertex_buffer = device.new_buffer_with_length(32, metal.MTLResourceOptions.storage_mode_managed) orelse @panic("Failed to make buffer");
 
         const tex_opts = metal.NSDictionary.new_mutable();
         tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
@@ -204,7 +204,9 @@ const Renderer = struct {
         if (self.vertices.items.len * @sizeOf(Vertex) > self.vertex_buffer.length()) {
             const old_vertex_buffer = self.vertex_buffer;
             defer old_vertex_buffer.release();
-            self.vertex_buffer = self.device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(self.vertices.items.ptr))[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_shared);
+            self.vertex_buffer = self.device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(self.vertices.items.ptr))[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_managed);
+        } else {
+            self.vertex_buffer.update(Vertex, self.vertices.items, 0);
         }
     }
 
@@ -934,8 +936,9 @@ const Renderer = struct {
 
         var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0};
         var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
-        self.fullthrottle.render_particles(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        // self.fullthrottle.render_particles(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        // self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.fire.render(dt, self.queue, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
         command_buffer.obj.msgSend(void, objc.sel("commit"), .{});

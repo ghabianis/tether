@@ -193,6 +193,12 @@ pub const Float3 = extern struct {
     y: f32,
     z: f32,
 
+    pub const WHITE = float3(1.0, 1.0, 1.0);
+    pub const BLUE = float3(0.0, 0.0, 1.0);
+    pub const YELLOW = float3(1.0, 1.0, 0.0);
+    pub const ORANGE = float3(1.0, 0.5, 0.0);
+    pub const RED = float3(1.0, 0.1, 0.0);
+
     pub fn screen_to_ndc_vec(self: Float3, screen_size: Float2) Float3 {
         return float3((2 * self.x / screen_size.x), (2 * self.y / screen_size.y), self.z);
     }
@@ -244,6 +250,7 @@ pub const Float4 = extern struct {
     y: f32,
     z: f32,
     w: f32,
+
 
     pub inline fn new(x: f32, y: f32, z: f32, w: f32) Float4 {
         return Float4{
