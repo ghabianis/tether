@@ -451,6 +451,10 @@ pub const MTLBuffer = struct {
     pub fn contents(self: Self) [*]u8 {
         return self.obj.getProperty([*]u8, "contents");
     }
+
+    pub fn length(self: Self) NSUInteger {
+        return self.obj.getProperty(NSUInteger, "length");
+    }
 };
 
 pub const MTLRenderPassDescriptor = struct {

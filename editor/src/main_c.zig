@@ -194,15 +194,18 @@ const Renderer = struct {
         try self.build_selection_geometry(alloc, str, screenx, screeny, text_start_x);
         try self.build_line_numbers_geometry(alloc, &Arena, screenx, screeny, text_start_x);
 
-        // Creating a buffer of length 0 causes a crash, so we need to check if we have any vertices
-        if (self.vertices.items.len > 0) {
-            const old_vertex_buffer = self.vertex_buffer;
-            defer old_vertex_buffer.release();
-            self.vertex_buffer = self.device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(self.vertices.items.ptr))[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_shared);
+        if (self.vertices.items.len == 0) {
+            self.editor.draw_text = false;
             return;
         }
 
-        self.editor.draw_text = false;
+        // Create new buffer if amount of vertices exceeds it
+        // TODO: Amortized growth?
+        if (self.vertices.items.len * @sizeOf(Vertex) > self.vertex_buffer.length()) {
+            const old_vertex_buffer = self.vertex_buffer;
+            defer old_vertex_buffer.release();
+            self.vertex_buffer = self.device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(self.vertices.items.ptr))[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_shared);
+        }
     }
 
     fn build_pipeline(device: metal.MTLDevice, view: metal.MTKView) metal.MTLRenderPipelineState {
@@ -931,7 +934,7 @@ const Renderer = struct {
 
         var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0};
         var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
-        self.fullthrottle.render(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.render_particles(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
         self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});

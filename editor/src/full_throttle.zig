@@ -246,7 +246,7 @@ pub const FullThrottleMode = struct {
             // .times = undefined,
         };
 
-        full_throttle.build_pipeline(device, view);
+        full_throttle.build_particles_pipeline(device, view);
         full_throttle.build_explosions_pipeline(device, view);
         
         return full_throttle;
@@ -496,7 +496,7 @@ pub const FullThrottleMode = struct {
         self.explosion_sampler_state = sampler_state;
     }
 
-    pub fn build_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
+    pub fn build_particles_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
         var err: ?*anyopaque = null;
         const shader_str = @embedFile("./shaders/particle.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
@@ -645,7 +645,7 @@ pub const FullThrottleMode = struct {
         command_encoder.end_encoding();
     }
 
-    pub fn render(self: *FullThrottleMode, dt: f32, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    pub fn render_particles(self: *FullThrottleMode, dt: f32, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
         self.update(dt);
         if (self.clusters_len == 0) {
             return;
