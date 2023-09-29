@@ -241,7 +241,7 @@ pub const FullThrottleMode = struct {
             // initialize to something very large so animation doesn't trigger on startup
             .time = 10000.0,
 
-            .fire = Fire.init(device, view, 10000),
+            .fire = Fire.init(device, view, 1000),
         };
 
         full_throttle.explosions = .{
@@ -743,22 +743,22 @@ const Fire = struct {
 
             .vertices = [4]Fire.Vertex{
                 .{
-                    .pos = math.float2(-0.6, 0.6),
+                    .pos = math.float2(-1.0, 1.0),
                     .texcoords = math.float2(0.0, 0.0),
                 },
                 .{
                     .pos = math.float2(
-                        0.6,
-                        0.6,
+                        1.0,
+                        1.0,
                     ),
                     .texcoords = math.float2(1.0, 0.0),
                 },
                 .{
-                    .pos = math.float2(0.6, -0.6),
+                    .pos = math.float2(1.0, -1.0),
                     .texcoords = math.float2(1.0, 1.0),
                 },
                 .{
-                    .pos = math.float2(-0.6, -0.6),
+                    .pos = math.float2(-1.0, -1.0),
                     .texcoords = math.float2(0.0, 1.0),
                 },
             },
@@ -783,7 +783,6 @@ const Fire = struct {
     }
 
     pub fn render(self: *Fire, dt: f32, command_queue: metal.MTLCommandQueue, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
-
         self.time += dt;
 
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
@@ -813,8 +812,12 @@ const Fire = struct {
         const h: f32 = @floatCast(height);
         const aspect = w / h;
         var ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
+        _ = ortho;
+        // var pers = math.Float4x4.perspective(45 * std.math.pi  / 180.0, 1.0, 0.001, 100.0);
+        var pers = math.Float4x4.perspective(45 * std.math.pi  / 180.0, aspect, 0.001, 100.0);
         const uniforms: Uniforms = .{
-            .projection_matrix = ortho,
+            // .projection_matrix = ortho,
+            .projection_matrix = pers,
             // .model_view_matrix = scale,
             // .model_view_matrix = self.model_matrix(4, w, h).mul(camera_matrix),
             .model_view_matrix = camera_matrix.*,

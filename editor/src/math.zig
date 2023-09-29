@@ -364,6 +364,24 @@ pub const Float4x4 = extern struct {
             float4(tx, ty, tz, 1));
     }
 
+    pub fn perspective(fovYRadians: f32, aspectRatio: f32, near: f32, far: f32) Float4x4 {
+        const tanHalfFovy = std.math.tan(fovYRadians / 2.0);
+
+        var result = Float4x4.new(float4(0,0,0,0), float4(0,0,0,0), float4(0,0,0,0), float4(0,0,0,0));
+
+        result._0.x = 1.0 / (aspectRatio * tanHalfFovy);
+        result._1.y = 1.0 / tanHalfFovy;
+
+        // This is where it's different for Metal's requirements:
+        result._2.z = far / (far - near);             // Scale for [0, 1] depth range
+        result._2.w = 1.0;
+
+        result._3.z = -(far * near) / (far - near);   // Translation term
+        result._3.w = 0.0;
+
+        return result;
+    }
+
     pub fn scale_by(s: f32) Float4x4 {
         return Float4x4.new(
             Float4.new(s, 0, 0, 0),

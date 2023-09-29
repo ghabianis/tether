@@ -906,6 +906,7 @@ const Renderer = struct {
         const color_attachment_desc = attachments.msgSend(objc.Object, objc.sel("objectAtIndexedSubscript:"), .{@as(c_ulong, 0)});
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.clear);
         const bg = math.hex4("#1a1b26");
+        // color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
         color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
