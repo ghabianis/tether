@@ -410,7 +410,7 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
                 print("In comment: @{s}\n", .{str_ptr[0..the_len]});
             }
-            // print("THE NODE: {d}\n", .{});
+            print("THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
             const color = self.theme[capture.index] orelse continue;
 
             const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);

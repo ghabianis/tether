@@ -227,8 +227,45 @@ pub const NSString = struct {
         return @as([*:0]u8, @ptrCast(buf));
     }
 
+    pub fn utf8(self: NSString) [*:0]u8 {
+        return self.obj.getProperty([*:0]u8, "UTF8String");
+    }
+
     pub fn get_characters(self: NSString, buf: []u16) void {
         self.obj.msgSend(void, objc.sel("getCharacters:"), .{buf.ptr});
+    }
+};
+
+
+pub const NSURL = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn file_url_with_path(path: NSString) Self {
+       return Self.from_obj(Self.get_class().msgSend(objc.Object, objc.sel("fileURLWithPath:"), .{path}));
+    }
+};
+
+pub const NSImage = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn new_with_data(data: NSData) Self {
+        return Self.alloc().init_with_data(data);
+    }
+
+    pub fn init_with_data(self: NSImage, data: NSData) Self {
+        return self.obj.msgSend(Self, objc.sel("initWithData:"), .{data});
+    }
+
+    pub fn cgimage_for_proposed_rect(self: NSImage, rect: ?*CGRect, context: ?*anyopaque, hints: ?*anyopaque) objc.c.id {
+        return self.obj.msgSend(objc.c.id, objc.sel("CGImageForProposedRect:context:hints:"), .{rect, context, hints});
+    }
+
+    pub fn size(self: NSImage) CGSize {
+        return self.obj.getProperty(CGSize, "size");
     }
 };
 
@@ -313,6 +350,7 @@ pub const MTKTextureLoaderOption = objc.c.id;
 pub extern "C" const MTKTextureLoaderOptionTextureUsage: MTKTextureLoaderOption;
 pub extern "C" const MTKTextureLoaderOptionTextureStorageMode: MTKTextureLoaderOption;
 pub extern "C" const MTKTextureLoaderOptionSRGB: MTKTextureLoaderOption;
+pub extern "C" fn NSLog(format: objc.c.id) void;
 // pub extern "C" const MTKTextureLoaderOptionPixelFormat: MTKTextureLoaderOption;
 
 pub const MTLTextureUsage = enum(NSUInteger) {
@@ -384,6 +422,8 @@ pub const MTLBlendFactor = enum(NSUInteger) {
 // TODO: this is supposed to be an enum
 pub const MTLPixelFormat = NSUInteger;
 pub const MTLPixelFormatR8Unorm: NSUInteger = 10;
+pub const MTLPixelFormatRGBA8Unorm: NSUInteger = 70;
+pub const MTLPixelFormatRGBA8Unorm_sRGB: NSUInteger = 71;
 
 pub const MTLViewport = extern struct { origin_x: f64, origin_y: f64, width: f64, height: f64, znear: f64, zfar: f64 };
 
@@ -593,6 +633,41 @@ pub const MTLDevice = struct {
 
     pub fn new_sampler_state(self: Self, descriptor: objc.Object) objc.Object {
         return self.obj.msgSend(objc.Object, objc.sel("newSamplerStateWithDescriptor:"), .{descriptor});
+    }
+
+    pub fn new_texture_with_descriptor(self: Self, descriptor: MTLTextureDescriptor) MTLTexture {
+        return self.obj.msgSend(MTLTexture, objc.sel("newTextureWithDescriptor:"), .{descriptor});
+    }
+};
+
+pub const MTLTextureDescriptor = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(Self);
+
+    pub fn new_2d_with_pixel_format(pixel_fmt: MTLPixelFormat, width: NSUInteger, height: NSUInteger, mipmapped: bool) Self {
+        return Self.get_class().msgSend(Self, objc.sel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), .{pixel_fmt, width, height, mipmapped});
+    }
+};
+
+pub const MTLOrigin = extern struct {
+    x: NSUInteger,
+    y: NSUInteger,
+    z: NSUInteger,
+};
+
+pub const MTLRegion2D = extern struct {
+    origin: MTLOrigin,
+    size: MTLSize
+};
+
+pub const MTLTexture = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(Self);
+
+    pub fn replace_region_with_bytes(self: Self, region: MTLRegion2D, mipmap_level: NSUInteger, bytes:  [*]const void, bytes_per_row: NSUInteger) void {
+        return self.obj.msgSend(void, objc.sel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), .{region, mipmap_level, bytes, bytes_per_row});
     }
 };
 
@@ -804,12 +879,12 @@ pub fn check_error(err_: ?*anyopaque) !void {
     if (err_) |err| {
         const nserr = objc.Object.fromId(err);
         const str =
-            nserr.getProperty(?*NSString, "localizedDescription").?;
+            nserr.getProperty(NSString, "localizedDescription");
 
         var buf: [256]u8 = undefined;
 
         const err_str = str.to_c_string(&buf) orelse "unknown error";
-        std.debug.print("meta error={s}\n", .{err_str});
+        std.debug.print("metal error={s}\n", .{err_str});
 
         return MetalError.Uhoh;
     }

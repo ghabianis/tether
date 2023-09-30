@@ -251,6 +251,11 @@ pub const Float4 = extern struct {
     z: f32,
     w: f32,
 
+    pub const WHITE = float4(1.0, 1.0, 1.0, 1.0);
+    pub const BLUE = float4(0.0, 0.0, 1.0, 1.0);
+    pub const YELLOW = float4(1.0, 1.0, 0.0, 1.0);
+    pub const ORANGE = float4(1.0, 0.5, 0.0, 1.0);
+    pub const RED = float4(1.0, 0.1, 0.0, 1.0);
 
     pub inline fn new(x: f32, y: f32, z: f32, w: f32) Float4 {
         return Float4{

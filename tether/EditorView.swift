@@ -162,6 +162,7 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         
         let image: CGImage = renderer_get_atlas_image(self.zig) as! CGImage
         view.renderer = self.zig
+//        view.colorPixelFormat = .bgra8Unorm_srgb
         
         let url = URL(fileURLWithPath: "/Users/zackradisic/Code/tether/atlas.png")
         let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypePNG, 1, nil)

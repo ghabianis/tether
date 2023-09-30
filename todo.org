@@ -1,11 +1,12 @@
 #+title: Todo
 
-* TODO Now [2/6]
-** TODO vertex buffer no need to create each time
+* TODO Now [4/7]
+** DONE vertex buffer no need to create each time
 instead check if <= to current, if so just append
 otherwise create new
-** TODO move particle simulation to GPU
-cluster opacity/velocity can still be computed on the CPU, but the updating particles can be computed on the GPU.
+** DONE fire [0/0]
+*** DONE create buffer for fire particles
+*** DONE compute shader to compute fire position and color
 ** DONE Bug bash [0/0]
 *** DONE selection rendering messed up
 *** DONE deleting text
@@ -53,6 +54,16 @@ vertices of a given char, so we can redraw the crusor without having to call =cr
 ** TODO (perf) don't output existing glyphs in the atlas
 some ligatures like =//= and =///= reuse the same glyph
 but we are being lazy and not checking for this and adding redundant glyphs to the atlas
+** TODO (perf) move particle simulation to GPU [0/8]
+
+*** TODO create particle buffer as texture
+*** TODO draw =cluster_amount * CLUSTER_PARTICLE_COUNT= instances
+*** TODO each instance needs a direction
+*** TODO pass time to shader, need time for each cluster
+*** TODO in shader: calculate cluster index and particle index
+*** TODO compute opacity in shader
+*** TODO compute velocity in shader
+*** TODO explosions: need to reflect the new updates
 ** TODO event loop or some mechanism to do work without stalling frame
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?

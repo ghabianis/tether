@@ -937,8 +937,8 @@ const Renderer = struct {
 
         var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0};
         var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
-        // self.fullthrottle.render_particles(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        // self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.render_particles(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
         self.fullthrottle.fire.render(dt, self.queue, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});

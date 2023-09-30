@@ -152,6 +152,7 @@ pub extern "C" fn CGContextSetFontSize(ctx: CGContextRef, size: metal.CGFloat) v
 pub extern "C" fn CGContextSetTextMatrix(ctx: CGContextRef, t: CGAffineTransform) void;
 pub extern "C" fn CGContextSetTextPosition(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat) void;
 pub extern "C" fn CGContextMoveToPoint(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat) void;
+pub extern "C" fn CGContextDrawImage(ctx: CGContextRef, rect: metal.CGRect, img: CGImageRef) void;
 
 pub extern "C" fn CGContextSetShouldAntialias(ctx: CGContextRef, val: bool) void;
 pub extern "C" fn CGContextSetAllowsAntialiasing(ctx: CGContextRef, val: bool) void;
@@ -165,9 +166,14 @@ pub extern "C" fn CGContextSetAllowsFontSubpixelQuantization(ctx: CGContextRef, 
 pub extern "C" fn CGContextShowGlyphsAtPoint(ctx: CGContextRef, x: metal.CGFloat, y: metal.CGFloat, glyphs: [*]const metal.CGGlyph, count: usize) void;
 pub extern "C" fn CGContextShowGlyphs(ctx: CGContextRef, glyphs: [*]const metal.CGGlyph, count: usize) void;
 pub extern "C" fn CGBitmapContextCreateImage(ctx: CGContextRef) CGImageRef;
+pub extern "C" fn CGBitmapContextGetData(ctx: CGContextRef) [*]void;
+
+pub extern "C" fn CGImageGetWidth(img: CGImageRef) usize;
+pub extern "C" fn CGImageGetHeight(img: CGImageRef) usize;
 
 pub extern "C" fn CGPathCreateWithRect(rect: metal.CGRect, transform: ?*const CGAffineTransform) CGPathRef;
 
+pub extern "C" fn CGImageRelease(img: CGImageRef) void;
 pub extern "C" fn CGColorRelease(color: CGColorRef) void;
 pub extern "C" fn CGColorSpaceRelease(space: CGColorSpaceRef) void;
 pub extern "C" fn CGContextRelease(ctx: CGContextRef) void;

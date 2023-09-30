@@ -241,7 +241,7 @@ pub const FullThrottleMode = struct {
             // initialize to something very large so animation doesn't trigger on startup
             .time = 10000.0,
 
-            .fire = Fire.init(device, view, 1000),
+            .fire = Fire.init(device, view, 10000),
         };
 
         full_throttle.explosions = .{
@@ -726,7 +726,7 @@ const Fire = struct {
 
     const FireParticle = extern struct {
         position: math.Float2 align(8),
-        color: math.Float3 align(16),
+        color: math.Float4 align(16),
         velocity: math.Float2 align(8),
         gravity: math.Float2 align(8),
         life: f32,
@@ -743,22 +743,22 @@ const Fire = struct {
 
             .vertices = [4]Fire.Vertex{
                 .{
-                    .pos = math.float2(-1.0, 1.0),
+                    .pos = math.float2(-0.33, 0.33),
                     .texcoords = math.float2(0.0, 0.0),
                 },
                 .{
                     .pos = math.float2(
-                        1.0,
-                        1.0,
+                        0.33,
+                        0.33,
                     ),
                     .texcoords = math.float2(1.0, 0.0),
                 },
                 .{
-                    .pos = math.float2(1.0, -1.0),
+                    .pos = math.float2(0.33, -0.33),
                     .texcoords = math.float2(1.0, 1.0),
                 },
                 .{
-                    .pos = math.float2(-1.0, -1.0),
+                    .pos = math.float2(-0.33, -0.33),
                     .texcoords = math.float2(0.0, 1.0),
                 },
             },
@@ -841,13 +841,13 @@ const Fire = struct {
         var particles = self.particle_buffer.contents_typed(FireParticle)[0..self.particle_count];
         for (0..particles.len) |i| {
             var p: *FireParticle = &particles[i];
-            p.position = math.float2(0.0, 0.0);
+            p.position = math.float2(0.0, -5.0);
             p.life = 1.0;
             p.fade = (rnd.random().float(f32) * 100.0) / 1000.0 + 0.003;
-            p.color = math.Float3.WHITE;
+            p.color = math.Float4.WHITE;
             p.velocity = math.float2(
-                (rnd.random().float(f32) * 50.0 - 25.0) * 10.0,
-                (rnd.random().float(f32) * 50.0 - 25.0) * 10.0
+                (rnd.random().float(f32) * 50.0 - 25.0) * 100.0,
+                (rnd.random().float(f32) * 50.0 - 25.0) * 100.0
 
                 // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0,
                 // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0
@@ -935,6 +935,7 @@ const Fire = struct {
             const pix_fmt = view.color_pixel_format();
             // Value is MTLPixelFormatBGRA8Unorm
             attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+            // attachment.setProperty("pixelFormat", @as(c_ulong, 81));
 
             // Blending. This is required so that our text we render on top
             // of our drawable properly blends into the bg.
@@ -953,24 +954,40 @@ const Fire = struct {
         self.render_pipeline = pipeline;
         self.index_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.indices))[0..@sizeOf([6]u16)], .storage_mode_managed);
 
-        const fire_texture_raw = @embedFile("./assets/Particle.bmp");
-        const fire_texture = metal.NSData.new_with_bytes_no_copy(fire_texture_raw[0..], false);
-        const tex_opts = metal.NSDictionary.new_mutable();
-        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
-        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
-        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(1), metal.MTKTextureLoaderOptionSRGB });
-        // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.MTLPixelFormatR8Unorm, metal.MTKTextureLoaderOptionPixelFormat });
+        // // const fire_texture_raw = @embedFile("./assets/Particle.bmp");
+        // // const fire_texture_raw = @embedFile("./assets/particle2.png");
+        // // const fire_texture_raw = @embedFile("./assets/fire.png");
+        // // const fire_texture_raw = @embedFile("./assets/fire2.png");
+        // const fire_texture_raw = @embedFile("./assets/flare.png");
+        // const fire_texture = metal.NSData.new_with_bytes_no_copy(fire_texture_raw[0..], false);
+        // // const fire_full_path = metal.NSString.new_with_bytes("/Users/zackradisic/Downloads/fireparticle.png", .ascii);
+        // // NSURL *textureFileURL = [NSURL fileURLWithPath:fullFilePath];
 
-        const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
-        var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
-        tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
+        // const tex_opts = metal.NSDictionary.new_mutable();
+        // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
+        // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
+        // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(0), metal.MTKTextureLoaderOptionSRGB });
+        // // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.MTLPixelFormatR8Unorm, metal.MTKTextureLoaderOptionPixelFormat });
 
-        const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithData:options:error:"), .{
-            fire_texture,
-            tex_opts,
-        });
-        metal.check_error(err) catch @panic("failed to make texture");
-        self.texture = tex;
+        // const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
+        // var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
+        // tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
+
+        // err = null;
+        // const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithData:options:error:"), .{
+        //     fire_texture,
+        //     tex_opts,
+        //     &err
+        // });
+        // // const nsurl = metal.NSURL.file_url_with_path(fire_full_path);
+        // // const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithContentsOfURL:options:error:"), .{
+        // //     nsurl,
+        // //     tex_opts,
+        // // });
+        // metal.check_error(err) catch @panic("failed to make texture");
+        const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/Particle.bmp")[0..]);
+        // const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/fire2.png")[0..]);
+        self.texture = tex.obj;
 
         const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
