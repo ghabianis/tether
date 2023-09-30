@@ -88,10 +88,57 @@ float randomNoise(float2 p, uint i) {
   return fract(6791.0 * sin(i * 47.0 * p.x + 9973.0 * p.y));
 }
 
+struct Keyframe {
+    float time;      // in the range [0, 1], representing the normalized life of the particle.
+    float4 color;
+};
+
+float4 lerp(float4 a, float4 b, float t) {
+    return a + (b - a) * t;
+}
+
+float4 getColorBasedOnLife(float life, Keyframe keyframes[5]) {
+    // For the provided example, we have 5 keyframes:
+    // 0: white, 0.25: blue, 0.5: yellow, 0.75: orange, 1: red
+
+    if(life <= keyframes[1].time) {
+        return lerp(keyframes[0].color, keyframes[1].color, life / keyframes[1].time);
+    } else if(life <= keyframes[2].time) {
+        return lerp(keyframes[1].color, keyframes[2].color, (life - keyframes[1].time) / (keyframes[2].time - keyframes[1].time));
+    } else if(life <= keyframes[3].time) {
+        return lerp(keyframes[2].color, keyframes[3].color, (life - keyframes[2].time) / (keyframes[3].time - keyframes[2].time));
+    } else {
+        return lerp(keyframes[3].color, keyframes[4].color, (life - keyframes[3].time) / (keyframes[4].time - keyframes[3].time));
+    }
+}
+
+constant Keyframe keyframes[5] = {
+    {1.0, float4(1, 1, 1, 1)},
+    {0.85, float4(0, 1.0, 0, 1)},
+    {0.75, float4(1, 1, 0, 1)},
+    {0.6, float4(1, 0.5, 0, 1)},
+    {0.4, float4(1, 1, 1, 1)},
+};
+
+// #define BLUEY 1
+
+float3 palette( float t ) {
+    float3 a = float3(0.5, 0.5, 0.5);
+    float3 b = float3(0.5, 0.5, 0.5);
+    float3 c = float3(1.0, 1.0, 1.0);
+    float3 d = float3(0.263,0.416,0.557);
+
+    return a + b*cos( 6.28318*(c*t+d) );
+}
+
 kernel void compute_main(device Particle *particles [[ buffer(0) ]],
                             constant float &time [[ buffer(1) ]],
                             uint id [[ thread_position_in_grid ]])
 {
+    const float4 red = float4(1, 0, 0, 1.0);
+    const float4 orange = float4(1, 0.5, 0, 1.0);
+    const float4 yellow = float4(1, 1, 0, 1.0);
+    const float4 blue = float4(0, 0, 1, 1.0);
     const float2 gravity = float2(0.0, 0.0);
     const float posX = 0.0;
     const float posY = -5.0;
@@ -104,26 +151,21 @@ kernel void compute_main(device Particle *particles [[ buffer(0) ]],
     particle.position.x += particle.velocity.x / 750;
     particle.position.y += particle.velocity.y / 1000;
 
-    // particle.position.x += particle.velocity.x / 75;
-    // particle.position.y += particle.velocity.y / 75;
-
-    // if (particle.position.y > 0.05 + posY) {
-    //     particle.gravity.x = sin(particle.gravity.x);
-    // }
-
     if (particle.position.x > posX && particle.position.y > (convergence_height + posY)) {
         // particle.gravity.x = -1.3 / 2.0;
         particle.gravity.x = -0.3;
+        // particle.gravity.x = -0.5;
     } else if (particle.position.x < posX &&
                 particle.position.y > (convergence_height + posY)) {
         // particle.gravity.x = 1.3 / 2.0;
         particle.gravity.x = 0.3;
+        // particle.gravity.x = 0.5;
     } else {
-        particle.gravity.x = 0.0;
+        particle.gravity.x = rng.rand() * 1 - 0.5;
     }
     
     particle.velocity += particle.gravity + gravity;
-    particle.life -= particle.fade * 1;
+    particle.life -= particle.fade * 1.0;
 
     if (particle.life < 0.0) {
         particle.life = 1.0;
@@ -142,14 +184,29 @@ kernel void compute_main(device Particle *particles [[ buffer(0) ]],
         particle.fade = (rng.rand() * 100) / 1000.0 + 0.003;
         particle.position = float2(posX, posY);
         particle.color = float4(1, 1, 1.0, 0.0001);
-    } else if (particle.life < 0.4) {
-        particle.color = float4(1, 0, 0, 1.0); // red
-    } else if (particle.life < 0.6) {
-        particle.color = float4(1, 0.5, 0, 1.0); // orange
-    } else if (particle.life < 0.75) {
-        particle.color = float4(1, 1, 0, 1.0); // yellow
-    } else if (particle.life < 0.85) {
-        particle.color = float4(0, 0, 1, 1.0); // blue
+    } else {
+#ifndef BLUEY
+        if (particle.life < 0.4) {
+            particle.color = float4(1, 0, 0, 1.0); // red
+        } else if (particle.life < 0.6) {
+            particle.color = float4(1, 0.5, 0, 1.0); // orange
+        } else if (particle.life < 0.75) {
+            particle.color = float4(1, 1, 0, 1.0); // yellow
+        } else if (particle.life < 0.85) {
+            particle.color = float4(0, 0, 1, 1.0); // blue
+        }
+#else
+        float life = particle.life;
+//        for (int i = 0; i < 4; i++) {
+//            if (life <= keyframes[i + 1].time) {
+//                float t = (life - keyframes[i].time) / (keyframes[i+1].time - keyframes[i].time);
+//                particle.color = lerp(keyframes[i].color, keyframes[i+1].color, t);
+//                break;
+//            }
+//        }
+        
+        particle.color = float4(palette(life), 1);
+#endif
     }
 
     particles[id] = particle;
@@ -188,13 +245,23 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]],
 {
     VertexOut out;
 
-    // Do something with the particle data
-    float2 particlePosition = particles[instance_id].position;
+    Particle particle = particles[instance_id];
+    float2 relativePosition = vertexIn.position; // Since vertexIn.position is already relative to the particle center
+
+    // float rotationAngle = atan2(particle.gravity.y, particle.gravity.x); // Assuming gravity is available in the shader
+    float rotationAngle = atan2(particle.gravity.x, particle.gravity.y); // Assuming gravity is available in the shader
+    float2x2 rotationMatrix = float2x2(
+        cos(rotationAngle), -sin(rotationAngle),
+        sin(rotationAngle),  cos(rotationAngle)
+    );
+
+    float2 rotatedRelativePosition = rotationMatrix * relativePosition;
+    float2 finalVertexPosition = rotatedRelativePosition + particle.position;
 
     // Convert to homogeneous coordinates
-    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(vertexIn.position + particlePosition, 80, 1.0);
+    out.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(finalVertexPosition, 20, 1.0);
     // out.position = uniforms.projectionMatrix * float4(vertexIn.position + particlePosition, 20, 1.0);
-    out.color = float4(particles[instance_id].color.xyz, particles[instance_id].color.w * smoothstep(0.0, 0.3, particles[instance_id].life));
+    out.color = float4(particles[instance_id].color.xyz, particles[instance_id].color.w * smoothstep(0.0, 0.6, particles[instance_id].life));
     out.texCoords = vertexIn.texCoords;
 
     return out;
@@ -209,14 +276,20 @@ fragment float4 fragment_main(
     // float sampled = round(tex.sample(smp, fragmentIn.texCoords.xy).r);
 
     // For Particle.bmp
-    // float sampled = tex.sample(smp, fragmentIn.texCoords.xy).a;
+    // float sampled = tex.sample(smp, fragmentIn.texCoords.xy).r;
+    // float4 color = float4(fragmentIn.color.xyz, fragmentIn.color.w * sampled);
+    // #ifndef BLUEY
+    // return color;
+    // #else
+    // return color * pow(1.0, -1.5);
+    // #endif
 
     // float sampled = tex.sample(smp, fragmentIn.texCoords.xy).r;
 
     // For flare.png
     // float3 sampled_rgb = tex.sample(smp, fragmentIn.texCoords.xy).rgb;
     // float sampled = (sampled_rgb.r + sampled_rgb.g + sampled_rgb.b) / 3;
-
     // return float4(fragmentIn.color.xyz, fragmentIn.color.w * sampled);
+
     return float4(fragmentIn.color.xyz, fragmentIn.color.w);
 }

@@ -733,6 +733,8 @@ const Fire = struct {
         fade: f32,
     };
 
+    const VERTEX_SIZE: f32 = 0.33;
+
     pub fn init(device: metal.MTLDevice, view: metal.MTKView, particle_count: usize) Fire {
         var fire: Fire = .{
             .compute_pipeline = undefined,
@@ -743,22 +745,22 @@ const Fire = struct {
 
             .vertices = [4]Fire.Vertex{
                 .{
-                    .pos = math.float2(-0.33, 0.33),
+                    .pos = math.float2(-VERTEX_SIZE, VERTEX_SIZE),
                     .texcoords = math.float2(0.0, 0.0),
                 },
                 .{
                     .pos = math.float2(
-                        0.33,
-                        0.33,
+                        VERTEX_SIZE,
+                        VERTEX_SIZE,
                     ),
                     .texcoords = math.float2(1.0, 0.0),
                 },
                 .{
-                    .pos = math.float2(0.33, -0.33),
+                    .pos = math.float2(VERTEX_SIZE, -VERTEX_SIZE),
                     .texcoords = math.float2(1.0, 1.0),
                 },
                 .{
-                    .pos = math.float2(-0.33, -0.33),
+                    .pos = math.float2(-VERTEX_SIZE, -VERTEX_SIZE),
                     .texcoords = math.float2(0.0, 1.0),
                 },
             },
@@ -841,20 +843,28 @@ const Fire = struct {
         var particles = self.particle_buffer.contents_typed(FireParticle)[0..self.particle_count];
         for (0..particles.len) |i| {
             var p: *FireParticle = &particles[i];
-            p.position = math.float2(0.0, -5.0);
+            p.position = math.float2(0.0, -5.0).add(
+                math.float2(
+                    rnd.random().float(f32) * 0.2 - 0.1, 
+                    rnd.random().float(f32) * 0.2 - 0.1
+            ));
             p.life = 1.0;
             p.fade = (rnd.random().float(f32) * 100.0) / 1000.0 + 0.003;
             p.color = math.Float4.WHITE;
             p.velocity = math.float2(
-                (rnd.random().float(f32) * 50.0 - 25.0) * 100.0,
-                (rnd.random().float(f32) * 50.0 - 25.0) * 100.0
+                rnd.random().float(f32) * 2.0 - 1.0, 
+                rnd.random().float(f32) * 2.0 - 1.0
+            ).norm().mul_f(rnd.random().float(f32) * 2000);
+            // p.velocity = math.float2(
+            //     (rnd.random().float(f32) * 50.0 - 25.0) * 100.0,
+            //     (rnd.random().float(f32) * 50.0 - 25.0) * 100.0
 
-                // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0,
-                // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0
+            //     // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0,
+            //     // (rnd.random().float(f32) * 50.0 - 25.0) * 1.0
 
-                // rnd.random().float(f32) * 2.0 - 1.0,
-                // rnd.random().float(f32) * 2.0 - 1.0
-            );
+            //     // rnd.random().float(f32) * 2.0 - 1.0,
+            //     // rnd.random().float(f32) * 2.0 - 1.0
+            // );
             p.gravity = math.float2(0.0, 0.8);
         }
         self.particle_buffer.did_modify_range(.{.location = 0, .length = @sizeOf(FireParticle) * self.particle_count});
@@ -987,6 +997,7 @@ const Fire = struct {
         // metal.check_error(err) catch @panic("failed to make texture");
         const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/Particle.bmp")[0..]);
         // const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/fire2.png")[0..]);
+        // const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/flare.png")[0..]);
         self.texture = tex.obj;
 
         const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
