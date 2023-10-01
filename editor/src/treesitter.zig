@@ -3,8 +3,9 @@ pub const c = @cImport({
 });
 
 pub extern "C" fn tree_sitter_zig() *c.TSLanguage;
+pub extern "C" fn tree_sitter_c() *c.TSLanguage;
 pub extern "C" fn tree_sitter_rust() *c.TSLanguage;
-pub extern "C" fn tree_sitter_typescript() *c.TSLanguage;
+// pub extern "C" fn tree_sitter_typescript() *c.TSLanguage;
 
 pub const RUST: Language = Language.comptime_new(
     tree_sitter_rust, 
@@ -20,12 +21,19 @@ pub const ZIG: Language = Language.comptime_new(
     null,
 );
 
-pub const TS: Language = Language.comptime_new(
-    tree_sitter_typescript,
-    "./syntax/tree-sitter-typescript/queries/highlights.scm",
+pub const C: Language = Language.comptime_new(
+    tree_sitter_c,
+    "./syntax/tree-sitter-c/queries/highlights.scm",
     null,
     null,
 );
+
+// pub const TS: Language = Language.comptime_new(
+//     tree_sitter_typescript,
+//     "./syntax/tree-sitter-typescript/queries/highlights.scm",
+//     null,
+//     null,
+// );
 
 pub const Language = struct {
     highlights: []const u8,

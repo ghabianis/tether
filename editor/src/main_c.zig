@@ -71,7 +71,7 @@ const Renderer = struct {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
-        const highlight = Highlight.init(alloc, &ts.ZIG, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
+        const highlight = Highlight.init(alloc, &ts.C, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
 
         var renderer: Renderer = .{
             .view = view,

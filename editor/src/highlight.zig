@@ -347,15 +347,16 @@ pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const Capt
 }
 
 pub fn update_tree(self: *Highlight, str: []const u8) void {
-    if (self.tree) |ts_tree| {
-        defer c.ts_tree_delete(ts_tree);
+    if (self.tree) |tstree| {
+        c.ts_tree_delete(tstree);
     }
-    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
+    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @intCast(str.len));
     self.tree = tree;
 }
 
 /// Invariants:
 pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
+    if (str.len == 0) return;
     defer c.ts_parser_reset(self.parser);
     if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
         @panic("Failed to set parser!");
@@ -383,7 +384,9 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
     }
     highlight_buf.list.clearRetainingCapacity();
 
+    var counter: usize = 0;
     while (c.ts_query_cursor_next_match(query_cursor, &match)) {
+        counter += 1;
         var last_match: ?u32 = null;
 
         var i: u32 = 0;
@@ -391,7 +394,13 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             const capture_maybe: ?*const c.TSQueryCapture = &match.captures[i];
             const capture = capture_maybe.?;
 
-            if (self.satisfies_text_predicates(capture, str, &match)) {
+            var length: u32 = undefined;
+            const predicates_ptr = c.ts_query_predicates_for_pattern(self.query, match.pattern_index, &length);
+
+            if (length > 1 and self.satisfies_text_predicates(capture, predicates_ptr[0..length], str)) {
+                last_match = i;
+                break;
+            } else {
                 last_match = i;
                 break;
             }
@@ -421,16 +430,12 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
     }
 }
 
-fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture, src: []const u8, match: *c.TSQueryMatch) bool {
-    var length: u32 = undefined;
+fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture, predicates: []const c.TSQueryPredicateStep, src: []const u8) bool {
 
-    var predicates_ptr = c.ts_query_predicates_for_pattern(self.query, match.pattern_index, &length);
-    if (length < 1) return true;
-
-    const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
+    // const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
 
     var i: u32 = 0;
-    while (i < length) {
+    while (i < predicates.len) {
         const predicate = predicates[i];
         switch (predicate.type) {
             c.TSQueryPredicateStepTypeString => {
