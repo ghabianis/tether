@@ -10,6 +10,17 @@ const math = @import("./math.zig");
 const r = @import("./regex.zig");
 const strutil = @import("./strutil.zig");
 
+const Highlight = @This();
+parser: *c.TSParser,
+lang: *const ts.Language,
+query: *c.TSQuery,
+theme: []const ?math.Float4,
+/// tree-sitter value id -> regex
+regexes: HashMap(u32, r.regex_t),
+tree: ?*c.TSTree = null,
+
+buf: HighlightBuf = .{},
+
 const CommonCaptureNames = enum {
     Attribute,
     Comment,
@@ -92,10 +103,16 @@ const CaptureConfig = struct {
     color: math.Float4,
 };
 
-const Highlight = @This();
 const HashMap = std.AutoHashMap;
 
+/// Contains a list of `HighlightCapture`: basically a list of text that need to be highlighted with a specific color.
+/// 
+/// HighlightCaptures are a range of text which need to be highlighted. They are
+/// directly created from tree-sitter's query captures. The color is from taking
+/// the capture name and looking it up from the current theme.
 pub const HighlightBuf = struct {
+    list: ArrayList(HighlightCapture) = .{},
+
     const HighlightCapture = struct {
         start: u32,
         end: u32,
@@ -146,7 +163,6 @@ pub const HighlightBuf = struct {
         }
     };
 
-    list: ArrayList(HighlightCapture) = .{},
 
     fn find_starting_insert_idx(self: *const HighlightBuf, start: u32) ?u32 {
         var size: usize = self.list.items.len;
@@ -206,16 +222,6 @@ pub const HighlightBuf = struct {
     }
 };
 
-parser: *c.TSParser,
-lang: *const ts.Language,
-query: *c.TSQuery,
-theme: []const ?math.Float4,
-/// tree-sitter value id -> regex
-regexes: HashMap(u32, r.regex_t),
-tree: ?*c.TSTree = null,
-
-buf: HighlightBuf = .{},
-
 /// Adapted with minor changes from:
 /// https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
 ///
@@ -224,7 +230,9 @@ buf: HighlightBuf = .{},
 /// and @keyword.operator, and the theme defines colors for only @keyword, then
 /// it makes sure @keyword.function and @keyword.operator get the color for
 /// @keyword.
-fn configure_higlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []const CaptureConfig) ![]?math.Float4 {
+/// 
+/// The return value is an array indexed by capture ID (basically index in the TSQuery) that contains the color for that capture.
+fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []const CaptureConfig) ![]?math.Float4 {
     const count: u32 = c.ts_query_capture_count(q);
     var theme = try alloc.alloc(?math.Float4, @as(usize, @intCast(count)));
     @memset(theme, null);
@@ -232,6 +240,7 @@ fn configure_higlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []cons
     var capture_parts = std.ArrayList([]const u8).init(alloc);
     defer capture_parts.deinit();
 
+    // Note that capture ID basically means index
     var i: u32 = 0;
     while (i < count) : (i += 1) {
         var length: u32 = 0;
@@ -282,6 +291,12 @@ fn configure_higlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []cons
     return theme;
 }
 
+/// Initializes the highlighter with the given language and color scheme. `colors` is from calling `.to_indices()` on the theme
+/// 
+/// The highlighter must be configured to handle the queries (highlights):
+///   1. If any queries have use `#match? <REGEX>` the REGEX needs to be compiled and stored
+///   2. The given color scheme is turned into an array indexed by TSQueryCapture index for easy retrieval of color to highlight text
+///      (e.g. if IDENTIFIER is index 0 in the TSQueryCapture then `Highlight.theme[0]` will contain the color to highlight an identifier)
 pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const CaptureConfig) !Highlight {
     var error_offset: u32 = undefined;
     var error_type: c.TSQueryError = undefined;
@@ -338,7 +353,7 @@ pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const Capt
             }
         }
 
-        const theme = try Highlight.configure_higlights(alloc, q, colors);
+        const theme = try Highlight.configure_highlights(alloc, q, colors);
 
         return .{ .parser = parser.?, .query = q, .lang = language, .theme = theme, .regexes = regexes };
     }
@@ -354,13 +369,21 @@ pub fn update_tree(self: *Highlight, str: []const u8) void {
     self.tree = tree;
 }
 
-/// Invariants:
+/// This function assigns highlight colors to the text vertices in `vertices: []math.Vertex` parameter.
+/// 
+/// NOTE: This function expects `self.tree` to either:
+///       - contain a TSTree parsed to the latest version of the text
+///       - OR be null, in which case it will parse and set `self.tree` itself
 pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
     if (str.len == 0) return;
+
+    // We reset the parser each time this is called
     defer c.ts_parser_reset(self.parser);
     if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
         @panic("Failed to set parser!");
     }
+
+    // Create a tree if we don't have one already
     var tree = tree: {
         if (self.tree) |ts_tree| {
             break :tree ts_tree;
@@ -377,16 +400,16 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
     c.ts_query_cursor_exec(query_cursor, self.query, root_node);
 
     var highlight_buf = &self.buf;
+    // If the text has not been updated, we don't need to run the queries again
     if (!text_dirty) {
-        // highlight_buf.print_items();
         highlight_buf.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
         return;
     }
+
+    // Otherwise, clear our highlight captures and run the queries
     highlight_buf.list.clearRetainingCapacity();
 
-    var counter: usize = 0;
     while (c.ts_query_cursor_next_match(query_cursor, &match)) {
-        counter += 1;
         var last_match: ?u32 = null;
 
         var i: u32 = 0;
@@ -397,6 +420,8 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             var length: u32 = undefined;
             const predicates_ptr = c.ts_query_predicates_for_pattern(self.query, match.pattern_index, &length);
 
+            // If the pattern has predicates (e.g. some regex like match?, eq? etc.) then check that the text matches it.
+            // Otherwise its a match
             if (length > 1 and self.satisfies_text_predicates(capture, predicates_ptr[0..length], str)) {
                 last_match = i;
                 break;
@@ -406,6 +431,8 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             }
         }
 
+        // If we have a match, copy the the highlight colors to the text
+        // vertices for the text range of the match
         if (last_match) |index| {
             const capture_maybe: ?*const c.TSQueryCapture = &match.captures[index];
             const capture = capture_maybe.?;
@@ -414,17 +441,22 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
             const end = c.ts_node_end_byte(capture.node);
             // if ((start_byte < start and end_byte <= start) or start_byte >= end) continue;
             // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
+            
             var the_len: u32 = 0;
             const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
             if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
                 print("In comment: @{s}\n", .{str_ptr[0..the_len]});
             }
+
             print("THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
+
+            // Grab the color that is associated with this capture kind based on the theme
             const color = self.theme[capture.index] orelse continue;
 
             const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);
             _ = the_highlight.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
             try highlight_buf.list.append(alloc, the_highlight);
+
             // std.sort.insertion(HighlightBuf.HighlightCapture, highlight_buf.list.items, {}, HighlightBuf.HighlightCapture.less_than_ctx);
         }
     }
@@ -581,7 +613,7 @@ test "dot notation" {
     try std.testing.expectEqualStrings(expected2, result2);
 }
 
-test "configure higlights levels" {
+test "configure highlights levels" {
     const alloc = std.heap.c_allocator;
     const language = ts.ZIG;
 
@@ -609,7 +641,7 @@ test "configure higlights levels" {
     const color_keyword_function = math.Float4.new(32.0, 32.0, 32.0, 1.0);
     const color_punctuation = math.Float4.new(1.0, 1.0, 0.0, 1.0);
     const color_function = math.Float4.new(0.0, 1.0, 0.0, 0.0);
-    const theme = try Highlight.configure_higlights(alloc, query, &.{
+    const theme = try Highlight.configure_highlights(alloc, query, &.{
         .{ .name = "keyword", .color = color_keyword },
         .{ .name = "keyword.function", .color = color_keyword_function },
         .{ .name = "function", .color = color_function },
@@ -629,7 +661,7 @@ test "configure higlights levels" {
     try std.testing.expectEqualDeep(theme[function_idx], color_function);
 }
 
-test "configure higlights levels edge case" {
+test "configure highlights levels edge case" {
     const alloc = std.heap.c_allocator;
     const language = ts.ZIG;
 
@@ -656,7 +688,7 @@ test "configure higlights levels edge case" {
     const color_keyword = math.Float4.new(69.0, 420.0, 69420.0, 1.0);
     const color_punctuation = math.Float4.new(1.0, 1.0, 0.0, 1.0);
     const color_function = math.Float4.new(0.0, 1.0, 0.0, 0.0);
-    const theme = try Highlight.configure_higlights(alloc, query, &.{
+    const theme = try Highlight.configure_highlights(alloc, query, &.{
         .{ .name = "keyword", .color = color_keyword },
         .{ .name = "function", .color = color_function },
         .{ .name = "punctuation", .color = color_punctuation },
