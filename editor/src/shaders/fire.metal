@@ -165,7 +165,7 @@ kernel void compute_main(device Particle *particles [[ buffer(0) ]],
     }
     
     particle.velocity += particle.gravity + gravity;
-    particle.life -= particle.fade * 1.0;
+    particle.life -= particle.fade * 5.0;
 
     if (particle.life < 0.0) {
         particle.life = 1.0;
