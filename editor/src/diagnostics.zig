@@ -83,6 +83,7 @@ pub fn update(
     if (!text_dirty) return;
     self.instances.clearRetainingCapacity();
 
+    // TODO: PERF: Only need to calculate lines that are visible. Also, move this to build text geometry loop?
     // First calculate mapping of line range -> glyph baseline
     var line_baselines = std.ArrayList(LineBaseline).initCapacity(frame_arena.allocator(), rope.nodes.len) catch @panic("OOM");
     {

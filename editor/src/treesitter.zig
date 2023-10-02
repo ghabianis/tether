@@ -68,3 +68,57 @@ pub const Tree = packed struct {
 };
 
 pub const Edit = c.TSInputEdit;
+
+pub const QueryCaptureIter = struct {
+    cursor: *c.TSQueryCursor,
+    peeked: ?Item,
+
+    pub const Item = struct {
+        match: c.TSQueryMatch,
+        idx: u32,
+        capture: *const c.TSQueryCapture
+    };
+
+    pub fn new(cursor: *c.TSQueryCursor) QueryCaptureIter {
+        return .{
+            .cursor = cursor,
+            .peeked = null,
+        };
+    }
+
+    pub fn next(self: *QueryCaptureIter) ?Item {
+        if (self.peeked) |p| {
+            self.peeked = null;
+            return p;
+        }
+
+        var match: c.TSQueryMatch = undefined;
+        var idx: u32 = undefined;
+        if (!c.ts_query_cursor_next_capture(self.cursor, &match, &idx)) {
+            return null;
+        } 
+
+        const capture_maybe: ?*const c.TSQueryCapture = &match.captures[idx];
+        const capture = capture_maybe.?;
+        return .{ .match = match, .idx = idx, .capture = capture };
+    }
+
+    pub fn peek(self: *QueryCaptureIter) ?Item {
+        if (self.peeked) |p| {
+            return p;
+        }
+
+        var match: c.TSQueryMatch = undefined;
+        var idx: u32 = undefined;
+        if (!c.ts_query_cursor_next_capture(self.cursor, &match, &idx)) {
+            return null;
+        } 
+
+        const capture_maybe: ?*const c.TSQueryCapture = &match.captures[idx];
+        const capture = capture_maybe.?;
+        const result = .{ .match = match, .idx = idx, .capture = capture };
+        self.peeked = result;
+
+        return self.peeked;
+    }
+};
