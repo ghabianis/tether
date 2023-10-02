@@ -1,43 +1,33 @@
 #+title: Todo
 
-* TODO Now [4/7]
-** DONE vertex buffer no need to create each time
-instead check if <= to current, if so just append
-otherwise create new
-** DONE fire [0/0]
-*** DONE create buffer for fire particles
-*** DONE compute shader to compute fire position and color
-** DONE Bug bash [0/0]
-*** DONE selection rendering messed up
-*** DONE deleting text
-#+begin_src zig
-fn testFn(self: *Self) void {
-    switch (self) {
-        .Foo => {
-
-        },
-    }
-}
-#+end_src
-
-start selection on comma
-move to the =.= on the line with =.Foo=
-delete
-
-it crashes
-*** DONE backspacing on start of line fucked
+* TODO Now [1/4]
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::
   - current file path relative to project root
   - current line / col
   - vim mode
-
+** TODO fix comment syntax highlighting fucked up
 ** TODO sweep thru code for objc memory leaks
 there are probably lots of places where i am not freeing objc objects
-** DONE bug: =cc= (change line) should preserve line and not delete it entirely
-* TODO Later [0/11]
+** DONE Diagnostics
+- Determine where to render diagnostics
+- Render diagnostics
+
+Problem: need the baseline of each line. How to get this information
+efficiently?
+
+Two things here:
+- Need to compute it. Where/when?
+  - Simple: compute in =Instance.from_text_vertices()= ::
+    It's not really needed elsewhere, so why bother with any place else?
+
+    We don't want to compute this for every char
+
+- Do we need to cache it? If so, where/when?
+* TODO Later [0/14]
 ** TODO simd math data structures
+** TODO (perf) Cache diagnostics =LineBaseline= struct?
 ** TODO (refactor) coalesce the text geometry building code for =build_text_geometry()= and =build_line_number_geometry()=
 ** TODO (perf) only build line number geometry for lines we see
 ** TODO (perf) only build text geometry for text we see?
@@ -101,6 +91,32 @@ https://x.com/GrahamFleming_/status/1706356048821620907?s=20
 ** TODO errors should burn
 https://x.com/xldenis/status/1706552511925002537?s=20
 * Archive
+** DONE bug: =cc= (change line) should preserve line and not delete it entirely
+** DONE vertex buffer no need to create each time
+instead check if <= to current, if so just append
+otherwise create new
+** DONE fire [0/0]
+*** DONE create buffer for fire particles
+*** DONE compute shader to compute fire position and color
+** DONE Bug bash [0/0]
+*** DONE selection rendering messed up
+*** DONE deleting text
+#+begin_src zig
+fn testFn(self: *Self) void {
+    switch (self) {
+        .Foo => {
+
+        },
+    }
+}
+#+end_src
+
+start selection on comma
+move to the =.= on the line with =.Foo=
+delete
+
+it crashes
+*** DONE backspacing on start of line fucked
 ** DONE Fix cursor [0/0]
 *** DONE not in front of text
 *** DONE newline fucks it up
