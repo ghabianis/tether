@@ -15,6 +15,7 @@ struct VertexIn {
 struct VertexOut {
     float4 position [[position]];
     float2 uv;
+    float2 size;
 };
 
 struct Uniforms {
@@ -80,6 +81,7 @@ vertex VertexOut vertex_main(VertexIn vertexIn [[stage_in]], uint vertex_id [[ve
     }
     vertexOut.position = uniforms.projectionMatrix * uniforms.modelViewMatrix * float4(position, 0.9, 1);
     vertexOut.uv = uv;
+    vertexOut.size = float2(instance.right - instance.left, instance.top - instance.bot);
     return vertexOut;
 }
 
@@ -87,11 +89,10 @@ fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]], constant Unifor
     float2 uv = fragmentIn.uv;
     uv.y = 1.0 - uv.y;
 
-    // float curve = 0.1 * sin((20.0 * uv.x) + (5.0 * uniforms.time));
-    float curve = sin(uniforms.time * 5.0) * 0.1 * sin((20.0 * uv.x));
+    float freq = 100.0 * fragmentIn.size.x;
+    float curve = sin(uniforms.time * 5.0) * 0.1 * sin((freq * uv.x));
     
     float distance = abs((curve + uv.y) - 0.5);
-    // float lineAShape = smoothstep(1.0 - clamp(distance * 1.0, 0.0, 1.0), 1.0, 0.998);
     float lineAShape = smoothstep(1.0 - clamp(distance * 1.0, 0.0, 1.0), 1.0, 0.98);
     float4 lineACol = float4(mix(float4(uniforms.colorIn, 1.0), float4(uniforms.colorOut, 0.0), lineAShape));
     return float4(lineACol);
