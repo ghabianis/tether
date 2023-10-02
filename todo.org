@@ -1,14 +1,47 @@
 #+title: Todo
 
-* TODO Now [1/4]
+* TODO Now [1/7]
+** TODO Combos [0/4]
+*** TODO Figure out what constitutes as score and how it increases
+*** TODO Cursor flame increases as score does
+*** TODO Display score and animate it similar to how Smash Bros. does it [0/3]
+**** TODO Display text on top right for example
+**** TODO Animation [0/2]
+Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x speed to see how they animate it)
+
+***** TODO Each number/glyph shakes as score increases
+***** TODO Flashes in and out of red/white
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::
   - current file path relative to project root
   - current line / col
   - vim mode
-** TODO fix comment syntax highlighting fucked up
-** TODO sweep thru code for objc memory leaks
+** TODO Font atlas refactor [0/2]
+*** TODO Use binpacking algorithm to reduce texture size
+Resources:
+- ghostty implementation
+- freetype-gl implementation
+- RectangleBinPack implementation
+*** TODO Rebuild atlas when encountering new glyphs
+Couple things to note:
+- Building atlas is expensive (binpacking and actually producing the texture)
+- We should try to batch the work as much as possible
+- e.g. in a frame we should rebuild the atlas /once/
+- How can we do this? ::
+  Does rebuilding the atlas cause existing glyphs to have different texel coordinates?
+
+  I see two options:
+    1. Do a pass over all of the visible text, collect new glyphs, rebuild the atlas.
+    2. Rebuild the atlas as we build the text geometry
+
+    The first choice is optimal for scenarios where we encounter /a lot/ of new glyphs, avoiding recalculating the atlas multiple times.
+
+    The first choice means we will either construct the CoreText data structures: /CTLine, CTGlyphRun, etc./ twice, or we cache them in the function. Caching them doesn't sound like a bad option. We also call =.autorelease()= on these objects so memory wise it's also fine to cache.
+
+    Note: If it is inexpensive to /only/ recalculate the atlas, that is, /without/ creating the texture, then the choice probably doesn't matter.
+** TODO Comment syntax highlighting broken
+** TODO Sweep thru code for objc memory leaks
 there are probably lots of places where i am not freeing objc objects
 ** DONE Diagnostics
 - Determine where to render diagnostics

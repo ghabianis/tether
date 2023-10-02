@@ -493,6 +493,11 @@ const Renderer = struct {
         const text_attributes = self.text_attributed_string_dict(.Left);
         defer text_attributes.msgSend(void, objc.sel("autorelease"), .{});
 
+        const default_glyph_count = 256;
+        var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), default_glyph_count);
+        var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), default_glyph_count);
+        var positions = try ArrayList(metal.CGPoint).initCapacity(frame_arena.allocator(), default_glyph_count);
+
         const starting_line: u32 = start_end.start;
         var iter = self.editor.rope.iter_lines(self.editor.rope.node_at_line(starting_line) orelse return);
 
@@ -523,6 +528,10 @@ const Renderer = struct {
 
             var last_x: f32 = initial_x;
             if (line.len > 0) {
+                glyphs.clearRetainingCapacity();
+                glyph_rects.clearRetainingCapacity();
+                positions.clearRetainingCapacity();
+
                 // TODO: I think this can be created once before this loop, then
                 //       reused by calling init_with_bytes_no_copy
                 const nstring = metal.NSString.new_with_bytes_no_copy(line, .ascii);
@@ -543,9 +552,9 @@ const Renderer = struct {
                 const run = ct.CFArrayGetValueAtIndex(runs, 0);
                 const glyph_count = @as(usize, @intCast(ct.CTRunGetGlyphCount(run)));
 
-                var glyphs = try ArrayList(metal.CGGlyph).initCapacity(frame_arena.allocator(), glyph_count);
-                var glyph_rects = try ArrayList(metal.CGRect).initCapacity(frame_arena.allocator(), glyph_count);
-                var positions = try ArrayList(metal.CGPoint).initCapacity(frame_arena.allocator(), glyph_count);
+                try glyphs.resize(frame_arena.allocator(), glyph_count);
+                try glyph_rects.resize(frame_arena.allocator(), glyph_count);
+                try positions.resize(frame_arena.allocator(), glyph_count);
 
                 glyphs.items.len = glyph_count;
                 glyph_rects.items.len = glyph_count;
