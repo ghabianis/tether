@@ -11,15 +11,366 @@ const r = @import("./regex.zig");
 const strutil = @import("./strutil.zig");
 
 const Highlight = @This();
+
 parser: *c.TSParser,
 lang: *const ts.Language,
-query: *c.TSQuery,
-theme: []const ?math.Float4,
-/// tree-sitter value id -> regex
-regexes: HashMap(u32, r.regex_t),
 tree: ?*c.TSTree = null,
 
+query: *c.TSQuery,
+/// Mapping of TSQuery pattern index -> color
+theme: []const ?math.Float4,
+/// Cached regex state machines for pattern predicates. For the key we use tree-sitter's "value ID", which is an index to the store of values internally in tree-sitter
+/// tree-sitter value id -> regex
+regexes: HashMap(u32, r.regex_t),
+/// Contains range and colors for text that needs to be highlighted
 buf: HighlightBuf = .{},
+
+error_query: *c.TSQuery,
+errors: std.ArrayList(ErrorRange),
+
+const ERROR_QUERY = "(ERROR) @__tether_error";
+
+/// Initializes the highlighter with the given language and color scheme. `colors` is from calling `.to_indices()` on the theme
+/// 
+/// The highlighter must be configured to handle the queries (highlights):
+///   1. If any queries have use `#match? <REGEX>` the REGEX needs to be compiled and stored
+///   2. The given color scheme is turned into an array indexed by the TSQuery pattern index for easy retrieval of color to highlight text
+///      (e.g. if IDENTIFIER is index 0 in the TSQueryCapture then `Highlight.theme[0]` will contain the color to highlight an identifier)
+pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const CaptureConfig) !Highlight {
+    var error_offset: u32 = undefined;
+    var error_type: c.TSQueryError = undefined;
+
+    const query = c.ts_query_new(language.lang_fn(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type) orelse @panic("Query error!");
+
+    var parser = c.ts_parser_new();
+    if (!c.ts_parser_set_language(parser, language.lang_fn())) {
+        @panic("Failed to set parser!");
+    }
+
+    var regexes = HashMap(u32, r.regex_t).init(alloc);
+
+    const count = c.ts_query_pattern_count(query);
+    for (0..count) |i| {
+        var length: u32 = 0;
+        var predicates_ptr = c.ts_query_predicates_for_pattern(query, @intCast(i), &length);
+        if (length < 1) continue;
+        const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
+        var j: u32 = 0;
+        while (j < length) {
+            const pred = predicates[j];
+            var value_len: u32 = undefined;
+            const value = c.ts_query_string_value_for_id(query, pred.value_id, &value_len);
+
+            if (pred.type == c.TSQueryPredicateStepTypeString) {
+                // Example:
+                // TSQueryPredicateStepTypeString: match?
+                // TSQueryPredicateStepTypeCapture: function
+                // TSQueryPredicateStepTypeString: ^[a-z]+([A-Z][a-z0-9]*)+$
+                // TSQueryPredicateStepTypeDone
+                //
+                // Has 4 steps
+                if (std.mem.eql(u8, "match?", value[0..value_len])) {
+                    const regex_step = predicates[j + 2];
+                    var regex_len: u32 = undefined;
+                    const regex_str_ptr = c.ts_query_string_value_for_id(query, regex_step.value_id, &regex_len);
+                    const regex_str = regex_str_ptr[0..regex_len];
+                    var regex: r.regex_t = undefined;
+
+                    if (r.regncomp(&regex, regex_str.ptr, regex_str.len, 0) != 0) {
+                        @panic("Failed to compile regular expression");
+                    }
+
+                    try regexes.put(regex_step.value_id, regex);
+
+                    j += 4;
+                    continue;
+                }
+            }
+
+            j += 1;
+        }
+    }
+
+    const theme = try Highlight.configure_highlights(alloc, query, colors);
+
+    error_offset = undefined;
+    error_type = undefined;
+
+    const error_query = c.ts_query_new(language.lang_fn(), ERROR_QUERY, ERROR_QUERY.len, &error_offset, &error_type) orelse @panic("Failed to build error query");
+    const errors = std.ArrayList(ErrorRange).init(alloc);
+
+    return .{ .parser = parser.?, .query = query, .lang = language, .theme = theme, .regexes = regexes, .error_query = error_query, .errors = errors };
+}
+
+fn tree_or_init(self: *Highlight, str: []const u8) *c.TSTree {
+    if (self.tree) |ts_tree| {
+        return ts_tree;
+    }
+    var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len))) orelse @panic("FAILED TO PARSE TREE!");
+    self.tree = tree;
+    return tree;
+}
+
+/// Adapted with minor changes from:
+/// https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
+/// 
+/// Basically handles finding the best match for capture names with multiple
+/// levels. For example, if the capture names of the query are @keyword.function
+/// and @keyword.operator, and the theme defines colors for only @keyword, then
+/// it makes sure @keyword.function and @keyword.operator get the color for
+/// @keyword.
+/// 
+/// The return value is an array indexed by capture ID (basically index in the TSQuery) that contains the color for that capture.
+fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []const CaptureConfig) ![]?math.Float4 {
+    const count: u32 = c.ts_query_capture_count(q);
+    var theme = try alloc.alloc(?math.Float4, @as(usize, @intCast(count)));
+    @memset(theme, null);
+
+    var capture_parts = std.ArrayList([]const u8).init(alloc);
+    defer capture_parts.deinit();
+
+    // Note that capture ID basically means index
+    var i: u32 = 0;
+    while (i < count) : (i += 1) {
+        var length: u32 = 0;
+        const capture_name_ptr = c.ts_query_capture_name_for_id(q, i, &length);
+        const capture_name = capture_name_ptr[0..length];
+
+        // Now find the best matching capture. "Best" meaning a capture in `recognized_names` with the most matching "parts".
+        // "parts" are separated by dots: e.g. "@keyword.function" has two parts => "keyword", and "function"
+        var temp_part_iter = std.mem.split(u8, capture_name, ".");
+        var part_iter = temp_part_iter;
+        while (part_iter.next()) |part| {
+            try capture_parts.append(part);
+        }
+        defer {
+            capture_parts.items.len = 0;
+        }
+
+        var best_index: ?u32 = null;
+        var best_match_len: u32 = 0;
+
+        var j: u32 = 0;
+        while (j < recognized_names.len) : (j += 1) {
+            const recognized_name = recognized_names[j];
+            var len: u32 = 0;
+            var matches: bool = true;
+            var recognized_name_part_iter = std.mem.split(u8, recognized_name.name, ".");
+            while (recognized_name_part_iter.next()) |recognized_name_part| {
+                const has = has: {
+                    if (len >= capture_parts.items.len) break :has false;
+                    const capture_part = capture_parts.items[len];
+                    break :has std.mem.eql(u8, capture_part, recognized_name_part);
+                };
+                len += 1;
+                if (!has) {
+                    matches = false;
+                    break;
+                }
+            }
+
+            if (matches and len > best_match_len) {
+                best_index = j;
+                best_match_len = len;
+            }
+        }
+
+        if (best_index) |index| {
+            theme[i] = recognized_names[index].color;
+        }
+    }
+
+    return theme;
+}
+
+pub fn update_tree(self: *Highlight, str: []const u8) void {
+    if (self.tree) |tstree| {
+        c.ts_tree_delete(tstree);
+    }
+    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @intCast(str.len));
+    self.tree = tree;
+}
+
+/// This function assigns highlight colors to the text vertices in `vertices: []math.Vertex` parameter.
+/// 
+/// NOTE: This function expects `self.tree` to either:
+///       - contain a TSTree parsed to the latest version of the text
+///       - OR be null, in which case it will parse and set `self.tree` itself
+pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
+    if (str.len == 0) return;
+
+    // We reset the parser each time this is called
+    defer c.ts_parser_reset(self.parser);
+    if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
+        @panic("Failed to set parser!");
+    }
+
+    // Create a tree if we don't have one already
+    const tree = self.tree_or_init(str);
+
+    var root_node = c.ts_tree_root_node(tree);
+    var query_cursor = c.ts_query_cursor_new();
+    defer c.ts_query_cursor_delete(query_cursor);
+    var match: c.TSQueryMatch = undefined;
+
+    c.ts_query_cursor_exec(query_cursor, self.query, root_node);
+
+    var highlight_buf = &self.buf;
+    // If the text has not been updated, we don't need to run the queries again
+    if (!text_dirty) {
+        highlight_buf.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
+        return;
+    }
+
+    // Otherwise, clear our highlight captures and run the queries
+    highlight_buf.list.clearRetainingCapacity();
+
+    while (c.ts_query_cursor_next_match(query_cursor, &match)) {
+        var last_match: ?u32 = null;
+
+        var i: u32 = 0;
+        while (i < match.capture_count) : (i += 1) {
+            const capture_maybe: ?*const c.TSQueryCapture = &match.captures[i];
+            const capture = capture_maybe.?;
+
+            var length: u32 = undefined;
+            const predicates_ptr = c.ts_query_predicates_for_pattern(self.query, match.pattern_index, &length);
+
+            // If the pattern has predicates (e.g. some regex like match?, eq? etc.) then check that the text matches it.
+            // Otherwise its a match
+            if (length > 1 and self.satisfies_text_predicates(capture, predicates_ptr[0..length], str)) {
+                last_match = i;
+                break;
+            } else {
+                last_match = i;
+                break;
+            }
+        }
+
+        // If we have a match, copy the the highlight colors to the text
+        // vertices for the text range of the match
+        if (last_match) |index| {
+            const capture_maybe: ?*const c.TSQueryCapture = &match.captures[index];
+            const capture = capture_maybe.?;
+
+            const start = c.ts_node_start_byte(capture.node);
+            const end = c.ts_node_end_byte(capture.node);
+            // if ((start_byte < start and end_byte <= start) or start_byte >= end) continue;
+            // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
+            
+            var the_len: u32 = 0;
+            const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
+            if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
+                print("In comment: @{s}\n", .{str_ptr[0..the_len]});
+            }
+
+            // print("THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
+
+            // Grab the color that is associated with this capture kind based on the theme
+            const color = self.theme[capture.index] orelse continue;
+
+            const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);
+            _ = the_highlight.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
+            try highlight_buf.list.append(alloc, the_highlight);
+
+            // std.sort.insertion(HighlightBuf.HighlightCapture, highlight_buf.list.items, {}, HighlightBuf.HighlightCapture.less_than_ctx);
+        }
+    }
+}
+
+pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool) !void {
+    if (!text_dirty) return;
+
+    self.errors.clearRetainingCapacity();
+    const tree = self.tree_or_init(src);
+    const root_node = c.ts_tree_root_node(tree);
+
+    var query_cursor = c.ts_query_cursor_new();
+    defer c.ts_query_cursor_delete(query_cursor);
+    var match: c.TSQueryMatch = undefined;
+
+    c.ts_query_cursor_exec(query_cursor, self.error_query, root_node);
+
+    while (c.ts_query_cursor_next_match(query_cursor, &match)) {
+        std.debug.assert(match.capture_count == 1);
+
+        const capture_maybe: ?*const c.TSQueryCapture = &match.captures[0];
+        const capture = capture_maybe.?;
+        
+        const start = c.ts_node_start_byte(capture.node);
+        const end = c.ts_node_end_byte(capture.node);
+
+        // var the_len: u32 = 0;
+        // const str_ptr = c.ts_query_capture_name_for_id(self.error_query, capture.index, &the_len);
+        // print("THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], src[start..end]});
+
+        try self.errors.append(
+            ErrorRange{
+                .start = start,
+                .end = end,
+            }
+        );
+    }
+}
+
+fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture, predicates: []const c.TSQueryPredicateStep, src: []const u8) bool {
+
+    // const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
+
+    var i: u32 = 0;
+    while (i < predicates.len) {
+        const predicate = predicates[i];
+        switch (predicate.type) {
+            c.TSQueryPredicateStepTypeString => {
+                var value_len: u32 = undefined;
+                const value = c.ts_query_string_value_for_id(self.query, predicate.value_id, &value_len);
+
+                if (std.mem.eql(u8, "match?", value[0..value_len])) {
+                    const regex_step = predicates[i + 2];
+                    const start = c.ts_node_start_byte(capture.node);
+                    const end = c.ts_node_end_byte(capture.node);
+                    if (self.satisfies_match(src[start..end], regex_step.value_id)) {
+                        return true;
+                    }
+                    i += 4;
+                    continue;
+                }
+
+                return false;
+            },
+            else => {
+                @panic("Unreachable");
+            },
+        }
+    }
+
+    return false;
+}
+fn satisfies_match(self: *Highlight, src: []const u8, regex_step_value_id: u32) bool {
+    var regex = self.regexes.get(regex_step_value_id) orelse @panic("REGEX NOT FOUND!");
+
+    const ret = r.regnexec(&regex, src.ptr, src.len, 0, null, 0);
+
+    if (ret == 0) return true;
+    if (ret == r.REG_NOMATCH) {
+        return false;
+    }
+
+    // otherwise failed
+    // @panic("Regex exec failed!");
+    return false;
+}
+
+fn find_name(names: [][]const u8, name: []const u8) ?usize {
+    var i: usize = 0;
+    for (names) |n| {
+        if (std.mem.eql(u8, n, name)) {
+            return i;
+        }
+        i += 1;
+    }
+    return null;
+}
 
 const CommonCaptureNames = enum {
     Attribute,
@@ -101,6 +452,11 @@ const CommonCaptureNames = enum {
 const CaptureConfig = struct {
     name: []const u8,
     color: math.Float4,
+};
+
+pub const ErrorRange = struct{
+    start: u32,
+    end: u32,
 };
 
 const HashMap = std.AutoHashMap;
@@ -221,305 +577,6 @@ pub const HighlightBuf = struct {
         print(")\n", .{});
     }
 };
-
-/// Adapted with minor changes from:
-/// https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
-///
-/// Basically handles finding the best match for capture names with multiple
-/// levels. For example, if the capture names of the query are @keyword.function
-/// and @keyword.operator, and the theme defines colors for only @keyword, then
-/// it makes sure @keyword.function and @keyword.operator get the color for
-/// @keyword.
-/// 
-/// The return value is an array indexed by capture ID (basically index in the TSQuery) that contains the color for that capture.
-fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []const CaptureConfig) ![]?math.Float4 {
-    const count: u32 = c.ts_query_capture_count(q);
-    var theme = try alloc.alloc(?math.Float4, @as(usize, @intCast(count)));
-    @memset(theme, null);
-
-    var capture_parts = std.ArrayList([]const u8).init(alloc);
-    defer capture_parts.deinit();
-
-    // Note that capture ID basically means index
-    var i: u32 = 0;
-    while (i < count) : (i += 1) {
-        var length: u32 = 0;
-        const capture_name_ptr = c.ts_query_capture_name_for_id(q, i, &length);
-        const capture_name = capture_name_ptr[0..length];
-        var temp_part_iter = std.mem.split(u8, capture_name, ".");
-        var part_iter = temp_part_iter;
-        while (part_iter.next()) |part| {
-            try capture_parts.append(part);
-        }
-        defer {
-            capture_parts.items.len = 0;
-        }
-
-        var best_index: ?u32 = null;
-        var best_match_len: u32 = 0;
-
-        var j: u32 = 0;
-        while (j < recognized_names.len) : (j += 1) {
-            const recognized_name = recognized_names[j];
-            var len: u32 = 0;
-            var matches: bool = true;
-            var recognized_name_part_iter = std.mem.split(u8, recognized_name.name, ".");
-            while (recognized_name_part_iter.next()) |recognized_name_part| {
-                const has = has: {
-                    if (len >= capture_parts.items.len) break :has false;
-                    const capture_part = capture_parts.items[len];
-                    break :has std.mem.eql(u8, capture_part, recognized_name_part);
-                };
-                len += 1;
-                if (!has) {
-                    matches = false;
-                    break;
-                }
-            }
-
-            if (matches and len > best_match_len) {
-                best_index = j;
-                best_match_len = len;
-            }
-        }
-
-        if (best_index) |index| {
-            theme[i] = recognized_names[index].color;
-        }
-    }
-
-    return theme;
-}
-
-/// Initializes the highlighter with the given language and color scheme. `colors` is from calling `.to_indices()` on the theme
-/// 
-/// The highlighter must be configured to handle the queries (highlights):
-///   1. If any queries have use `#match? <REGEX>` the REGEX needs to be compiled and stored
-///   2. The given color scheme is turned into an array indexed by TSQueryCapture index for easy retrieval of color to highlight text
-///      (e.g. if IDENTIFIER is index 0 in the TSQueryCapture then `Highlight.theme[0]` will contain the color to highlight an identifier)
-pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const CaptureConfig) !Highlight {
-    var error_offset: u32 = undefined;
-    var error_type: c.TSQueryError = undefined;
-
-    const query = c.ts_query_new(language.lang_fn(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type);
-
-    if (query) |q| {
-        var parser = c.ts_parser_new();
-        if (!c.ts_parser_set_language(parser, language.lang_fn())) {
-            @panic("Failed to set parser!");
-        }
-
-        var regexes = HashMap(u32, r.regex_t).init(alloc);
-
-        const count = c.ts_query_pattern_count(query);
-        for (0..count) |i| {
-            var length: u32 = 0;
-            var predicates_ptr = c.ts_query_predicates_for_pattern(query, @intCast(i), &length);
-            if (length < 1) continue;
-            const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
-            var j: u32 = 0;
-            while (j < length) {
-                const pred = predicates[j];
-                var value_len: u32 = undefined;
-                const value = c.ts_query_string_value_for_id(query, pred.value_id, &value_len);
-
-                if (pred.type == c.TSQueryPredicateStepTypeString) {
-                    // Example:
-                    // TSQueryPredicateStepTypeString: match?
-                    // TSQueryPredicateStepTypeCapture: function
-                    // TSQueryPredicateStepTypeString: ^[a-z]+([A-Z][a-z0-9]*)+$
-                    // TSQueryPredicateStepTypeDone
-                    //
-                    // Has 4 steps
-                    if (std.mem.eql(u8, "match?", value[0..value_len])) {
-                        const regex_step = predicates[j + 2];
-                        var regex_len: u32 = undefined;
-                        const regex_str_ptr = c.ts_query_string_value_for_id(query, regex_step.value_id, &regex_len);
-                        const regex_str = regex_str_ptr[0..regex_len];
-                        var regex: r.regex_t = undefined;
-
-                        if (r.regncomp(&regex, regex_str.ptr, regex_str.len, 0) != 0) {
-                            @panic("Failed to compile regular expression");
-                        }
-
-                        try regexes.put(regex_step.value_id, regex);
-
-                        j += 4;
-                        continue;
-                    }
-                }
-
-                j += 1;
-            }
-        }
-
-        const theme = try Highlight.configure_highlights(alloc, q, colors);
-
-        return .{ .parser = parser.?, .query = q, .lang = language, .theme = theme, .regexes = regexes };
-    }
-
-    @panic("Query error!");
-}
-
-pub fn update_tree(self: *Highlight, str: []const u8) void {
-    if (self.tree) |tstree| {
-        c.ts_tree_delete(tstree);
-    }
-    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @intCast(str.len));
-    self.tree = tree;
-}
-
-/// This function assigns highlight colors to the text vertices in `vertices: []math.Vertex` parameter.
-/// 
-/// NOTE: This function expects `self.tree` to either:
-///       - contain a TSTree parsed to the latest version of the text
-///       - OR be null, in which case it will parse and set `self.tree` itself
-pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
-    if (str.len == 0) return;
-
-    // We reset the parser each time this is called
-    defer c.ts_parser_reset(self.parser);
-    if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
-        @panic("Failed to set parser!");
-    }
-
-    // Create a tree if we don't have one already
-    var tree = tree: {
-        if (self.tree) |ts_tree| {
-            break :tree ts_tree;
-        }
-        var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len)));
-        break :tree tree;
-    };
-
-    var root_node = c.ts_tree_root_node(tree);
-    var query_cursor = c.ts_query_cursor_new();
-    defer c.ts_query_cursor_delete(query_cursor);
-    var match: c.TSQueryMatch = undefined;
-
-    c.ts_query_cursor_exec(query_cursor, self.query, root_node);
-
-    var highlight_buf = &self.buf;
-    // If the text has not been updated, we don't need to run the queries again
-    if (!text_dirty) {
-        highlight_buf.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
-        return;
-    }
-
-    // Otherwise, clear our highlight captures and run the queries
-    highlight_buf.list.clearRetainingCapacity();
-
-    while (c.ts_query_cursor_next_match(query_cursor, &match)) {
-        var last_match: ?u32 = null;
-
-        var i: u32 = 0;
-        while (i < match.capture_count) : (i += 1) {
-            const capture_maybe: ?*const c.TSQueryCapture = &match.captures[i];
-            const capture = capture_maybe.?;
-
-            var length: u32 = undefined;
-            const predicates_ptr = c.ts_query_predicates_for_pattern(self.query, match.pattern_index, &length);
-
-            // If the pattern has predicates (e.g. some regex like match?, eq? etc.) then check that the text matches it.
-            // Otherwise its a match
-            if (length > 1 and self.satisfies_text_predicates(capture, predicates_ptr[0..length], str)) {
-                last_match = i;
-                break;
-            } else {
-                last_match = i;
-                break;
-            }
-        }
-
-        // If we have a match, copy the the highlight colors to the text
-        // vertices for the text range of the match
-        if (last_match) |index| {
-            const capture_maybe: ?*const c.TSQueryCapture = &match.captures[index];
-            const capture = capture_maybe.?;
-
-            const start = c.ts_node_start_byte(capture.node);
-            const end = c.ts_node_end_byte(capture.node);
-            // if ((start_byte < start and end_byte <= start) or start_byte >= end) continue;
-            // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
-            
-            var the_len: u32 = 0;
-            const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
-            if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
-                print("In comment: @{s}\n", .{str_ptr[0..the_len]});
-            }
-
-            print("THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
-
-            // Grab the color that is associated with this capture kind based on the theme
-            const color = self.theme[capture.index] orelse continue;
-
-            const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);
-            _ = the_highlight.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
-            try highlight_buf.list.append(alloc, the_highlight);
-
-            // std.sort.insertion(HighlightBuf.HighlightCapture, highlight_buf.list.items, {}, HighlightBuf.HighlightCapture.less_than_ctx);
-        }
-    }
-}
-
-fn satisfies_text_predicates(self: *Highlight, capture: *const c.TSQueryCapture, predicates: []const c.TSQueryPredicateStep, src: []const u8) bool {
-
-    // const predicates: []const c.TSQueryPredicateStep = predicates_ptr[0..length];
-
-    var i: u32 = 0;
-    while (i < predicates.len) {
-        const predicate = predicates[i];
-        switch (predicate.type) {
-            c.TSQueryPredicateStepTypeString => {
-                var value_len: u32 = undefined;
-                const value = c.ts_query_string_value_for_id(self.query, predicate.value_id, &value_len);
-
-                if (std.mem.eql(u8, "match?", value[0..value_len])) {
-                    const regex_step = predicates[i + 2];
-                    const start = c.ts_node_start_byte(capture.node);
-                    const end = c.ts_node_end_byte(capture.node);
-                    if (self.satisfies_match(src[start..end], regex_step.value_id)) {
-                        return true;
-                    }
-                    i += 4;
-                    continue;
-                }
-
-                return false;
-            },
-            else => {
-                @panic("Unreachable");
-            },
-        }
-    }
-
-    return false;
-}
-fn satisfies_match(self: *Highlight, src: []const u8, regex_step_value_id: u32) bool {
-    var regex = self.regexes.get(regex_step_value_id) orelse @panic("REGEX NOT FOUND!");
-
-    const ret = r.regnexec(&regex, src.ptr, src.len, 0, null, 0);
-
-    if (ret == 0) return true;
-    if (ret == r.REG_NOMATCH) {
-        return false;
-    }
-
-    // otherwise failed
-    // @panic("Regex exec failed!");
-    return false;
-}
-
-fn find_name(names: [][]const u8, name: []const u8) ?usize {
-    var i: usize = 0;
-    for (names) |n| {
-        if (std.mem.eql(u8, n, name)) {
-            return i;
-        }
-        i += 1;
-    }
-    return null;
-}
 
 pub const TokyoNightStorm = struct {
     const Self = @This();

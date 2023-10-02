@@ -428,7 +428,8 @@ pub const Atlas = struct {
             ox += max_w_before_ligatures + @as(i32, @intFromFloat(@ceil(max_advance_before_ligatures))) + 1;
             const cursor_rect = .{
                 .origin = .{ .x = @as(f32, @floatFromInt(ox)), .y = @as(f32, @floatFromInt(oy)) },
-                .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = @as(f32, @floatFromInt(max_h)) },
+                // .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = @as(f32, @floatFromInt(max_h)) },
+                .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = self.ascent + self.descent },
             };
             const tx = @as(f32, @floatFromInt(ox)) / @as(f32, @floatFromInt(tex_w));
             const ty = (@as(f32, @floatFromInt(tex_h)) - (@as(f32, @floatFromInt(oy)))) / @as(f32, @floatFromInt(tex_h));
@@ -447,6 +448,7 @@ pub const Atlas = struct {
             ox += max_w_before_ligatures + @as(i32, @intFromFloat(@ceil(max_advance_before_ligatures))) + 1;
             const rectangular_cursor_rect = .{
                 .origin = .{ .x = @as(f32, @floatFromInt(ox)), .y = @as(f32, @floatFromInt(oy)) },
+                // .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = @as(f32, @floatFromInt(max_h)) },
                 .size = .{ .width = @as(f32, @floatFromInt(max_w_before_ligatures)), .height = @as(f32, @floatFromInt(max_h)) },
             };
             const border_tx = @as(f32, @floatFromInt(ox)) / @as(f32, @floatFromInt(tex_w));

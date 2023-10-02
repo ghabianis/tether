@@ -472,6 +472,7 @@ pub const FullThrottleMode = struct {
             attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
         }
 
+        pipeline_desc.set_label("Explosions");
         const pipeline = device.new_render_pipeline(pipeline_desc) catch @panic("failed to make pipeline");
         self.explosion_pipeline = pipeline;
 
@@ -576,6 +577,7 @@ pub const FullThrottleMode = struct {
             attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
         }
 
+        pipeline_desc.set_label("Particles");
         const pipeline = device.new_render_pipeline(pipeline_desc) catch @panic("failed to make pipeline");
         self.pipeline = pipeline;
 
@@ -607,7 +609,9 @@ pub const FullThrottleMode = struct {
         // );
     }
 
-    pub fn render_explosions(self: *FullThrottleMode, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    // pub fn render_explosions(self: *FullThrottleMode, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    pub fn render_explosions(self: *FullThrottleMode, command_encoder: metal.MTLRenderCommandEncoder, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+        _ = render_pass_desc;
         if (self.explosions.len == 0) {
             return;
         }
@@ -637,8 +641,9 @@ pub const FullThrottleMode = struct {
             .model_view_matrix = self.model_matrix(4, w, h).mul(camera_matrix),
         };
 
-        const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
-        command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
+        // const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
+        command_encoder.set_label("Explosions");
 
         command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&self.explosion_vertices))[0..@sizeOf([6]Explosion)], 0);
         command_encoder.set_vertex_buffer(self.instance_buffer, 0, 1);
@@ -649,10 +654,12 @@ pub const FullThrottleMode = struct {
 
         command_encoder.set_render_pipeline_state(self.explosion_pipeline);
         command_encoder.draw_primitives_instanced(.triangle, 0, 6, self.explosions.len);
-        command_encoder.end_encoding();
+        // command_encoder.end_encoding();
     }
 
-    pub fn render_particles(self: *FullThrottleMode, dt: f32, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    // pub fn render_particles(self: *FullThrottleMode, dt: f32, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    pub fn render_particles(self: *FullThrottleMode, dt: f32, command_encoder: metal.MTLRenderCommandEncoder, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+        _ = render_pass_desc;
         self.update(dt);
         if (self.clusters_len == 0) {
             return;
@@ -692,7 +699,8 @@ pub const FullThrottleMode = struct {
             .model_view_matrix = self.model_matrix(4, w, h).mul(camera_matrix),
         };
 
-        const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // command_encoder.set_label("Particles");
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
 
         command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&self.vertices))[0..@sizeOf([4]Vertex)], 0);
@@ -701,7 +709,7 @@ pub const FullThrottleMode = struct {
 
         command_encoder.set_render_pipeline_state(self.pipeline);
         command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, @as(usize, self.clusters_len) * MAX_CLUSTER_PARTICLE_AMOUNT);
-        command_encoder.end_encoding();
+        // command_encoder.end_encoding();
     }
 };
 
@@ -784,7 +792,9 @@ const Fire = struct {
         return fire;
     }
 
-    pub fn render(self: *Fire, dt: f32, command_queue: metal.MTLCommandQueue, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    // pub fn render(self: *Fire, dt: f32, command_queue: metal.MTLCommandQueue, command_buffer: metal.MTLCommandBuffer, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+    pub fn render(self: *Fire, dt: f32, command_queue: metal.MTLCommandQueue, render_command_encoder: metal.MTLRenderCommandEncoder, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
+        _ = render_pass_desc;
         self.time += dt;
 
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
@@ -806,8 +816,8 @@ const Fire = struct {
         // wait for results to populate the particle buffer
         // compute_command_buffer.wait_until_completed();
 
-        const render_command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
-        render_command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
+        // const render_command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // render_command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
         render_command_encoder.set_render_pipeline_state(self.render_pipeline);
 
         const w: f32 = @floatCast(width);
@@ -834,7 +844,7 @@ const Fire = struct {
 
         render_command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, self.particle_count);
 
-        render_command_encoder.end_encoding();
+        // render_command_encoder.end_encoding();
     }
 
     fn initialize_particles(self: *Fire, device: metal.MTLDevice) void {
@@ -960,6 +970,7 @@ const Fire = struct {
             attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one));
         }
 
+        pipeline_desc.set_label("Fire");
         const pipeline = device.new_render_pipeline(pipeline_desc) catch @panic("failed to make pipeline");
         self.render_pipeline = pipeline;
         self.index_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.indices))[0..@sizeOf([6]u16)], .storage_mode_managed);

@@ -479,6 +479,7 @@ pub const MTLRenderCommandEncoder = struct {
     const Self = @This();
     obj: objc.Object,
     pub usingnamespace DefineObject(Self);
+    pub usingnamespace MetalResource(Self);
 
     pub fn set_viewport(self: Self, viewport: MTLViewport) void {
         self.obj.msgSend(void, objc.sel("setViewport:"), .{viewport});
@@ -494,6 +495,10 @@ pub const MTLRenderCommandEncoder = struct {
 
     pub fn set_vertex_buffer(self: Self, buffer: MTLBuffer, offset: NSUInteger, atIndex: NSUInteger) void {
         self.obj.msgSend(void, objc.sel("setVertexBuffer:offset:atIndex:"), .{ buffer.obj, offset, atIndex });
+    }
+
+    pub fn set_fragment_bytes(self: Self, bytes: []const u8, index: NSUInteger) void {
+        return self.obj.msgSend(void, objc.sel("setFragmentBytes:length:atIndex:"), .{bytes.ptr, bytes.len, index});
     }
 
     pub fn set_fragment_texture(self: Self, tex: objc.Object, index: usize) void {
@@ -543,6 +548,7 @@ pub const MTLBuffer = struct {
         self.obj.msgSend(void, objc.sel("didModifyRange:"), .{range});
     }
 
+    /// Convenience wrapper around calling `self.contents()`, setting the data, and then calling `self.did_modify_range()`
     pub fn update(self: Self, comptime T: type, data: []const T, offset: usize) void {
         const contents_buf = self.contents();
         const contents_t = @as([*]T, @ptrCast(@alignCast(contents_buf)));
@@ -716,6 +722,7 @@ pub const MTLHazardTrackingMode = enum(NSUInteger) {
 pub const MTLCommandQueue = struct {
     obj: objc.Object,
     pub usingnamespace DefineObject(@This());
+    pub usingnamespace MetalResource(@This());
 
     pub fn command_buffer(self: @This()) MTLCommandBuffer {
         return self.obj.msgSend(MTLCommandBuffer, objc.sel("commandBuffer"), .{});
@@ -785,6 +792,7 @@ pub const MTLVertexDescriptor = struct {
 pub const MTLRenderPipelineDescriptor = struct {
     obj: objc.Object,
     pub usingnamespace DefineObject(@This());
+    pub usingnamespace MetalResource(@This());
 
     pub fn set_vertex_function(self: @This(), func_vert: objc.Object) void {
         self.obj.setProperty("vertexFunction", func_vert);
@@ -851,6 +859,17 @@ fn DefineObject(comptime T: type) type {
 
         pub fn retain(self: T) void {
             self.obj.msgSend(void, objc.sel("retain"), .{});
+        }
+    };
+
+    return obj_impl;
+}
+
+fn MetalResource(comptime T: type) type {
+    const obj_impl = struct {
+        pub fn set_label(self: T, name: []const u8) void {
+            const str = NSString.new_with_bytes_no_copy(name, .ascii);
+            self.obj.setProperty("label", str);
         }
     };
 

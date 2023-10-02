@@ -17,6 +17,7 @@ const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
 const earcut = @import("earcut");
 const fullthrottle = @import("./full_throttle.zig");
+const Diagnostics = @import("./diagnostics.zig");
 const Time = @import("time.zig");
 
 const print = std.debug.print;
@@ -64,6 +65,7 @@ const Renderer = struct {
     editor: Editor,
     highlight: ?Highlight = null,
     fullthrottle: FullThrottle,
+    diagnostic_renderer: Diagnostics,
 
     last_clock: ?c_ulong,
 
@@ -94,6 +96,7 @@ const Renderer = struct {
             .editor = Editor{},
             .highlight = highlight,
             .fullthrottle = FullThrottle.init(device, view),
+            .diagnostic_renderer = Diagnostics.init(std.heap.c_allocator, device, view),
 
             .last_clock = null,
         };
@@ -283,6 +286,7 @@ const Renderer = struct {
             attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
         }
 
+        pipeline_desc.set_label("Text");
         const pipeline = device.new_render_pipeline(pipeline_desc) catch @panic("failed to make pipeline");
 
         return pipeline;
@@ -619,6 +623,21 @@ const Renderer = struct {
 
         if (self.highlight) |*highlight| {
             try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty);
+            try highlight.find_errors(str, self.editor.text_dirty);
+            try self.diagnostic_renderer.update(
+                frame_arena,
+                &self.editor.rope,
+                highlight.errors.items, 
+                self.vertices.items, 
+                start_end.start_y,
+                start_byte, 
+                end_byte, 
+                math.float2(@floatCast(self.screen_size.width), 
+                @floatCast(self.screen_size.height)), 
+                self.atlas.ascent, 
+                self.atlas.descent, 
+                self.editor.text_dirty
+            );
         }
 
         if (cursor_vert_index) |cvi| {
@@ -867,8 +886,8 @@ const Renderer = struct {
                 }, .{
                     // use the middle of the cursor glyph because there's some
                     // texture sampling errors that make the selection fade into the background
-                    .t = self.atlas.cursor_ty + self.atlas.cursor_h / 2.0,
-                    .b = self.atlas.cursor_ty + self.atlas.cursor_h / 2.0,
+                    .t = self.atlas.cursor_ty - self.atlas.cursor_h / 2.0,
+                    .b = self.atlas.cursor_ty - self.atlas.cursor_h / 2.0,
                     .l = self.atlas.cursor_tx + self.atlas.cursor_w / 2.0,
                     .r = self.atlas.cursor_tx + self.atlas.cursor_w / 2.0,
                 }, color));
@@ -910,14 +929,15 @@ const Renderer = struct {
         color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
 
         const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+        // command_encoder.set_label("Text");
         // for some reason this causes crash
         // defer command_encoder.autorelease();
         const drawable_size = view.drawable_size();
         command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
         var model_matrix = math.Float4x4.scale_by(1.0);
-        var view_matrix_before_shake = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
-        var view_matrix = view_matrix_before_shake.mul(&self.fullthrottle.screen_shake_matrix);
+        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
+        view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
         const model_view_matrix = view_matrix.mul(&model_matrix);
         const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
         const uniforms = Uniforms{
@@ -933,13 +953,15 @@ const Renderer = struct {
         command_encoder.set_fragment_texture(self.texture, 0);
         command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
         command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
-        command_encoder.end_encoding();
 
         var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0};
         var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
-        self.fullthrottle.render_particles(dt, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        self.fullthrottle.render_explosions(command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        self.fullthrottle.fire.render(dt, self.queue, command_buffer, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.render_particles(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.render_explosions(command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        // self.fullthrottle.fire.render(dt, self.queue, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+
+        self.diagnostic_renderer.render(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        command_encoder.end_encoding();
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
         command_buffer.obj.msgSend(void, objc.sel("commit"), .{});
@@ -986,7 +1008,7 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 48.0);
+    var atlas = font.Atlas.new(alloc, 64.0);
     atlas.make_atlas(alloc) catch @panic("OOPS");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});

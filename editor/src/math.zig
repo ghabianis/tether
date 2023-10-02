@@ -133,6 +133,14 @@ pub const Float2 = extern struct {
         std.debug.print("Float2[x = {d}, y = {d}]\n", .{ self.x, self.y });
     }
 
+    pub fn screen_to_ndc_vec(self: Float2, screen_size: Float2) Float2 {
+        return float3((2 * self.x / screen_size.x), (2 * self.y / screen_size.y));
+    }
+
+    pub fn screen_to_ndc_point(self: Float2, screen_size: Float2) Float2 {
+        return float2((2 * self.x / screen_size.x) - 1, (2 * self.y / screen_size.y) - 1);
+    }
+
     pub inline fn new(x: f32, y: f32) Float2 {
         return .{
             .x = x,
@@ -243,6 +251,19 @@ pub const Float3 = extern struct {
         }
         return self;
     }
+
+
+    pub fn hex(str: []const u8) Float3 {
+        var hex_str = str;
+        if (hex_str[0] == '#') {
+            hex_str = hex_str[1..];
+        }
+        return float3(
+            (hex_to_decimal(hex_str[0]) * 16.0 + hex_to_decimal(hex_str[1])) / 255.0,
+            (hex_to_decimal(hex_str[2]) * 16.0 + hex_to_decimal(hex_str[3])) / 255.0,
+            (hex_to_decimal(hex_str[4]) * 16.0 + hex_to_decimal(hex_str[5])) / 255.0,
+        );
+    }
 };
 
 pub const Float4 = extern struct {
@@ -336,6 +357,11 @@ pub inline fn float3(x: f32, y: f32, z: f32) Float3 {
 pub inline fn float4(x: f32, y: f32, z: f32, w: f32) Float4 {
     return .{ .x = x, .y = y, .z = z, .w = w };
 }
+
+pub fn hex3(comptime hex: []const u8) Float3 {
+    return comptime Float3.hex(hex);
+}
+
 pub fn hex4(comptime hex: []const u8) Float4 {
     return comptime Float4.hex(hex);
 }
