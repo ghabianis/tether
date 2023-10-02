@@ -237,6 +237,24 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
 
         const this_node = capture.node;
 
+        const start = c.ts_node_start_byte(capture.node);
+        const end = c.ts_node_end_byte(capture.node);
+
+        var the_len: u32 = 0;
+        const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
+        if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
+            print("In comment: @{s}\n", .{str_ptr[0..the_len]});
+        }
+
+        print("MATCHING THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
+
+        // Grab the color that is associated with this capture kind based on the theme
+        const color = self.theme[capture.index] orelse continue;
+
+        const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);
+        _ = the_highlight.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
+        try highlight_buf.list.append(alloc, the_highlight);
+
         // Skip over any subsequent highlighting patterns that capture the same
         // node. Captures for a given node are ordered by pattern index, so the
         // current capture should be the matching one, and the rest should be
@@ -250,26 +268,6 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
                 break;
             }
         }
-
-        const start = c.ts_node_start_byte(capture.node);
-        const end = c.ts_node_end_byte(capture.node);
-        // if ((start_byte < start and end_byte <= start) or start_byte >= end) continue;
-        // if ((start < start_byte and end < end_byte) or start >= end_byte) continue;
-        
-        var the_len: u32 = 0;
-        const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
-        if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
-            print("In comment: @{s}\n", .{str_ptr[0..the_len]});
-        }
-
-        print("THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
-
-        // Grab the color that is associated with this capture kind based on the theme
-        const color = self.theme[capture.index] orelse continue;
-
-        const the_highlight = HighlightBuf.HighlightCapture.new(start, end, color);
-        _ = the_highlight.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
-        try highlight_buf.list.append(alloc, the_highlight);
 
         // std.sort.insertion(HighlightBuf.HighlightCapture, highlight_buf.list.items, {}, HighlightBuf.HighlightCapture.less_than_ctx);
     }
