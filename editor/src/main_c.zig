@@ -1,9 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const objc = @import("zig-objc");
-const font = @import("./font.zig");
-const Atlas = font.Atlas;
-const Glyph = font.GlyphInfo;
+const Font = @import("./font.zig");
+const Glyph = Font.GlyphInfo;
 const metal = @import("./metal.zig");
 const math = @import("./math.zig");
 const rope = @import("./rope.zig");
@@ -60,7 +59,7 @@ const Renderer = struct {
     text_height: f32,
     some_val: u64,
 
-    atlas: font.Atlas,
+    font: Font,
     frame_arena: std.heap.ArenaAllocator,
     editor: Editor,
     highlight: ?Highlight = null,
@@ -69,7 +68,7 @@ const Renderer = struct {
 
     last_clock: ?c_ulong,
 
-    pub fn init(alloc: Allocator, atlas: font.Atlas, view_: objc.c.id, device_: objc.c.id) *Renderer {
+    pub fn init(alloc: Allocator, font: Font, view_: objc.c.id, device_: objc.c.id) *Renderer {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
@@ -87,7 +86,7 @@ const Renderer = struct {
             .some_val = 69420,
             .vertices = ArrayList(Vertex){},
             .vertex_buffer = undefined,
-            .atlas = atlas,
+            .font = font,
             .texture = undefined,
             .sampler_state = undefined,
             .screen_size = view.drawable_size(),
@@ -104,22 +103,7 @@ const Renderer = struct {
 
         renderer.vertex_buffer = device.new_buffer_with_length(32, metal.MTLResourceOptions.storage_mode_managed) orelse @panic("Failed to make buffer");
 
-        const tex_opts = metal.NSDictionary.new_mutable();
-        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLTextureUsage.shader_read), metal.MTKTextureLoaderOptionTextureUsage });
-        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
-        tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(0), metal.MTKTextureLoaderOptionSRGB });
-
-        const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
-        var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
-        tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
-
-        var err: ?*anyopaque = null;
-        const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithCGImage:options:error:"), .{
-            atlas.atlas,
-            tex_opts,
-        });
-        metal.check_error(err) catch @panic("failed to make texture");
-        renderer.texture = tex;
+        renderer.texture = renderer.font.create_texture(device).obj;
 
         const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
@@ -168,8 +152,8 @@ const Renderer = struct {
         var number_str_buf = [_]u8{0} ** 16;
 
         const number_str = strutil.number_to_str(@intCast(biggest_num), digit_count, &number_str_buf);
-        const padding = self.atlas.max_adv_before_ligatures;
-        const width = self.atlas.str_width(number_str) + padding;
+        const padding = self.font.max_adv;
+        const width = self.font.str_width(number_str) + padding;
 
         return @as(f32, @floatCast(width));
     }
@@ -299,10 +283,15 @@ const Renderer = struct {
         const br = math.float2(r, b);
         const bl = math.float2(l, b);
 
-        const txt = if (comptime !is_border) self.atlas.cursor_ty else self.atlas.border_cursor_ty;
-        const txbb = if (comptime !is_border) txt - self.atlas.cursor_h else txt - self.atlas.border_cursor_h;
-        const txl = if (comptime !is_border) self.atlas.cursor_tx else self.atlas.border_cursor_tx;
-        const txr = if (comptime !is_border) txl + self.atlas.cursor_w else txl + self.atlas.border_cursor_w;
+        // const txt: f32 = @floatCast(if (comptime !is_border) self.font.cursor.ty else self.font.border_cursor.ty);
+        // const txbb: f32 = @floatCast(if (comptime !is_border) txt - self.font.cursor.rect.size.height else txt - self.font.border_cursor.rect.size.height);
+        // const txl: f32 = @floatCast(if (comptime !is_border) self.font.cursor.tx else self.font.border_cursor.tx);
+        // const txr: f32 = @floatCast(if (comptime !is_border) txl + self.font.cursor.rect.size.width else txl + self.font.border_cursor.rect.size.width);
+
+        const txt: f32 = @floatCast(if (comptime !is_border) self.font.cursor.ty else self.font.border_cursor.ty);
+        const txbb: f32 = @floatCast(if (comptime !is_border) txt + self.font.cursor.rect.size.height / @as(f32, @floatFromInt(self.font.atlas.height)) else txt + self.font.border_cursor.rect.size.height / @as(f32, @floatFromInt(self.font.atlas.height)));
+        const txl: f32 = @floatCast(if (comptime !is_border) self.font.cursor.tx else self.font.border_cursor.tx);
+        const txr: f32 = @floatCast(if (comptime !is_border) txl + self.font.cursor.rect.size.width / @as(f32, @floatFromInt(self.font.atlas.width)) else txl + self.font.border_cursor.rect.size.width / @as(f32, @floatFromInt(self.font.atlas.width)));
 
         const tx_tl = math.float2(txl, txt);
         const tx_tr = math.float2(txr, txt);
@@ -323,8 +312,8 @@ const Renderer = struct {
     }
 
     pub fn build_cursor_geometry(self: *Self, y: f32, xx: f32, width: f32, comptime is_border: bool) [6]Vertex {
-        const yy2 = y + self.atlas.ascent;
-        const bot2 = y - self.atlas.descent;
+        const yy2 = y + self.font.ascent;
+        const bot2 = y - self.font.descent;
         return self.build_cursor_geometry_from_tbrl(yy2, bot2, xx, xx + width, is_border);
     }
 
@@ -338,7 +327,7 @@ const Renderer = struct {
             ct.kCTLigatureAttributeName,
         });
         dict.msgSend(void, objc.sel("setObject:forKey:"), .{
-            self.atlas.font.value,
+            self.font.font.obj.value,
             ct.kCTFontAttributeName,
         });
         if (comptime alignment != .Left) {
@@ -374,8 +363,8 @@ const Renderer = struct {
         // 2. Get y of end of screen
         // 3. Get y of cursor top and bot
         // 4. Check if cursor is within those bounds.
-        const ascent: f32 = @floatCast(self.atlas.ascent);
-        const descent: f32 = @floatCast(self.atlas.descent);
+        const ascent: f32 = @floatCast(self.font.ascent);
+        const descent: f32 = @floatCast(self.font.descent);
 
         const cursor_line = self.editor.cursor.line;
 
@@ -417,8 +406,8 @@ const Renderer = struct {
     ///
     /// TODO: this can be made faster, just do multiplication bruh
     fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32, end_y: f32 } {
-        const ascent: f32 = @floatCast(self.atlas.ascent);
-        const descent: f32 = @floatCast(self.atlas.descent);
+        const ascent: f32 = @floatCast(self.font.ascent);
+        const descent: f32 = @floatCast(self.font.descent);
 
         const lines_len = self.editor.rope.nodes.len;
         const top = screeny;
@@ -482,8 +471,8 @@ const Renderer = struct {
         var starting_y: f32 = start_end.start_y;
         var text_max_width: f32 = 0.0;
 
-        const atlas_w = @as(f32, @floatFromInt(self.atlas.width));
-        const atlas_h = @as(f32, @floatFromInt(self.atlas.height));
+        const atlas_w: f32 = @floatFromInt(self.font.atlas.width);
+        const atlas_h: f32 = @floatFromInt(self.font.atlas.height);
 
         self.vertices.clearRetainingCapacity();
 
@@ -514,9 +503,9 @@ const Renderer = struct {
             // empty line
             if (the_line.len == 0) {
                 if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
-                    cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)), false);
+                    cursor_vertices = self.build_cursor_geometry(starting_y, initial_x, @floatCast(self.font.cursor.rect.size.width), false);
                 }
-                starting_y -= self.atlas.descent + self.atlas.ascent;
+                starting_y -= self.font.descent + self.font.ascent;
                 cursor_line += 1;
                 cursor_col = 0;
                 continue;
@@ -562,7 +551,7 @@ const Renderer = struct {
 
                 ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
                 ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
-                self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
+                self.font.get_glyph_rects(glyphs.items, glyph_rects.items);
                 if (glyphs.items.len != line.len) {
                     @panic("Houston we have a problem");
                 }
@@ -578,7 +567,7 @@ const Renderer = struct {
                     const color = TEXT_COLOR;
 
                     const glyph = glyphs.items[i];
-                    const glyph_info = self.atlas.lookup(glyph);
+                    const glyph_info = self.font.lookup(glyph);
                     const rect = glyph_rects.items[i];
                     const pos = positions.items[i];
 
@@ -595,7 +584,7 @@ const Renderer = struct {
                     const l = vertices[0].pos.x;
 
                     if (has_cursor) {
-                        cursor_vertices = self.build_cursor_geometry(starting_y + @as(f32, @floatCast(pos.y)), starting_x + @as(f32, @floatCast(pos.x)), if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance, false);
+                        cursor_vertices = self.build_cursor_geometry(starting_y + @as(f32, @floatCast(pos.y)), starting_x + @as(f32, @floatCast(pos.x)), if (glyph_info.advance == 0.0) @floatCast(self.font.cursor.rect.size.width) else glyph_info.advance, false);
                         // TODO: This will break if there is no 1->1 mapping of character to glyphs (some ligatures)
                         cursor_vert_index = .{
                             .str_index = index,
@@ -603,7 +592,7 @@ const Renderer = struct {
                             .c = line[i],
                             .y = starting_y + @as(f32, @floatCast(pos.y)),
                             .xx = starting_x + @as(f32, @floatCast(pos.x)),
-                            .width = if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance,
+                            .width = if (glyph_info.advance == 0.0) @floatCast(self.font.cursor.rect.size.width) else glyph_info.advance,
                         };
                     }
                     try self.vertices.appendSlice(alloc, &vertices);
@@ -612,11 +601,11 @@ const Renderer = struct {
             }
 
             if (cursor_line == self.editor.cursor.line and cursor_col == self.editor.cursor.col) {
-                cursor_vertices = self.build_cursor_geometry(starting_y, last_x, @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)), false);
+                cursor_vertices = self.build_cursor_geometry(starting_y, last_x, @floatCast(self.font.cursor.rect.size.width), false);
             }
 
-            text_max_width = @max(text_max_width, last_x + @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)));
-            starting_y -= self.atlas.descent + self.atlas.ascent;
+            text_max_width = @max(text_max_width, last_x + @as(f32, @floatCast(self.font.cursor.rect.size.width)));
+            starting_y -= self.font.descent + self.font.ascent;
             cursor_line += 1;
             cursor_col = 0;
             // if (has_newline) {
@@ -643,8 +632,8 @@ const Renderer = struct {
                 end_byte, 
                 math.float2(@floatCast(self.screen_size.width), 
                 @floatCast(self.screen_size.height)), 
-                self.atlas.ascent, 
-                self.atlas.descent, 
+                self.font.ascent, 
+                self.font.descent, 
                 self.editor.text_dirty
             );
         }
@@ -727,20 +716,20 @@ const Renderer = struct {
         const text_attributes = self.text_attributed_string_dict(.Right);
         defer text_attributes.msgSend(void, objc.sel("release"), .{});
 
-        const starting_x: f32 = 0.0 + self.atlas.max_adv_before_ligatures * 0.5;
+        const starting_x: f32 = 0.0 + self.font.max_adv * 0.5;
         var starting_y: f32 = start_end.start_y;
 
-        const atlas_w = @as(f32, @floatFromInt(self.atlas.width));
-        const atlas_h = @as(f32, @floatFromInt(self.atlas.height));
+        const atlas_w = @as(f32, @floatFromInt(self.font.atlas.width));
+        const atlas_h = @as(f32, @floatFromInt(self.font.atlas.height));
 
-        const p = self.atlas.max_adv_before_ligatures * 0.5;
+        const p = self.font.max_adv * 0.5;
 
         var number_buf = [_]u8{0} ** 16;
 
         var i: usize = start_end.start;
         while (i < start_end.end) : (i += 1) {
             defer {
-                starting_y -= self.atlas.descent + self.atlas.ascent;
+                starting_y -= self.font.descent + self.font.ascent;
             }
             var on_current_line = false;
             const num = num: {
@@ -781,7 +770,7 @@ const Renderer = struct {
 
             ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
             ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
-            self.atlas.get_glyph_rects(glyphs.items, glyph_rects.items);
+            self.font.get_glyph_rects(glyphs.items, glyph_rects.items);
             if (glyphs.items.len != str.len) {
                 @panic("Houston we have a problem");
             }
@@ -790,9 +779,9 @@ const Renderer = struct {
                 if (glyph_rects.items.len == 0) continue;
 
                 const pos: metal.CGPoint = positions.items[glyph_rects.items.len - 1];
-                const glyph_info: *const Glyph = self.atlas.lookup(glyphs.items[glyph_rects.items.len - 1]);
+                const glyph_info: *const Glyph = self.font.lookup(glyphs.items[glyph_rects.items.len - 1]);
 
-                break :run_width pos.x + if (glyph_info.advance == 0.0) @as(f32, @floatFromInt(self.atlas.max_glyph_width_before_ligatures)) else glyph_info.advance;
+                break :run_width pos.x + if (glyph_info.advance == 0.0) @as(f32, @floatCast(self.font.cursor_w())) else glyph_info.advance;
             };
 
             const origin_adjust = (line_nb_col_width - p * 2.0) - run_width;
@@ -800,7 +789,7 @@ const Renderer = struct {
             var j: usize = 0;
             while (j < glyphs.items.len) : (j += 1) {
                 const glyph = glyphs.items[j];
-                const glyph_info = self.atlas.lookup(glyph);
+                const glyph_info = self.font.lookup(glyph);
                 const rect: metal.CGRect = glyph_rects.items[j];
 
                 // Align text position to the right
@@ -835,7 +824,7 @@ const Renderer = struct {
         const color = bg;
         const selection = self.editor.selection orelse return;
 
-        var y: f32 = screeny - @as(f32, @floatFromInt(self.atlas.max_glyph_height));
+        var y: f32 = screeny - @as(f32, @floatCast(self.font.ascent + self.font.descent));
         const starting_x: f32 = text_start_x;
         var x: f32 = starting_x;
         var text = text_;
@@ -848,15 +837,15 @@ const Renderer = struct {
         for (text) |char| {
             defer i += 1;
             if (i >= selection.end) break;
-            const glyph = self.atlas.lookup_char(char);
+            const glyph = self.font.lookup_char(char);
 
             if (i < selection.start) {
                 if (char == 9) {
-                    x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                    x += self.font.lookup_char_from_str(" ").advance * 4.0;
                 } else if (strutil.is_newline(char)) {
                     x = starting_x;
-                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                    y -= self.atlas.descent + self.atlas.ascent;
+                    // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.font.descent;
+                    y -= self.font.descent + self.font.ascent;
                 } else {
                     x += glyph.advance;
                 }
@@ -874,11 +863,11 @@ const Renderer = struct {
             }
 
             if (char == 9) {
-                x += self.atlas.lookup_char_from_str(" ").advance * 4.0;
+                x += self.font.lookup_char_from_str(" ").advance * 4.0;
             } else if (strutil.is_newline(char)) {
                 x = starting_x;
-                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.atlas.descent;
-                y -= self.atlas.descent + self.atlas.ascent;
+                // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.font.descent;
+                y -= self.font.descent + self.font.ascent;
             } else {
                 x += glyph.advance;
             }
@@ -888,17 +877,17 @@ const Renderer = struct {
                 line_state = false;
 
                 try self.vertices.appendSlice(alloc, &Vertex.square(.{
-                    .t = yy + self.atlas.ascent,
-                    .b = yy - self.atlas.descent,
+                    .t = yy + self.font.ascent,
+                    .b = yy - self.font.descent,
                     .l = l,
                     .r = r,
                 }, .{
                     // use the middle of the cursor glyph because there's some
                     // texture sampling errors that make the selection fade into the background
-                    .t = self.atlas.cursor_ty - self.atlas.cursor_h / 2.0,
-                    .b = self.atlas.cursor_ty - self.atlas.cursor_h / 2.0,
-                    .l = self.atlas.cursor_tx + self.atlas.cursor_w / 2.0,
-                    .r = self.atlas.cursor_tx + self.atlas.cursor_w / 2.0,
+                    .t = self.font.cursor_ty() - self.font.cursor_h() / 2.0,
+                    .b = self.font.cursor_ty() - self.font.cursor_h() / 2.0,
+                    .l = self.font.cursor_tx() + self.font.cursor_w() / 2.0,
+                    .r = self.font.cursor_tx() + self.font.cursor_w() / 2.0,
                 }, color));
             }
         }
@@ -1017,12 +1006,11 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    var atlas = font.Atlas.new(alloc, 64.0);
-    atlas.make_atlas(alloc) catch @panic("OOPS");
+    const font = Font.init(alloc, 64.0, 1024, 1024) catch @panic("Failed to create Font");
     const class = objc.Class.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
     defer obj.msgSend(void, objc.sel("release"), .{});
-    return Renderer.init(std.heap.c_allocator, atlas, view, device);
+    return Renderer.init(std.heap.c_allocator, font, view, device);
 }
 
 export fn renderer_draw(renderer: *Renderer, view_id: objc.c.id) void {
@@ -1047,10 +1035,6 @@ export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void
 export fn renderer_handle_scroll(renderer: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
     // renderer.scroll(-dx * 10.0, -dy * 10.0, phase);
     renderer.scroll(-dx * 10.0, -dy, phase);
-}
-
-export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
-    return renderer.atlas.atlas;
 }
 
 export fn renderer_get_val(renderer: *Renderer) u64 {

@@ -236,6 +236,17 @@ pub const NSString = struct {
     }
 };
 
+pub const NSFont = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn from_name_and_size(name: NSString, font_size: CGFloat) Self {
+        const Class = Self.get_class();
+        const font = Class.msgSend(objc.Object, objc.sel("fontWithName:size:"), .{ name, font_size });
+        return Self.from_obj(font);
+    }
+};
 
 pub const NSURL = struct {
     const Self = @This();
@@ -342,8 +353,6 @@ pub const MTKTextureLoader = struct {
     const Self = @This();
     obj: objc.Object,
     pub usingnamespace DefineObject(@This());
-
-
 };
 
 pub const MTKTextureLoaderOption = objc.c.id;

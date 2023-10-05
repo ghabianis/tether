@@ -39,5 +39,6 @@ fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]],
                               texture2d<float> tex [[texture(0)]],
                               sampler smp [[sampler(0)]]) {
     float4 color = tex.sample(smp, fragmentIn.texCoords.xy);
-    return float4(1, 1, 1, color.a) * fragmentIn.color;
+    // return float4(1, 1, 1, color.a) * fragmentIn.color;
+    return float4(1, 1, 1, color.r) * fragmentIn.color;
 }

@@ -31,8 +31,10 @@ pub const Vertex = extern struct {
         const l = @as(f32, @floatCast(pos.x)) + x + @as(f32, @floatCast(rect.origin.x));
         const r = l + @as(f32, @floatCast(rect.size.width));
 
-        const txt = glyph_info.ty - @as(f32, @floatFromInt(rect.heightCeil())) / atlas_h;
-        const txb = glyph_info.ty;
+        // const txt = glyph_info.ty - @as(f32, @floatFromInt(rect.heightCeil())) / atlas_h;
+        // const txb = glyph_info.ty;
+        const txt = glyph_info.ty;
+        const txb = glyph_info.ty + @as(f32, @floatFromInt(rect.heightCeil())) / atlas_h;
         const txl = glyph_info.tx;
         const txr = glyph_info.tx + width / atlas_w;
 

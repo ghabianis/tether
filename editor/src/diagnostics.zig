@@ -3,7 +3,7 @@ const objc = @import("zig-objc");
 const metal = @import("./metal.zig");
 const math = @import("./math.zig");
 const highlight = @import("./highlight.zig");
-const memutil = @import("./memutil.zig");
+const cast = @import("./cast.zig");
 const binary_search = @import("./binary_search.zig");
 const Rope = @import("./rope.zig").Rope;
 
@@ -192,11 +192,11 @@ pub fn render(self: *Diagnostics, dt: f32, command_encoder: metal.MTLRenderComma
     // command_encoder.set_label("Diagnostics");
     command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = width, .height = height, .znear = 0.1, .zfar = 100.0 });
 
-    command_encoder.set_vertex_bytes(memutil.as_bytes(&self.vertices), 0);
+    command_encoder.set_vertex_bytes(cast.bytes(&self.vertices), 0);
     command_encoder.set_vertex_buffer(self.instance_buffer, 0, 1);
-    command_encoder.set_vertex_bytes(memutil.as_bytes(&uniforms), 2);
+    command_encoder.set_vertex_bytes(cast.bytes(&uniforms), 2);
 
-    command_encoder.set_fragment_bytes(memutil.as_bytes(&uniforms), 0);
+    command_encoder.set_fragment_bytes(cast.bytes(&uniforms), 0);
 
     command_encoder.set_render_pipeline_state(self.pipeline);
     command_encoder.draw_primitives_instanced(.triangle, 0, 6, self.instances.items.len);

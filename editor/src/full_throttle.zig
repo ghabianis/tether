@@ -4,7 +4,7 @@ const objc = @import("zig-objc");
 const math = @import("math.zig");
 const anim = @import("anim.zig");
 const mempool = @import("./memory_pool.zig");
-const memutil = @import("./memutil.zig");
+const cast = @import("./cast.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -803,7 +803,7 @@ const Fire = struct {
 
         compute_command_encoder.set_compute_pipeline_state(self.compute_pipeline);
         compute_command_encoder.set_buffer(self.particle_buffer, 0, 0);
-        const time_bytes = memutil.as_bytes(&self.time);
+        const time_bytes = cast.bytes(&self.time);
         std.debug.assert(time_bytes.len == @sizeOf(f32));
         compute_command_encoder.set_bytes(time_bytes, 1);
 
@@ -835,9 +835,9 @@ const Fire = struct {
             .model_view_matrix = camera_matrix.*,
         };
 
-        render_command_encoder.set_vertex_bytes(memutil.as_bytes(&self.vertices), 0);
+        render_command_encoder.set_vertex_bytes(cast.bytes(&self.vertices), 0);
         render_command_encoder.set_vertex_buffer(self.particle_buffer, 0, 1);
-        render_command_encoder.set_vertex_bytes(memutil.as_bytes(&uniforms), 2);
+        render_command_encoder.set_vertex_bytes(cast.bytes(&uniforms), 2);
 
         render_command_encoder.set_fragment_texture(self.texture, 0);
         render_command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
@@ -1006,9 +1006,13 @@ const Fire = struct {
         // //     tex_opts,
         // // });
         // metal.check_error(err) catch @panic("failed to make texture");
-        const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/Particle.bmp")[0..]);
-        // const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/fire2.png")[0..]);
-        // const tex = @import("./texture_loader.zig").load_texture_from_bytes(device, @embedFile("./assets/flare.png")[0..]);
+        const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(
+            device, 
+            @embedFile("./assets/Particle.bmp")[0..], 
+            metal.MTLPixelFormatRGBA8Unorm
+        );
+        // const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(device, @embedFile("./assets/fire2.png")[0..]);
+        // const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(device, @embedFile("./assets/flare.png")[0..]);
         self.texture = tex.obj;
 
         const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});

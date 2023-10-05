@@ -17,12 +17,13 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
   - current file path relative to project root
   - current line / col
   - vim mode
-** TODO Font atlas refactor [0/2]
-*** TODO Use binpacking algorithm to reduce texture size
+** TODO Font atlas refactor [2/6]
+*** DONE Use binpacking algorithm to reduce texture size
 Resources:
 - ghostty implementation
 - freetype-gl implementation
 - RectangleBinPack implementation
+*** DONE Split rasterization from atlas
 *** TODO Rebuild atlas when encountering new glyphs
 Couple things to note:
 - Building atlas is expensive (binpacking and actually producing the texture)
@@ -40,6 +41,14 @@ Couple things to note:
     The first choice means we will either construct the CoreText data structures: /CTLine, CTGlyphRun, etc./ twice, or we cache them in the function. Caching them doesn't sound like a bad option. We also call =.autorelease()= on these objects so memory wise it's also fine to cache.
 
     Note: If it is inexpensive to /only/ recalculate the atlas, that is, /without/ creating the texture, then the choice probably doesn't matter.
+*** TODO Correct integer <-> float discrepancies [0/2]
+There are a couple places where there might be some discrepancies from converting integers <-> floats:
+**** TODO CGImage -> Atlas bitmap
+***** TODO GlyphInfo.rect.width/height are in floats but bitmap wants integers
+***** TODO Subtracting the origin
+**** TODO Certain font metrics
+
+*** TODO rewrite CGBitmapContextCreate to be nullable. Don't use ?CGContextRef though because that doesn't work
 ** TODO Comment syntax highlighting broken
 ** TODO Sweep thru code for objc memory leaks
 there are probably lots of places where i am not freeing objc objects
@@ -59,7 +68,6 @@ Two things here:
 
 - Do we need to cache it? If so, where/when?
 * TODO Later [0/14]
-** TODO simd math data structures
 ** TODO (perf) Cache diagnostics =LineBaseline= struct?
 ** TODO (refactor) coalesce the text geometry building code for =build_text_geometry()= and =build_line_number_geometry()=
 ** TODO (perf) only build line number geometry for lines we see
@@ -91,6 +99,7 @@ but we are being lazy and not checking for this and adding redundant glyphs to t
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?
 ** TODO curves svg etc
+** TODO simd math data structures
 * TODO Brainstorm [0/14]
 ** TODO improve particles with glow
 look at these: https://www.shadertoy.com/view/lldGzr

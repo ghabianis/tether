@@ -234,8 +234,8 @@ fn build_test(b: *std.build.Builder, test_step: *std.build.Step, modules: []cons
     const the_test = b.addTest(opts);
     add_libs(the_test, modules, treesitter);
     the_test.linkLibC();
-    b.default_step.dependOn(&the_test.step);
-    b.default_step.dependOn(&treesitter.step);
+    // b.default_step.dependOn(&the_test.step);
+    // b.default_step.dependOn(&treesitter.step);
     const run: *std.build.Step.Run = b.addRunArtifact(the_test);
     b.installArtifact(the_test);
     test_step.dependOn(&the_test.step);
