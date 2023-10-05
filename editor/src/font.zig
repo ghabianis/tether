@@ -98,7 +98,7 @@ pub fn init(alloc: Allocator, font_size: u16, atlas_width: u32, atlas_height: u3
     return font;
 }
 
-/// Loads the default ASCII chars and cursor and border cursor glyphs
+/// Loads the default ASCII chars, COMMON_LIGATURES, and cursor / border cursor glyphs
 fn load_default(self: *Font) !void {
     var glyphs = ArrayList(metal.CGGlyph){};
     var glyph_rects = ArrayList(metal.CGRect){};
@@ -470,6 +470,41 @@ pub fn cursor_h(self: *const Font) f32 {
 pub fn cursor_w(self: *const Font) f32 {
     return @floatCast(self.cursor.rect.height());
 }
+
+pub const Serialize = struct {
+    pub const Glyph = extern struct {
+        tx: f32 align(8),
+        ty: f32,
+        bitmap_w: f32,
+        bitmap_h: f32,
+        bitmap_l: f32,
+        bitmap_t: f32,
+        advance_x: f32,
+    };
+
+    pub const Header = extern struct {
+         width: u32 align(8),
+         height: u32,
+         ascent: u32,
+         descent: u32,
+         glyph_len: u32,
+         _pad: u32 = 0,
+    };
+
+    pub fn serialize(self: *const Font, alloc: Allocator, buf: *ArrayList(u8)) !void {
+        const glyph_len = self.glyphs.unmanaged.size;
+        const header: Header = .{
+            .width = self.atlas.width,
+            .height = self.atlas.height,
+            .ascent = @floatFromInt(@ceil(self.ascent)),
+            .descent = @floatFromInt(@ceil(self.descent)),
+            .glyph_len = glyph_len,
+        };
+
+        try buf.appendSlice(alloc, cast.bytes(&header));
+        
+    }
+};
 
 pub const GlyphInfo = struct {
     const Self = @This();

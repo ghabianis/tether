@@ -18,6 +18,7 @@ const earcut = @import("earcut");
 const fullthrottle = @import("./full_throttle.zig");
 const Diagnostics = @import("./diagnostics.zig");
 const Time = @import("time.zig");
+const cast = @import("./cast.zig");
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -32,6 +33,12 @@ const FullThrottle = fullthrottle.FullThrottleMode;
 var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
+const WindowLineRange = struct { 
+    start: u32, 
+    start_y: f32, 
+    end: u32, 
+    end_y: f32
+};
 
 const TEXT_COLOR = math.hex4("#b8c1ea");
 const CURSOR_COLOR = math.hex4("#b4f9f8");
@@ -177,9 +184,10 @@ const Renderer = struct {
         const screeny = @as(f32, @floatCast(self.screen_size.height));
         const text_start_x = self.line_number_column_width();
 
-        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny, text_start_x);
-        try self.build_selection_geometry(alloc, str, screenx, screeny, text_start_x);
-        try self.build_line_numbers_geometry(alloc, &Arena, screenx, screeny, text_start_x);
+        const window_range = self.find_start_end_lines(screeny);
+        try self.build_text_geometry(alloc, &Arena, str, screenx, screeny, text_start_x, window_range);
+        try self.build_selection_geometry(alloc, str, screenx, screeny, text_start_x, window_range);
+        try self.build_line_numbers_geometry(alloc, &Arena, screenx, screeny, text_start_x, window_range);
 
         if (self.vertices.items.len == 0) {
             self.editor.draw_text = false;
@@ -411,7 +419,7 @@ const Renderer = struct {
     /// meaning (y + ascent = top of line, y - descent = bot of line)
     ///
     /// TODO: this can be made faster, just do multiplication bruh
-    fn find_start_end_lines(self: *Self, screeny: f32) struct { start: u32, start_y: f32, end: u32, end_y: f32 } {
+    fn find_start_end_lines(self: *Self, screeny: f32) WindowLineRange {
         const ascent: f32 = @floatCast(self.font.ascent);
         const descent: f32 = @floatCast(self.font.descent);
 
@@ -459,12 +467,13 @@ const Renderer = struct {
         return .{ .start = start, .end = end, .start_y = start_y, .end_y = end_y };
     }
 
-    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+    pub fn build_text_geometry(self: *Self, alloc: Allocator, frame_arena: *ArenaAllocator, str: []const u8, screenx: f32, screeny: f32, text_start_x: f32, start_end: WindowLineRange) !void {
+        _ = screeny;
         _ = screenx;
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
 
-        const start_end = self.find_start_end_lines(screeny);
+        // const start_end = self.find_start_end_lines(screeny);
         const offset: f32 = @floatFromInt(start_end.start);
         _ = offset;
 
@@ -708,11 +717,12 @@ const Renderer = struct {
         screenx: f32,
         screeny: f32,
         line_nb_col_width: f32,
+        start_end: WindowLineRange,
     ) !void {
+        _ = screeny;
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
 
-        const start_end = self.find_start_end_lines(screeny);
         const offset: f32 = @floatFromInt(start_end.start);
         _ = offset;
 
@@ -821,7 +831,8 @@ const Renderer = struct {
     }
 
     /// TODO: use frame scratch arena
-    pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32, text_start_x: f32) !void {
+    pub fn build_selection_geometry(self: *Self, alloc: Allocator, text_: []const u8, screenx: f32, screeny: f32, text_start_x: f32, start_end: WindowLineRange) !void {
+        _ = screeny;
         _ = screenx;
         // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         var bg = math.hex4("#b4f9f8");
@@ -830,7 +841,8 @@ const Renderer = struct {
         const color = bg;
         const selection = self.editor.selection orelse return;
 
-        var y: f32 = screeny - @as(f32, @floatCast(self.font.ascent + self.font.descent));
+        // var y: f32 = screeny - @as(f32, @floatCast(self.font.ascent + self.font.descent));
+        var y: f32 = start_end.start_y;
         const starting_x: f32 = text_start_x;
         var x: f32 = starting_x;
         var text = text_;
@@ -882,18 +894,24 @@ const Renderer = struct {
             if (strutil.is_newline(char) or i == selection.end -| 1) {
                 line_state = false;
 
+                // Use the middle of the cursor glyph because there's some
+                // texture sampling errors that make the selection fade into the
+                // background
+                const txt: f32 = self.font.cursor.ty + cast.num(f32, self.font.cursor.rect.size.height / 2.0) / @as(f32, @floatFromInt(self.font.atlas.height));
+                const txbb: f32 = txt;
+                const txl: f32 = self.font.cursor.tx + cast.num(f32, self.font.cursor.rect.size.width / 2.0) / cast.num(f32, self.font.atlas.width);
+                const txr: f32 = txl;
+
                 try self.vertices.appendSlice(alloc, &Vertex.square(.{
                     .t = yy + self.font.ascent,
                     .b = yy - self.font.descent,
                     .l = l,
                     .r = r,
                 }, .{
-                    // use the middle of the cursor glyph because there's some
-                    // texture sampling errors that make the selection fade into the background
-                    .t = self.font.cursor_ty() - self.font.cursor_h() / 2.0,
-                    .b = self.font.cursor_ty() - self.font.cursor_h() / 2.0,
-                    .l = self.font.cursor_tx() + self.font.cursor_w() / 2.0,
-                    .r = self.font.cursor_tx() + self.font.cursor_w() / 2.0,
+                    .t = txt,
+                    .b = txbb,
+                    .l = txl,
+                    .r = txr,
                 }, color));
             }
         }

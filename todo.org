@@ -17,14 +17,14 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
   - current file path relative to project root
   - current line / col
   - vim mode
-** TODO Font atlas refactor [2/6]
+** TODO Font atlas refactor [3/6]
 *** DONE Use binpacking algorithm to reduce texture size
 Resources:
 - ghostty implementation
 - freetype-gl implementation
 - RectangleBinPack implementation
 *** DONE Split rasterization from atlas
-*** TODO Rebuild atlas when encountering new glyphs
+*** DONE Rebuild atlas when encountering new glyphs
 Couple things to note:
 - Building atlas is expensive (binpacking and actually producing the texture)
 - We should try to batch the work as much as possible
@@ -49,6 +49,10 @@ There are a couple places where there might be some discrepancies from convertin
 **** TODO Certain font metrics
 
 *** TODO rewrite CGBitmapContextCreate to be nullable. Don't use ?CGContextRef though because that doesn't work
+*** TODO Text geometry resizing bug
+When we build text geometry, we iterate text line by line. On each line, we call =self.font.lookup_glyph_rects()= which will load each glyph from the line, adding any newly encountered glyphs to the atlas, and possibly causing the atlas to resize.
+
+If the atlas resizes, all the texcoords of vertices from previous lines will be invalid, since they will be normalized to the previous dimensions of the atlas.
 ** TODO Comment syntax highlighting broken
 ** TODO Sweep thru code for objc memory leaks
 there are probably lots of places where i am not freeing objc objects

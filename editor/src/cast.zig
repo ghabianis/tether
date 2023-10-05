@@ -1,5 +1,6 @@
 const std = @import("std");
 
+/// Cast to a slice of bytes. Should pass in a pointer to the value
 pub fn bytes(value_ptr: anytype) []const u8 {
     const tyinfo = comptime @typeInfo(@TypeOf(value_ptr));
     if (comptime @as(std.builtin.TypeId, tyinfo) != std.builtin.TypeId.Pointer) {
