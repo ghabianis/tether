@@ -510,8 +510,8 @@ pub const MTLRenderCommandEncoder = struct {
         return self.obj.msgSend(void, objc.sel("setFragmentBytes:length:atIndex:"), .{bytes.ptr, bytes.len, index});
     }
 
-    pub fn set_fragment_texture(self: Self, tex: objc.Object, index: usize) void {
-        self.obj.msgSend(void, objc.sel("setFragmentTexture:atIndex:"), .{ tex, index });
+    pub fn set_fragment_texture(self: Self, tex: MTLTexture, index: usize) void {
+        self.obj.msgSend(void, objc.sel("setFragmentTexture:atIndex:"), .{ tex.obj, index });
     }
 
     pub fn set_fragment_sampler_state(self: Self, sampler_state: objc.Object, index: usize) void {

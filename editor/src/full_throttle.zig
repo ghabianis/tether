@@ -124,7 +124,7 @@ pub const FullThrottleMode = struct {
     indices: [6]u16,
 
     explosion_pipeline: metal.MTLRenderPipelineState,
-    explosion_texture: objc.Object,
+    explosion_texture: metal.MTLTexture,
     explosion_sampler_state: objc.Object,
     explosion_vertices: [6]Explosion,
 
@@ -492,7 +492,7 @@ pub const FullThrottleMode = struct {
             tex_opts,
         });
         metal.check_error(err) catch @panic("failed to make texture");
-        self.explosion_texture = tex;
+        self.explosion_texture = metal.MTLTexture.from_obj(tex);
 
         const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);

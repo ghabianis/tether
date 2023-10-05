@@ -45,7 +45,7 @@ const Renderer = struct {
     queue: metal.MTLCommandQueue,
     pipeline: metal.MTLRenderPipelineState,
     /// MTLTexture
-    texture: objc.Object,
+    texture: metal.MTLTexture,
     /// MTLSamplerState
     sampler_state: objc.Object,
 
@@ -103,7 +103,7 @@ const Renderer = struct {
 
         renderer.vertex_buffer = device.new_buffer_with_length(32, metal.MTLResourceOptions.storage_mode_managed) orelse @panic("Failed to make buffer");
 
-        renderer.texture = renderer.font.create_texture(device).obj;
+        renderer.texture = renderer.font.create_texture(device);
 
         const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
@@ -194,6 +194,12 @@ const Renderer = struct {
             self.vertex_buffer = self.device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(self.vertices.items.ptr))[0..(@sizeOf(Vertex) * self.vertices.items.len)], metal.MTLResourceOptions.storage_mode_managed);
         } else {
             self.vertex_buffer.update(Vertex, self.vertices.items, 0);
+        }
+
+        if (self.font.atlas.dirty) {
+            const tex = self.texture;
+            defer tex.release();
+            self.texture = self.font.create_texture(self.device);
         }
     }
 
@@ -551,7 +557,7 @@ const Renderer = struct {
 
                 ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
                 ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
-                self.font.get_glyph_rects(glyphs.items, glyph_rects.items);
+                try self.font.lookup_glyph_rects(glyphs.items, glyph_rects.items);
                 if (glyphs.items.len != line.len) {
                     @panic("Houston we have a problem");
                 }
@@ -567,7 +573,7 @@ const Renderer = struct {
                     const color = TEXT_COLOR;
 
                     const glyph = glyphs.items[i];
-                    const glyph_info = self.font.lookup(glyph);
+                    const glyph_info = try self.font.lookup(glyph);
                     const rect = glyph_rects.items[i];
                     const pos = positions.items[i];
 
@@ -770,7 +776,7 @@ const Renderer = struct {
 
             ct.CTRunGetGlyphs(run, .{ .location = 0, .length = @as(i64, @intCast(glyph_count)) }, glyphs.items.ptr);
             ct.CTRunGetPositions(run, .{ .location = 0, .length = 0 }, positions.items.ptr);
-            self.font.get_glyph_rects(glyphs.items, glyph_rects.items);
+            try self.font.lookup_glyph_rects(glyphs.items, glyph_rects.items);
             if (glyphs.items.len != str.len) {
                 @panic("Houston we have a problem");
             }
@@ -779,7 +785,7 @@ const Renderer = struct {
                 if (glyph_rects.items.len == 0) continue;
 
                 const pos: metal.CGPoint = positions.items[glyph_rects.items.len - 1];
-                const glyph_info: *const Glyph = self.font.lookup(glyphs.items[glyph_rects.items.len - 1]);
+                const glyph_info: *const Glyph = try self.font.lookup(glyphs.items[glyph_rects.items.len - 1]);
 
                 break :run_width pos.x + if (glyph_info.advance == 0.0) @as(f32, @floatCast(self.font.cursor_w())) else glyph_info.advance;
             };
@@ -789,7 +795,7 @@ const Renderer = struct {
             var j: usize = 0;
             while (j < glyphs.items.len) : (j += 1) {
                 const glyph = glyphs.items[j];
-                const glyph_info = self.font.lookup(glyph);
+                const glyph_info = try self.font.lookup(glyph);
                 const rect: metal.CGRect = glyph_rects.items[j];
 
                 // Align text position to the right
@@ -837,11 +843,11 @@ const Renderer = struct {
         for (text) |char| {
             defer i += 1;
             if (i >= selection.end) break;
-            const glyph = self.font.lookup_char(char);
+            const glyph = try self.font.lookup_char(char);
 
             if (i < selection.start) {
                 if (char == 9) {
-                    x += self.font.lookup_char_from_str(" ").advance * 4.0;
+                    x += (try self.font.lookup_char_from_str(" ")).advance * 4.0;
                 } else if (strutil.is_newline(char)) {
                     x = starting_x;
                     // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.font.descent;
@@ -863,7 +869,7 @@ const Renderer = struct {
             }
 
             if (char == 9) {
-                x += self.font.lookup_char_from_str(" ").advance * 4.0;
+                x += (try self.font.lookup_char_from_str(" ")).advance * 4.0;
             } else if (strutil.is_newline(char)) {
                 x = starting_x;
                 // y += -@intToFloat(f32, self.atlas.max_glyph_height) - self.font.descent;
