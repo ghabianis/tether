@@ -12,7 +12,6 @@ const Self = @This();
 
 mode: Mode = .Normal,
 parsers: []CommandParser = &[_]CommandParser{},
-failed_parsers: BitSet = .{},
 
 pub const DEFAULT_PARSERS = [_]CommandParser{
     // move
@@ -55,6 +54,7 @@ pub const DEFAULT_PARSERS = [_]CommandParser{
 
 
 pub fn init(self: *Self, alloc: Allocator, parsers: []const CommandParser) !void {
+    _ = alloc;
     self.parsers = try std.heap.c_allocator.alloc(CommandParser, parsers.len);
     var index: usize = 0;
     var i: usize = 0;
@@ -63,42 +63,40 @@ pub fn init(self: *Self, alloc: Allocator, parsers: []const CommandParser) !void
         index += 1;
         i += 1;
     }
-    self.failed_parsers = try BitSet.initEmpty(alloc, self.parsers.len);
 }
 
 pub fn parse(self: *Self, key: Key) ?Cmd {
     if (key == .Esc) {
-        self.reset_parser();
+        self.reset_parsers();
         return .{ .repeat = 1, .kind = .{ .SwitchMode = .Normal } };
     }
 
     var i: usize = 0;
+    var failed_count: usize = 0;
     while (i < self.parsers.len) : (i += 1) {
-        if (self.failed_parsers.isSet(i)) continue;
         var p = &self.parsers[i];
         const res = p.parse(self.mode, key);
         if (res == .Accept) {
             const result = p.result(self.mode);
-            self.reset_parser();
+            self.reset_parsers();
             return result;
         }
         if (res == .Fail) {
-            self.failed_parsers.set(i);
+            failed_count += 1;
         }
     }
 
-    if (self.failed_parsers.count() == self.parsers.len) {
-        self.reset_parser();
+    if (failed_count == self.parsers.len) {
+        self.reset_parsers();
     }
 
     return null;
 }
 
-fn reset_parser(self: *Self) void {
+fn reset_parsers(self: *Self) void {
     for (self.parsers) |*p| {
         p.reset();
     }
-    self.failed_parsers.setRangeValue(.{ .start = 0, .end = self.parsers.len }, false);
 }
 
 pub const Mode = enum(u8) {
@@ -277,6 +275,8 @@ pub const CustomCmd = struct {
     name: []const u8
 };
 
+/// TODO: We might be able to slim this down to 8 bytes
+/// Instead of storing a pointer to the start of this CommandParser's inputs, we 
 pub const CommandParser = struct {
     const Self = @This();
 
@@ -292,7 +292,7 @@ pub const CommandParser = struct {
         insert_mode: u1,
         normal_mode: u1,
         visual_mode: u1,
-        _pad: u1 = 0,
+        has_failed: u1 = 0,
         idx: u4 = 0,
         len: u4 = 0,
 
@@ -562,6 +562,7 @@ pub const CommandParser = struct {
             i += 1;
         }
         self.data.idx = 0;
+        self.data.has_failed = 0;
     }
 
     pub fn copy(self: *const CommandParser, alloc: Allocator) !CommandParser {
@@ -578,13 +579,19 @@ pub const CommandParser = struct {
     }
 
     fn is_valid_mode(self: *CommandParser, mode: Mode) bool {
-        _ = mode;
-        _ = self;
-        // @ptrCast(u8, self.data + s)
-        return true;
+        return self.data.is_valid_mode(mode);
     }
 
-    pub fn parse(self: *CommandParser, mode: Mode, key: Key) ParseResult {
+    pub inline fn parse(self: *CommandParser, mode: Mode, key: Key) ParseResult {
+        if (self.data.has_failed == 1) return .Fail;
+        const res = self.parse_impl(mode, key);
+        if (res == .Fail) {
+            self.data.has_failed = 1;
+        }
+        return res;
+    }
+
+    fn parse_impl(self: *CommandParser, mode: Mode, key: Key) ParseResult {
         if (!self.data.is_valid_mode(mode)) return .Fail;
         if (self.data.idx >= self.data.len) return .Fail;
 
@@ -604,6 +611,10 @@ pub const CommandParser = struct {
             .Fail => return .Fail,
             .Continue => return .Continue,
         }
+    }
+
+    pub fn has_failed(self: *CommandParser) bool {
+        return self.data.has_failed == 1;
     }
 
     fn result_dcy(self: *CommandParser, comptime dcy_kind: CmdTag, mode: Mode) Cmd {
