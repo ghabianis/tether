@@ -11,6 +11,8 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
 
 ***** TODO Each number/glyph shakes as score increases
 ***** TODO Flashes in and out of red/white
+** TODO Command palette
+
 ** TODO Status line
 *** BRAINSTORM
 - what we want ::
@@ -103,6 +105,8 @@ but we are being lazy and not checking for this and adding redundant glyphs to t
 ** TODO create deinit function for renderer/editor
 ** TODO Egui for debugging?
 ** TODO curves svg etc
+Good reosurce:
+https://phoboslab.org/log/2012/09/ejecta-2
 ** TODO simd math data structures
 * TODO Brainstorm [0/14]
 ** TODO improve particles with glow

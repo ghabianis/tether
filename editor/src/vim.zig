@@ -9,6 +9,11 @@ const strutil = @import("./strutil.zig");
 const Key = @import("./event.zig").Key;
 
 const Self = @This();
+
+mode: Mode = .Normal,
+parsers: []CommandParser = &[_]CommandParser{},
+failed_parsers: BitSet = .{},
+
 pub const DEFAULT_PARSERS = [_]CommandParser{
     // move
     CommandParser.comptime_new(.Move, "<mv>", .{ .normal = true, .visual = true }),
@@ -48,10 +53,6 @@ pub const DEFAULT_PARSERS = [_]CommandParser{
     CommandParser.comptime_new(.PasteBefore, "<#> P", .{ .normal = true, .visual = true }),
 };
 
-mode: Mode = .Normal,
-
-parsers: []CommandParser = &[_]CommandParser{},
-failed_parsers: BitSet = .{},
 
 pub fn init(self: *Self, alloc: Allocator, parsers: []const CommandParser) !void {
     self.parsers = try std.heap.c_allocator.alloc(CommandParser, parsers.len);
@@ -150,7 +151,8 @@ pub const CmdTag = union(CmdKindEnum) {
     Paste,
     PasteBefore,
 
-    Custom: []const u8,
+    // Custom: []const u8,
+    Custom: u16,
 };
 
 pub const CmdKind = union(CmdKindEnum) {
@@ -271,14 +273,20 @@ pub const Find = packed struct {
     }
 };
 
-pub const CustomCmd = struct {};
+pub const CustomCmd = struct {
+    name: []const u8
+};
 
 pub const CommandParser = struct {
     const Self = @This();
 
-    inputs: []Input,
+    inputs: [*]CommandParser.Input,
     data: Metadata,
-    tag: CmdTag,
+    tag: CmdTag,   
+
+    comptime {
+        std.debug.assert(@sizeOf(CommandParser) == 16);
+    }
 
     const Metadata = packed struct {
         insert_mode: u1,
@@ -286,13 +294,20 @@ pub const CommandParser = struct {
         visual_mode: u1,
         _pad: u1 = 0,
         idx: u4 = 0,
+        len: u4 = 0,
 
         fn is_valid_mode(self: Metadata, mode: Mode) bool {
-            return (@as(u8, @bitCast(self)) & 0b00000111) & @as(u8, @bitCast(@intFromEnum(mode))) != 0;
+            return @as(u8, @truncate(@as(u12, @bitCast(self)) & 0b00000111)) & @as(u8, @bitCast(@intFromEnum(mode))) != 0;
         }
 
         pub fn from_valid_modes(modes: ValidMode) Metadata {
             var ret: Metadata = .{ .idx = 0, .insert_mode = if (modes.insert) 1 else 0, .normal_mode = if (modes.normal) 1 else 0, .visual_mode = if (modes.visual) 1 else 0 };
+            return ret;
+        }
+
+        pub fn with_len(self: Metadata, len: u4) Metadata {
+            var ret = self;
+            ret.len = len;
             return ret;
         }
     };
@@ -533,15 +548,15 @@ pub const CommandParser = struct {
 
     pub fn new(tag: CmdTag, inputs: []Input, metadata: Metadata) CommandParser {
         return .{
-            .inputs = inputs,
-            .data = metadata,
+            .inputs = inputs.ptr,
+            .data = metadata.with_len(@intCast(inputs.len)),
             .tag = tag,
         };
     }
 
     pub fn reset(self: *CommandParser) void {
         var i: usize = 0;
-        while (i < self.inputs.len) {
+        while (i < self.data.len) {
             var input = &self.inputs[i];
             input.reset();
             i += 1;
@@ -550,19 +565,14 @@ pub const CommandParser = struct {
     }
 
     pub fn copy(self: *const CommandParser, alloc: Allocator) !CommandParser {
+        var inputs = try alloc.alloc(Input, self.data.len);
         var cpy = CommandParser{
             .data = self.data,
             .tag = self.tag,
-            .inputs = try alloc.alloc(Input, self.inputs.len),
+            .inputs = inputs.ptr,
         };
 
-        var i: usize = 0;
-        while (i < self.inputs.len) {
-            // var input = &self.inputs[i];
-            // cpy.inputs[i] = input.copy();
-            cpy.inputs[i] = self.inputs[i];
-            i += 1;
-        }
+        @memcpy(cpy.inputs[0..cpy.data.len], self.inputs[0..self.data.len]);
 
         return cpy;
     }
@@ -576,7 +586,7 @@ pub const CommandParser = struct {
 
     pub fn parse(self: *CommandParser, mode: Mode, key: Key) ParseResult {
         if (!self.data.is_valid_mode(mode)) return .Fail;
-        if (self.data.idx >= self.inputs.len) return .Fail;
+        if (self.data.idx >= self.data.len) return .Fail;
 
         var parser = &self.inputs[self.data.idx];
         const res = parser.parse(key);
@@ -584,7 +594,7 @@ pub const CommandParser = struct {
         switch (res) {
             .Accept => {
                 self.data.idx += 1;
-                if (self.data.idx >= self.inputs.len) return .Accept;
+                if (self.data.idx >= self.data.len) return .Accept;
                 return .Continue;
             },
             .Skip, .TryTransition => {
@@ -754,8 +764,8 @@ pub const CommandParser = struct {
                 return .{ .repeat = amount, .kind = .PasteBefore };
             },
 
-            .Custom => |name| {
-                _ = name;
+            .Custom => |idx| {
+                _ = idx;
                 unreachable;
             },
         }

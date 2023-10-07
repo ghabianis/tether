@@ -928,6 +928,7 @@ const Renderer = struct {
                 break :dt 0.0;
             }
         };
+
         self.fullthrottle.compute_shake(dt, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
         
         var pool = objc.AutoreleasePool.init();
