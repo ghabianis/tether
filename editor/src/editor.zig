@@ -1,5 +1,6 @@
 /// SOME IMPORTANT INVARIANTS:
 /// - `text_dirty` must be set to true anytime it is modified
+/// - `cursor_dirty` must be set to true anytime the cursor is modified
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -23,11 +24,13 @@ const ts = @import("./treesitter.zig");
 const Self = @This();
 
 rope: Rope = Rope{},
-// TODO: also store the node of the current line
+// TODO: also store the node of the current line?
 cursor: TextPos = .{ .line = 0, .col = 0 },
-draw_text: bool = false,
-/// Any time the text is modified, this is set to true.
+/// Any time the text is modified, this is set to true. When true, it tells the
+/// renderer to rebuild the text geometry and recalculate highlights.
 text_dirty: bool = true,
+/// Any time the the cursor is moved, this is set to true. When true, it tells the renderer to rebuild the text geometry.
+cursor_dirty: bool = false,
 vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
@@ -368,7 +371,7 @@ fn visual_move(self: *Self, mv: Vim.Move) void {
         self.selection = .{ .start = next_abs, .end = sel.end };
     }
 
-    self.draw_text = true;
+    self.cursor_dirty = true;
 }
 
 pub fn switch_mode(self: *Self, mode: Vim.Mode) void {
@@ -414,7 +417,7 @@ fn paste(self: *Self, before: bool) !void {
         insert_pos.col = @min(self.rope.len, insert_pos.col + 1);
     }
     self.cursor = try self.rope.insert_text(insert_pos, str);
-    self.draw_text = true;
+    self.text_dirty = true;
 }
 
 pub fn insert_char(self: *Self, c: u8) !void {
@@ -437,7 +440,7 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
         const char_buf_slice = indent_level.fill_str(char_buf[0..]);
         var ins_cursor = try self.rope.insert_text(cursor, chars);
         _ = try self.rope.insert_text(ins_cursor, char_buf_slice);
-        self.draw_text = true;
+        self.text_dirty = true;
         return;
     }
 
@@ -456,7 +459,7 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
             try self.rope.replace_line(node, indent_buf);
             self.cursor.col = @as(u32, @intCast(node.data.items.len));
             self.cursor = try self.rope.insert_text(self.cursor, chars);
-            self.draw_text = true;
+            self.text_dirty = true;
             return;
         }
     }
@@ -488,7 +491,7 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
                 try self.insert_at(self.cursor, "\n", true, indent_level);
                 self.cursor = cached;
             }
-            self.draw_text = true;
+            self.text_dirty = true;
             return;
         }
 
@@ -496,7 +499,7 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
 
         const result = try self.rope.insert_text(.{ .line = self.cursor.line, .col = 0 }, char_buf_slice);
         self.cursor.col += result.col;
-        self.draw_text = true;
+        self.text_dirty = true;
         return;
     }
 
@@ -514,7 +517,7 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
     // _ = edit;
 
     self.cursor = new_cursor;
-    self.draw_text = true;
+    self.text_dirty = true;
 }
 
 fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
@@ -714,7 +717,6 @@ pub fn backspace(self: *Self) !void {
     // Sanity check in dev mode
     std.debug.assert(new_len == old_len -| 1);
 
-    self.draw_text = true;
     self.text_dirty = true;
 }
 
@@ -777,13 +779,13 @@ fn cursor_eol_for_mode(self: *Self, line_node: *const Rope.Node) u32 {
 
 pub fn start_of_line(self: *Self) void {
     self.cursor.col = 0;
-    self.draw_text = true;
+    self.cursor_dirty = true;
 }
 
 pub fn end_of_line(self: *Self) void {
     var cur_node = self.rope.node_at_line(self.cursor.line) orelse @panic("No node");
     self.cursor.col = self.cursor_eol_for_mode(cur_node) -| 1;
-    self.draw_text = true;
+    self.cursor_dirty = true;
 }
 
 pub fn start_of_selection(self: *Self) void {
@@ -974,7 +976,7 @@ pub fn move_line(self: *Self, delta: i64) void {
     const col = @min(self.cursor_eol_for_mode(self.rope.node_at_line(line).?) -| 1, target_col);
     self.cursor.line = line;
     self.cursor.col = col;
-    self.draw_text = true;
+    self.cursor_dirty = true;
 }
 
 pub fn move_char(self: *Self, delta_: i64, limited_to_line: bool) void {
@@ -1022,7 +1024,7 @@ pub fn move_char(self: *Self, delta_: i64, limited_to_line: bool) void {
     self.cursor.line = line;
     self.cursor.col = @as(u32, @intCast(col));
     // TODO: Probably very bad to redraw entire text after just moving cursor
-    self.draw_text = true;
+    self.cursor_dirty = true;
 }
 
 pub fn text(self: *Self, alloc: Allocator) ![]const u8 {

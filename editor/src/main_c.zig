@@ -79,7 +79,7 @@ const Renderer = struct {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
-        const highlight = Highlight.init(alloc, &ts.C, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
+        const highlight = Highlight.init(alloc, &ts.ZIG, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
 
         var renderer: Renderer = .{
             .view = view,
@@ -132,7 +132,7 @@ const Renderer = struct {
     }
 
     fn update_if_needed(self: *Self, alloc: Allocator) !void {
-        if (self.editor.draw_text or self.editor.text_dirty) {
+        if (self.editor.cursor_dirty or self.editor.text_dirty) {
             self.adjust_scroll_to_cursor(@floatCast(self.screen_size.height));
             try self.update(alloc);
         }
@@ -190,7 +190,7 @@ const Renderer = struct {
         try self.build_line_numbers_geometry(alloc, &Arena, screenx, screeny, text_start_x, window_range);
 
         if (self.vertices.items.len == 0) {
-            self.editor.draw_text = false;
+            self.editor.cursor_dirty = false;
             return;
         }
 
@@ -1018,7 +1018,7 @@ const Renderer = struct {
         _ = dx;
         self.scroll_phase = phase;
         self.ty = self.ty + @as(f32, @floatCast(dy));
-        self.editor.draw_text = true;
+        self.editor.cursor_dirty = true;
         self.update_if_needed(std.heap.c_allocator) catch @panic("test");
         // const vertical = std.math.fabs(dy) > std.math.fabs(dx);
         // if (vertical) {

@@ -1,6 +1,6 @@
 #+title: Todo
 
-* TODO Now [1/7]
+* TODO Now [1/9]
 ** TODO Combos [0/4]
 *** TODO Figure out what constitutes as score and how it increases
 *** TODO Cursor flame increases as score does
@@ -11,7 +11,60 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
 
 ***** TODO Each number/glyph shakes as score increases
 ***** TODO Flashes in and out of red/white
-** TODO Command palette
+** TODO Tree-sitter optimizations
+*** TODO Run query cursor only on range of edited text
+*** TODO Incremental parsing
+** TODO Command palette [/]
+*** TODO Minibuffer [/]
+Command palette appears in a minibuffer, heavily inspired by Doom Emacs.
+
+For now, just one single minibuffer.
+
+**** Minibuffer details
+
+The minibuffer contains:
+1. A text input
+2. List of results
+
+The first consideration is how the input should behave. Ideally, this text input should enable Vim keybindings. That then brings to rise the question of how we make that happen.
+
+Currently, all Vim keybindings / text editing operations are inside the =Editor= struct/module. However, it is designed specifically for a regular buffer of text.
+
+Some text editing operations simply don't map onto this minibuffer text input.
+
+For example, the `enter` key submits the input. There is only a single-line allowed.
+
+One question is whether or not we actually want this behaviour. Would it be nice to allow multi-line input? The view of the input starts as single line, and as the user adds newlines, it grows?
+
+There are a lot of questions that arise here. Note that the input is greatly simplified if we choose not to allow Vim keybindings.
+
+The main problem of allowing Vim keybindings is that it requires slight alterations to how the Vim commands are handled.
+
+Doom Emacs solves this by disallowing Vim in minibuffer inputs, same as VSCode.
+
+In zsh with Vi editing they take an interesting approach. Typically in terminal emulators, the =\= key is required to allow multiline input.
+
+With zsh + Vi, you can press =o= to create a new line, and each line will be interpreted as a separate command. On the UI, terminal emulators have their input at the bottom, so the text input grows upwards as newlines are added
+
+
+***** Current vim functionality
+- Move ::
+  Left, right, down, up, line start/end, wW/bB/eE, find, matching pair. All of these can stay the same.
+
+  When moving up and down, if going past text range, will go to option instead.
+
+- delete/change/yank ::
+  all of these can stay the same
+- insert ::
+  has to look for newline and avoid it
+
+  actually no, in emacs you can copy/paste and it adds newlines
+- insert newline ::
+  no op on minibuffer input mode
+- pressing enter ::
+  if the minibuffer selection allows for any arbitrary input, submits
+  otherwise enter does nothing until the user selects an option
+**** TODO
 
 ** TODO Status line
 *** BRAINSTORM

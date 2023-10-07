@@ -242,11 +242,12 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
 
         var the_len: u32 = 0;
         const str_ptr = c.ts_query_capture_name_for_id(self.query, capture.index, &the_len);
-        if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
-            print("In comment: @{s}\n", .{str_ptr[0..the_len]});
-        }
+        _ = str_ptr;
+        // if (std.mem.eql(u8, "comment", str_ptr[0..the_len])) {
+        //     print("In comment: @{s}\n", .{str_ptr[0..the_len]});
+        // }
 
-        print("MATCHING THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
+        // print("MATCHING THE NODE: {s} => {s}\n", .{str_ptr[0..the_len], str[start..end]});
 
         // Grab the color that is associated with this capture kind based on the theme
         const color = self.theme[capture.index] orelse continue;
