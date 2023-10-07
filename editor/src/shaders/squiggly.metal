@@ -90,7 +90,8 @@ fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]], constant Unifor
     uv.y = 1.0 - uv.y;
 
     float freq = 100.0 * fragmentIn.size.x;
-    float curve = sin(uniforms.time * 5.0) * 0.1 * sin((freq * uv.x));
+    float squigglySpeed = 5.0;
+    float curve = sin(uniforms.time * squigglySpeed) * 0.1 * sin((freq * uv.x));
     
     float distance = abs((curve + uv.y) - 0.5);
     float lineAShape = smoothstep(1.0 - clamp(distance * 1.0, 0.0, 1.0), 1.0, 0.98);
