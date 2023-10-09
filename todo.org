@@ -15,6 +15,24 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
 *** DONE Run query cursor only on range of edited text
 *** TODO Incremental parsing [0/2]
 **** TODO Edits to text return an =Edit= struct
+***** TODO How do we actually propagate this information
+
+I see two places where we can give this responsibility:
+1. Rope
+2. Editor
+
+The rope usually keeps track of the TextPos and byte pos of text modifications.
+
+At the same time, sometimes we make modifications that are composed of calling multiple rope modification functions. Ideally, we'd like to merge these into a single edit.
+
+For example, inserting a newline in between opening + closing delimiters causes the text to be placed at increased indentation, and the closing delimiter to be put on a new, dedented line.
+
+Internally, we do this by inserting the text on increased indentation line, and then inserting closing delimiter on decreased indentation line. Two edits.
+
+It makes more sense to combine them. If we implement undo, we don't want the user to undo the closing delimiter insert, and then the text insert.
+
+On the other hand, there are definitely situations where an edit is simply composed of multiple, non-overlapping edits. For example, search and replace all matches in a file.
+
 ***** TODO Insertions
 TSEdit properties:
 - start   => the point where the text was added

@@ -102,21 +102,7 @@ pub fn handle_cmd_normal(self: *Self, cmd: Vim.Cmd) !void {
         },
         .SwitchMode => |m| self.switch_mode(m),
         .NewLine => |nwl| {
-            if (nwl.switch_mode) self.switch_mode(.Insert);
-            if (!nwl.up) {
-                self.end_of_line();
-                try self.insert_char('\n');
-            } else {
-                if (self.cursor.line == 0) {
-                    const pos = .{ .line = 0, .col = 0 };
-                    try self.insert_char_at(pos, '\n');
-                    self.cursor = pos;
-                } else {
-                    self.up();
-                    self.end_of_line();
-                    try self.insert_char('\n');
-                }
-            }
+            try self.add_newline(nwl);
         },
         .Undo => {},
         .Redo => {},
@@ -385,6 +371,25 @@ pub fn switch_mode(self: *Self, mode: Vim.Mode) void {
         self.left();
     }
     self.vim.mode = mode;
+}
+
+pub fn add_newline(self: *Self, nwl: Vim.NewLine) !void {
+    if (nwl.switch_mode) self.switch_mode(.Insert);
+    if (!nwl.up) {
+        self.end_of_line();
+        try self.insert_char('\n');
+    } else {
+        if (self.cursor.line == 0) {
+            const pos = .{ .line = 0, .col = 0 };
+            try self.insert_char_at(pos, '\n');
+            self.cursor = pos;
+        } else {
+            self.up();
+            self.end_of_line();
+            try self.insert_char('\n');
+        }
+    }
+    self.text_dirty = true;
 }
 
 pub fn yank(self: *Self, range: Selection) !void {
