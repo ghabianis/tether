@@ -12,7 +12,7 @@ pub const TextPos = union(enum) {
 
 /// Represents a position in text by line and col.
 /// This struct is `packed` so it is interoperable with tree-sitter's TSPoint.
-pub const TextPoint = packed struct {
+pub const TextPoint = extern struct {
     line: u32,
     /// An important thing to note is that in VISUAL and INSERT mode,
     /// the cursor is allowed to go past the end of the line. See `Editor.cursor_eol_for_mode()`
@@ -168,22 +168,31 @@ pub const Rope = struct {
         return null;
     }
 
-    pub fn node_at_line(self: *Self, line: u32) ?*Node {
+    pub fn node_at_line(self: *const Self, line: u32) ?*Node {
         if (self.node_at_line_impl(line)) |nl| {
             return nl.node;
         }
         return null;
     }
 
-    fn node_at_line_impl(self: *Self, line: u32) ?struct { node: *Node, i: usize } {
+    pub const NodeWithBytepos = struct { node: *Node, bytepos: usize };
+
+    /// Return the node at the given line and the byte position of its first char
+    pub fn node_and_idx_at_line(self: *const Self, line: u32) ?NodeWithBytepos {
+        return self.node_at_line_impl(line);
+    }
+
+    fn node_at_line_impl(self: *const Self, line: u32) ?NodeWithBytepos {
+        var bytepos: usize = 0;
         var i: usize = 0;
         var iter: ?*Node = self.nodes.first;
         while (iter != null and i < line) {
             iter = iter.?.next;
+            bytepos += iter.?.data.items.len;
             i += 1;
         }
         const node = iter orelse return null;
-        return .{ .node = node, .i = i };
+        return .{ .node = node, .bytepos = bytepos };
     }
 
     pub fn pos_to_idx(self: *const Self, pos: TextPoint) ?usize {
@@ -201,7 +210,22 @@ pub const Rope = struct {
         return i + @as(usize, @intCast(pos.col));
     }
 
-    pub fn idx_to_pos(self: *Self, idx: usize) ?TextPoint {
+    // fn pos_to_idx_impl(self: *const Self, pos: TextPoint, comptime allow_past_bounds: bool) ?usize {
+    //     var line: usize = pos.line;
+    //     var iter_node: ?*Node = self.nodes.first;
+    //     var i: usize = 0;
+    //     while (iter_node != null and line > 0) {
+    //         line -= 1;
+    //         i += iter_node.?.data.items.len;
+    //         iter_node = iter_node.?.next;
+    //     }
+
+    //     const node = iter_node orelse return null;
+    //     _ = node;
+    //     return i + @as(usize, @intCast(pos.col));
+    // }
+
+    pub fn idx_to_pos(self: *const Self, idx: usize) ?TextPoint {
         var line: u32 = 0;
         var col: u32 = 0;
 

@@ -1,17 +1,19 @@
 /// SOME IMPORTANT INVARIANTS:
-/// - `text_dirty` must be set to true anytime it is modified
-/// - `cursor_dirty` must be set to true anytime the cursor is modified
+/// A. `cursor_dirty` must be set to true anytime the cursor is modified.
+/// B. ALL modifications to text must create and append an Edit to `self.edits`:
+///    In practice, most of the functions that modify text (`self.delete_range()`, `self.insert()`, etc.) will do this for you.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
+const dbgassert = std.debug.assert;
+
 
 const objc = @import("zig-objc");
 const strutil = @import("./strutil.zig");
 
-const rope = @import("./rope.zig");
-const TextPoint = rope.TextPoint;
-const Rope = rope.Rope;
+const TextPoint = @import("./rope.zig").TextPoint;
+const Rope = @import("./rope.zig").Rope;
 
 const Vim = @import("./vim.zig");
 const Clipboard = @import("./clipboard.zig");
@@ -22,14 +24,15 @@ const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
 
+const cast = @import("./cast.zig");
+
+const ArrayList = std.ArrayList;
+
 const Self = @This();
 
 rope: Rope = Rope{},
 // TODO: also store the node of the current line?
 cursor: TextPoint = .{ .line = 0, .col = 0 },
-/// Any time the text is modified, this is set to true. When true, it tells the
-/// renderer to rebuild the text geometry and recalculate highlights.
-text_dirty: bool = true,
 /// Any time the the cursor is moved, this is set to true. When true, it tells the renderer to rebuild the text geometry.
 cursor_dirty: bool = false,
 vim: Vim = Vim{},
@@ -37,6 +40,7 @@ selection: ?Selection = null,
 clipboard: Clipboard = undefined,
 desired_col: ?u32 = null,
 highlight: ?Highlight = null,
+edits: ArrayList(Edit) = ArrayList(Edit).init(std.heap.c_allocator),
 
 pub fn init(self: *Self) !void {
     try self.rope.init();
@@ -54,7 +58,11 @@ pub fn init_with_highlighter(self: *Self, highlight: Highlight) !void {
     self.highlight = highlight;
 }
 
-pub fn keydown(self: *Self, key: Key) !?Edit {
+pub inline fn text_dirty(self: *const Self) bool {
+    return self.edits.items.len > 0;
+}
+
+pub fn keydown(self: *Self, key: Key) !?([]const Edit) {
     if (self.vim.parse(key)) |cmd| {
         switch (self.vim.mode) {
             .Insert => try self.handle_cmd_insert(cmd),
@@ -62,19 +70,12 @@ pub fn keydown(self: *Self, key: Key) !?Edit {
             .Visual => try self.handle_cmd_visual(cmd),
         }
         // TODO: Return the edit
-        return null;
+        return self.edits.items[0..self.edits.items.len];
     }
 
     if (self.vim.mode == .Insert) {
-        const prev_cursor = self.cursor;
-        const old_end_byte = self.rope.pos_to_idx(prev_cursor) orelse @panic("OHNO!");
         try self.handle_key_insert(key);
-        return .{
-            .start = prev_cursor,
-            .new_end = self.cursor,
-            .old_end = prev_cursor,
-            .old_end_byte = @intCast(old_end_byte),
-        };
+        return self.edits.items[0..self.edits.items.len];
     }
 
     return null;
@@ -389,7 +390,7 @@ pub fn add_newline(self: *Self, nwl: Vim.NewLine) !void {
             try self.insert_char('\n');
         }
     }
-    self.text_dirty = true;
+    dbgassert(self.text_dirty());
 }
 
 pub fn yank(self: *Self, range: Selection) !void {
@@ -421,20 +422,33 @@ fn paste(self: *Self, before: bool) !void {
     } else {
         insert_pos.col = @min(self.rope.len, insert_pos.col + 1);
     }
-    self.cursor = try self.rope.insert_text(insert_pos, str);
-    self.text_dirty = true;
+    try self.insert_at(insert_pos, str);
+    // self.cursor = try self.rope.
+    // self.cursor = try self.rope.insert_text(insert_pos, str);
+
+    dbgassert(self.text_dirty());
 }
 
-pub fn insert_char(self: *Self, c: u8) !void {
-    try self.insert_at(self.cursor, &[_]u8{c});
+
+pub fn insert(self: *Self, chars: []const u8) !void {
+    try self.insert_at(self.cursor, chars);
+}
+
+pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
+    const prev_cursor = self.cursor;
+    try self.insert_at_impl(cursor, chars);
+    const next_cursor = self.cursor;
+    const edit = Edit.insertion_from_cursors(prev_cursor, next_cursor, &self.rope);
+    try self.edits.append(edit);
 }
 
 pub fn insert_char_at(self: *Self, cursor: TextPoint, c: u8) !void {
     try self.insert_at(cursor, &[_]u8{c});
 }
 
-pub fn insert(self: *Self, chars: []const u8) !void {
-    try self.insert_at(self.cursor, chars);
+pub fn insert_char(self: *Self, c: u8) !void {
+    try self.insert(&[_]u8{c});
+    dbgassert(self.text_dirty());
 }
 
 /// Inserts text at the given cursor position.
@@ -447,8 +461,7 @@ pub fn insert(self: *Self, chars: []const u8) !void {
 ///     
 /// }
 /// ```
-pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
-    self.text_dirty = true;
+fn insert_at_impl(self: *Self, cursor: TextPoint, chars: []const u8) !void {
     // If the char closes a prevoius delimiter, then dedent.
     if (chars.len == 1) b: {
         // Check if its a closing delimiter first
@@ -474,7 +487,6 @@ pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
             try self.rope.replace_line(node, indent_buf);
             self.cursor.col = @as(u32, @intCast(node.data.items.len));
             self.cursor = try self.rope.insert_text(self.cursor, chars);
-            self.text_dirty = true;
             return;
         }
     }
@@ -515,11 +527,9 @@ pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
                 const dedent_char_slice = indent_level.fill_str(dedent_char_buf[0..]);
                 var ins_cursor = try self.rope.insert_text(self.cursor, chars);
                 _ = try self.rope.insert_text(ins_cursor, dedent_char_slice);
-                self.text_dirty = true;
                 self.cursor = cached;
             }
 
-            self.text_dirty = true;
             return;
         }
 
@@ -527,7 +537,6 @@ pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
 
         const result = try self.rope.insert_text(.{ .line = self.cursor.line, .col = 0 }, char_buf_slice);
         self.cursor.col += result.col;
-        self.text_dirty = true;
         return;
     }
 
@@ -535,7 +544,6 @@ pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
     const new_cursor = try self.rope.insert_text(cursor, chars);
 
     self.cursor = new_cursor;
-    self.text_dirty = true;
 }
 
 fn get_indent_level(self: *Self, line_node: *const Rope.Node) IndentLevel {
@@ -732,34 +740,36 @@ pub fn backspace(self: *Self) !void {
         }
     };
 
-    try self.rope.remove_text(idx_pos - 1, idx_pos);
+    try self.delete_range(.{ .start = cast.num(u32, idx_pos) -| 1, .end = cast.num(u32, idx_pos)});
     const new_len = self.rope.len;
 
     // Sanity check in dev mode
     std.debug.assert(new_len == old_len -| 1);
-
-    self.text_dirty = true;
 }
 
 fn delete_range(self: *Self, range: Selection) !void {
+    const edit = Edit.deletion_from_range(range, &self.rope);
     try self.rope.remove_text(range.start, range.end);
-    self.text_dirty = true;
+    try self.edits.append(edit);
 }
 
 pub fn delete_line(self: *Self) !void {
+    const edit = Edit.delete_line(self.cursor.line, &self.rope);
     try self.rope.remove_line(self.cursor.line);
     if (self.cursor.line >= self.rope.nodes.len) {
         self.cursor.line = self.cursor.line -| 1;
     }
-
+    try self.edits.append(edit);
     self.cursor.col = if (self.rope.nodes.last) |last| @min(self.cursor_eol_for_mode(last) -| 1, self.cursor.col) else 0;
-    self.text_dirty = true;
 }
 
 pub fn change_line(self: *Self) !void {
     const node = self.rope.node_at_line(self.cursor.line) orelse return;
     // Nothing to do
     if (node.data.items.len == 0) return;
+
+    const last_char_is_newline = strutil.is_newline(node.data.items[node.data.items.len - 1]);
+    const edit = Edit.change_line(self.cursor.line, last_char_is_newline, &self.rope);
 
     if (strutil.is_newline(node.data.items[node.data.items.len - 1])) {
         const last = node.data.items[node.data.items.len - 1];
@@ -770,8 +780,9 @@ pub fn change_line(self: *Self) !void {
         node.data.items.len = 0;
     }
 
+    try self.edits.append(edit);
+
     self.cursor.col = 0;
-    self.text_dirty = true;
 }
 
 /// Normal mode        -> cursor can only be on the last char
@@ -1068,6 +1079,131 @@ pub fn filter_chars(in: []const u8, out: []u8) []u8 {
     return out[0..len];
 }
 
+/// Represents an edit to text, this mimics the TSEdit struct of tree-sitter
+/// 
+/// Insertions:
+/// - start   => the point where the text was added
+/// - old_end => same as start
+/// - new_end => length of insertion
+/// 
+/// Deletions:
+/// - start   => the start of the range of text to be deleted
+/// - old_end => the end of the range of text to be deleted
+/// - new_end => 0
+/// 
+/// Replacements:
+/// - start   => the start of the range of text to be deleted
+/// - old_end => the end of the range of text to be deleted
+/// - new_end => the new end
+pub const Edit = extern struct {
+    start_byte: u32,
+    old_end_byte: u32,
+    new_end_byte: u32,
+    start: TextPoint,
+    new_end: TextPoint,
+    old_end: TextPoint,
+
+    comptime {
+        dbgassert(@sizeOf(Edit) == @sizeOf(ts.Edit));
+        dbgassert(@alignOf(Edit) == @alignOf(ts.Edit));
+    }
+
+    pub fn insertion_from_cursors(start_: TextPoint, end_: TextPoint, rope: *const Rope) Edit {
+        var start: TextPoint = start_;
+        var end: TextPoint = end_;
+        if (TextPoint.cmp(start, end) == .Greater) {
+            start = end_;
+            end = start_;
+        }
+        const start_byte: u32 = @intCast(rope.pos_to_idx(start) orelse @panic("OOPS!"));
+        const new_end_byte: u32 = @intCast(rope.pos_to_idx(end) orelse @panic("OOPS!"));
+
+        return .{
+            .start = start,
+            .start_byte = start_byte,
+            .new_end = end,
+            .new_end_byte = new_end_byte,
+            .old_end = start,
+            .old_end_byte = start_byte,
+        };
+    }
+
+    /// Construct an Edit from a line deletion.
+    /// INVARIANT: This must be called BEFORE the actual edit to the rope
+    pub fn delete_line(line: u32, rope: *const Rope) Edit {
+        const node_and_idx = rope.node_and_idx_at_line(line) orelse @panic("Line not found");
+        const start: TextPoint = .{
+            .line = line,
+            .col = 0,
+        };
+        const start_byte: u32 = @intCast(node_and_idx.bytepos);
+        const old_end: TextPoint = .{
+            .line = line,
+            .col = start_byte + cast.num(u32, node_and_idx.node.data.items.len),
+        };
+        return .{
+            .start = start,
+            .start_byte = start_byte,
+            .new_end = start,
+            .new_end_byte = @intCast(node_and_idx.bytepos),
+            .old_end = old_end,
+            .old_end_byte = start_byte + cast.num(u32, node_and_idx.node.data.items.len),
+        };
+    }
+
+    /// Construct an Edit from a line change.
+    /// INVARIANT: This must be called BEFORE the actual edit to the rope
+    pub fn change_line(line: u32, last_char_is_newline: bool, rope: *const Rope) Edit {
+        const node_and_idx = rope.node_and_idx_at_line(line) orelse @panic("Line not found");
+        const start: TextPoint = .{
+            .line = line,
+            .col = 0,
+        };
+        const start_byte: u32 = @intCast(node_and_idx.bytepos);
+        const old_end: TextPoint = .{
+            .line = line,
+            .col = start_byte + cast.num(u32, node_and_idx.node.data.items.len),
+        };
+        const new_end: TextPoint = if (last_char_is_newline) .{
+            .line = line,
+            .col = start.col + 1
+        } else .{
+            .line = line,
+            .col = start.col
+        };
+        const new_end_byte = if (last_char_is_newline) start_byte + 1 else start_byte;
+        return .{
+            .start = start,
+            .start_byte = start_byte,
+            .new_end = new_end,
+            .new_end_byte = new_end_byte,
+            .old_end = old_end,
+            .old_end_byte = start_byte + cast.num(u32, node_and_idx.node.data.items.len),
+        };
+    }
+
+    pub fn deletion_from_range(range: Selection, rope: *const Rope) Edit {
+        const start_byte = range.start;
+        const old_end_byte = range.end;
+        const start = rope.idx_to_pos(start_byte) orelse @panic("Unreachable");
+        // const old_end = rope.idx_to_pos(old_end_byte) orelse @panic("Unreachable");
+        var old_end = rope.idx_to_pos(old_end_byte -| 1) orelse @panic("Unreachable");
+        old_end.col += 1;
+        return .{
+            .start_byte = start_byte,
+            .old_end_byte = old_end_byte,
+            .new_end_byte = start_byte,
+            .start = start,
+            .new_end = start,
+            .old_end = old_end,
+        };
+    }
+
+    pub fn to_treesitter(self: Edit) ts.Edit {
+        return @bitCast(self);
+    }
+};
+
 pub const Selection = struct {
     start: u32,
     end: u32,
@@ -1105,28 +1241,6 @@ const IndentLevel = struct {
         if (len > 128) @panic("Indentation too big!");
         @memset(char_buf_slice, ' ');
         return buf[0..len];
-    }
-};
-
-/// Represents an edit to text
-pub const Edit = struct {
-    start: TextPoint,
-    new_end: TextPoint,
-    old_end: TextPoint,
-    old_end_byte: u32,
-
-    pub fn to_treesitter(self: Edit, rope_: *const Rope) ts.Edit {
-        const start_byte = rope_.pos_to_idx(self.start) orelse @panic("Oh no!");
-        const new_end_byte = rope_.pos_to_idx(self.new_end) orelse @panic("Oh no!");
-
-        return .{
-            .start_byte = @intCast(start_byte), 
-            .old_end_byte = self.old_end_byte,
-            .new_end_byte = @intCast(new_end_byte),
-            .start_point = @bitCast(self.start),
-            .old_end_point = @bitCast(self.old_end),
-            .new_end_point = @bitCast(self.new_end),
-        };
     }
 };
 

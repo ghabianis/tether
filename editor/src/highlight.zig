@@ -189,13 +189,15 @@ fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []con
     return theme;
 }
 
-pub fn update_tree(self: *Highlight, str: []const u8, edit: ?ts.Edit) void {
+pub fn update_tree(self: *Highlight, str: []const u8, edits: ?[]const ts.Edit) void {
     // If `self.tree` exists, either apply the edit to it, or delete it so we
     // can reparse the source from scratch.
     const old_tree = old_tree: {
         if (self.tree) |tstree| {
-            if (edit) |e| {
-                c.ts_tree_edit(tstree, &e);
+            if (edits) |e| {
+                for (e) |*edit| {
+                    c.ts_tree_edit(tstree, edit);
+                }
                 break :old_tree tstree;
             }
             c.ts_tree_delete(tstree);

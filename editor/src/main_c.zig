@@ -13,6 +13,7 @@ const Event = @import("./event.zig");
 const strutil = @import("./strutil.zig");
 const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
+const Highlight = @import("./highlight.zig");
 const earcut = @import("earcut");
 const fullthrottle = @import("./full_throttle.zig");
 const Diagnostics = @import("./diagnostics.zig");
@@ -102,7 +103,8 @@ const Renderer = struct {
 
             .last_clock = null,
         };
-        renderer.editor.init() catch @panic("oops");
+        const highlight = Highlight.init(alloc, &ts.C, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
+        renderer.editor.init_with_highlighter(highlight) catch @panic("oops");
 
         renderer.vertex_buffer = device.new_buffer_with_length(32, metal.MTLResourceOptions.storage_mode_managed) orelse @panic("Failed to make buffer");
 
@@ -127,15 +129,15 @@ const Renderer = struct {
         try self.update(alloc, null);
     }
 
-    fn update_if_needed(self: *Self, alloc: Allocator, edit: ?Editor.Edit) !void {
-        if (self.editor.cursor_dirty or self.editor.text_dirty) {
+    fn update_if_needed(self: *Self, alloc: Allocator, edits: ?[]const Editor.Edit) !void {
+        if (self.editor.cursor_dirty or self.editor.text_dirty()) {
             self.adjust_scroll_to_cursor(@floatCast(self.screen_size.height));
-            try self.update(alloc, edit);
+            try self.update(alloc, edits);
         }
     }
 
-    fn update(self: *Self, alloc: Allocator, edit: ?Editor.Edit) !void {
-        try self.update_text(alloc, edit);
+    fn update(self: *Self, alloc: Allocator, edits: ?[]const Editor.Edit) !void {
+        try self.update_text(alloc, edits);
     }
 
     fn digits(val: usize) u32 {
@@ -161,18 +163,17 @@ const Renderer = struct {
         return @as(f32, @floatCast(width));
     }
 
-    fn update_text(self: *Self, alloc: Allocator, edit: ?Editor.Edit) !void {
+    fn update_text(self: *Self, alloc: Allocator, edit: ?[]const Editor.Edit) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
         defer {
             if (str.len > 0) {
                 std.heap.c_allocator.free(str);
             }
-            self.editor.text_dirty = false;
         }
 
-        if (self.editor.text_dirty) {
+        if (self.editor.text_dirty()) {
             if (self.editor.highlight) |*h| {
-                const ts_edit = if (edit) |e| e.to_treesitter(&self.editor.rope) else null;
+                const ts_edit: ?[]const ts.Edit = if (edit) |e| @ptrCast(e) else null;
                 h.update_tree(str, ts_edit);
             }
         }
@@ -632,8 +633,8 @@ const Renderer = struct {
         self.text_height = @fabs(starting_y);
 
         if (self.editor.highlight) |*highlight| {
-            try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty);
-            try highlight.find_errors(str, self.editor.text_dirty, start_byte, end_byte);
+            try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty());
+            try highlight.find_errors(str, self.editor.text_dirty(), start_byte, end_byte);
             try self.diagnostic_renderer.update(
                 frame_arena,
                 &self.editor.rope,
@@ -646,7 +647,7 @@ const Renderer = struct {
                 @floatCast(self.screen_size.height)), 
                 self.font.ascent, 
                 self.font.descent, 
-                self.editor.text_dirty
+                self.editor.text_dirty()
             );
         }
 
@@ -991,11 +992,14 @@ const Renderer = struct {
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
         const key = Event.Key.from_nsevent(event) orelse return;
-        const maybe_edit = try self.editor.keydown(key);
+        const maybe_edits = try self.editor.keydown(key);
+        defer {
+            self.editor.edits.clearRetainingCapacity();
+        }
 
-        try self.update_if_needed(alloc, maybe_edit);
+        try self.update_if_needed(alloc, maybe_edits);
 
-        if (maybe_edit != null) {
+        if (maybe_edits != null) {
             // cursor vertices are first 6 vertices of text
             const tl: Vertex = self.vertices.items.ptr[0];
             const br: Vertex = self.vertices.items.ptr[4];
