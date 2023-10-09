@@ -126,17 +126,17 @@ const Renderer = struct {
 
     fn resize(self: *Self, alloc: Allocator, new_size: metal.CGSize) !void {
         self.screen_size = new_size;
-        try self.update(alloc, null);
+        try self.update(alloc, &[_]Editor.Edit{});
     }
 
-    fn update_if_needed(self: *Self, alloc: Allocator, edits: ?[]const Editor.Edit) !void {
+    fn update_if_needed(self: *Self, alloc: Allocator, edits: []const Editor.Edit) !void {
         if (self.editor.cursor_dirty or self.editor.text_dirty()) {
             self.adjust_scroll_to_cursor(@floatCast(self.screen_size.height));
             try self.update(alloc, edits);
         }
     }
 
-    fn update(self: *Self, alloc: Allocator, edits: ?[]const Editor.Edit) !void {
+    fn update(self: *Self, alloc: Allocator, edits: []const Editor.Edit) !void {
         try self.update_text(alloc, edits);
     }
 
@@ -163,7 +163,7 @@ const Renderer = struct {
         return @as(f32, @floatCast(width));
     }
 
-    fn update_text(self: *Self, alloc: Allocator, edit: ?[]const Editor.Edit) !void {
+    fn update_text(self: *Self, alloc: Allocator, edits: []const Editor.Edit) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
         defer {
             if (str.len > 0) {
@@ -173,7 +173,7 @@ const Renderer = struct {
 
         if (self.editor.text_dirty()) {
             if (self.editor.highlight) |*h| {
-                const ts_edit: ?[]const ts.Edit = if (edit) |e| @ptrCast(e) else null;
+                const ts_edit: ?[]const ts.Edit = if (edits.len > 0) @ptrCast(edits) else null;
                 h.update_tree(str, ts_edit);
             }
         }
@@ -992,14 +992,14 @@ const Renderer = struct {
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
         const key = Event.Key.from_nsevent(event) orelse return;
-        const maybe_edits = try self.editor.keydown(key);
+        const edits = try self.editor.keydown(key);
         defer {
             self.editor.edits.clearRetainingCapacity();
         }
 
-        try self.update_if_needed(alloc, maybe_edits);
+        try self.update_if_needed(alloc, edits);
 
-        if (maybe_edits != null) {
+        if (edits.len > 0) {
             // cursor vertices are first 6 vertices of text
             const tl: Vertex = self.vertices.items.ptr[0];
             const br: Vertex = self.vertices.items.ptr[4];
@@ -1021,7 +1021,7 @@ const Renderer = struct {
         self.scroll_phase = phase;
         self.ty = self.ty + @as(f32, @floatCast(dy));
         self.editor.cursor_dirty = true;
-        self.update_if_needed(std.heap.c_allocator, null) catch @panic("test");
+        self.update_if_needed(std.heap.c_allocator, &.{}) catch @panic("test");
         // const vertical = std.math.fabs(dy) > std.math.fabs(dx);
         // if (vertical) {
         //     self.ty = @min(self.text_height, @max(0.0, self.ty + @as(f32, @floatCast(dy))));
@@ -1051,7 +1051,7 @@ export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {
 
 export fn renderer_insert_text(renderer: *Renderer, text: [*:0]const u8, len: usize) void {
     renderer.editor.insert(text[0..len]) catch @panic("oops");
-    renderer.update_if_needed(std.heap.c_allocator, null) catch @panic("oops");
+    renderer.update_if_needed(std.heap.c_allocator, &[_]Editor.Edit{}) catch @panic("oops");
 }
 
 export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void {

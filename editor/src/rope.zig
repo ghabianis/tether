@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const print = std.debug.print;
+const dbgassert = std.debug.assert;
 
 const strutil = @import("./strutil.zig");
 
@@ -210,36 +211,44 @@ pub const Rope = struct {
         return i + @as(usize, @intCast(pos.col));
     }
 
-    // fn pos_to_idx_impl(self: *const Self, pos: TextPoint, comptime allow_past_bounds: bool) ?usize {
-    //     var line: usize = pos.line;
-    //     var iter_node: ?*Node = self.nodes.first;
-    //     var i: usize = 0;
-    //     while (iter_node != null and line > 0) {
-    //         line -= 1;
-    //         i += iter_node.?.data.items.len;
-    //         iter_node = iter_node.?.next;
-    //     }
-
-    //     const node = iter_node orelse return null;
-    //     _ = node;
-    //     return i + @as(usize, @intCast(pos.col));
-    // }
-
+    /// Convert a byte position in the text to a TextPoint.
+    /// NOTE: If the byte position is out of bounds, this will return null. If
+    /// you want to represent byte positions outside of the text, use
+    /// `idx_to_pos_allow_out_of_bounds`.
     pub fn idx_to_pos(self: *const Self, idx: usize) ?TextPoint {
+        return self.idx_to_pos_impl(idx, false);
+    }
+
+    /// Converts a byte position in the text to a TextPoint, allowing positions
+    /// that go beyond the length to be represented as a TextPoint.
+    /// 
+    /// This is mostly used when interfacing with the tree-sitter API. The
+    /// `TSEdit` struct has `new_end_point` and `old_end_point` fields which can
+    /// possibly represent points outside of the text. For example, you can
+    /// delete the entire text. The `old_end_byte` will be `text.len + 1`, so
+    /// the `old_end_point` will be outside of the text
+    pub fn idx_to_pos_allow_out_of_bounds(self: *const Self, idx: usize) TextPoint {
+        return self.idx_to_pos_impl(idx, true) orelse unreachable;
+    }
+
+    fn idx_to_pos_impl(self: *const Self, idx: usize, comptime allow_out_of_bounds: bool) ?TextPoint {
         var line: u32 = 0;
         var col: u32 = 0;
 
         var node = self.nodes.first;
         var i: usize = 0;
         while (node) |n| {
-            if (idx >= i and idx < i + n.data.items.len) {
-                col = @as(u32, @intCast(idx - i));
+            if (idx >= i and (idx < i + n.data.items.len or ((comptime allow_out_of_bounds) and line == self.nodes.len -| 1))) {
+                col = @intCast(idx - i);
                 return .{ .line = line, .col = col };
             }
             line += 1;
             i += n.data.items.len;
             node = n.next;
         }
+
+        if (comptime allow_out_of_bounds) 
+            unreachable;
 
         return null;
     }

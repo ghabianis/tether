@@ -62,7 +62,7 @@ pub inline fn text_dirty(self: *const Self) bool {
     return self.edits.items.len > 0;
 }
 
-pub fn keydown(self: *Self, key: Key) !?([]const Edit) {
+pub fn keydown(self: *Self, key: Key) ![]const Edit {
     if (self.vim.parse(key)) |cmd| {
         switch (self.vim.mode) {
             .Insert => try self.handle_cmd_insert(cmd),
@@ -78,7 +78,7 @@ pub fn keydown(self: *Self, key: Key) !?([]const Edit) {
         return self.edits.items[0..self.edits.items.len];
     }
 
-    return null;
+    return self.edits.items[0..self.edits.items.len];
 }
 
 pub fn handle_cmd_insert(self: *Self, cmd: Vim.Cmd) !void {
@@ -1187,7 +1187,8 @@ pub const Edit = extern struct {
         const old_end_byte = range.end;
         const start = rope.idx_to_pos(start_byte) orelse @panic("Unreachable");
         // const old_end = rope.idx_to_pos(old_end_byte) orelse @panic("Unreachable");
-        var old_end = rope.idx_to_pos(old_end_byte -| 1) orelse @panic("Unreachable");
+        // var old_end = rope.idx_to_pos(old_end_byte -| 1) orelse @panic("Unreachable");
+        var old_end = rope.idx_to_pos_allow_out_of_bounds(old_end_byte);
         old_end.col += 1;
         return .{
             .start_byte = start_byte,
@@ -1476,4 +1477,44 @@ test "indentation then backspace edge case" {
 
     str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings(expected[0..], str);
+}
+
+test "delete all text" {
+    var editor = Self{};
+    try editor.init();
+
+    _ = try editor.keydown(.{ .Char = 'i' });
+    const text_to_insert = "01234\n01234";
+    for (text_to_insert) |c| {
+        if (strutil.is_newline(c)) {
+            _ = try editor.keydown(.Newline);
+        } else {
+            _ = try editor.keydown(.{ .Char = c });
+        }
+    }
+    _ = try editor.keydown(.Esc);
+    _ = try editor.keydown(.{ .Char = 'v' });
+    _ = try editor.keydown(.{ .Char = 'g' });
+    _ = try editor.keydown(.{ .Char = 'g' });
+    _ = try editor.keydown(.{ .Char = 'd' });
+}
+
+test "delete all text on newline" {
+    var editor = Self{};
+    try editor.init();
+
+    _ = try editor.keydown(.{ .Char = 'i' });
+    const text_to_insert = "01234\n01234\n";
+    for (text_to_insert) |c| {
+        if (strutil.is_newline(c)) {
+            _ = try editor.keydown(.Newline);
+        } else {
+            _ = try editor.keydown(.{ .Char = c });
+        }
+    }
+    _ = try editor.keydown(.Esc);
+    _ = try editor.keydown(.{ .Char = 'v' });
+    _ = try editor.keydown(.{ .Char = 'g' });
+    _ = try editor.keydown(.{ .Char = 'g' });
+    _ = try editor.keydown(.{ .Char = 'd' });
 }
