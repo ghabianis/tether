@@ -444,11 +444,12 @@ pub fn insert(self: *Self, chars: []const u8) !void {
 /// ```
 pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8) !void {
     self.text_dirty = true;
+    // If the char closes a prevoius delimiter, then dedent.
     if (chars.len == 1) b: {
-        // If the char closes a previous delimiter, then dedent.
+        // Check if its a closing delimiter first
         if (self.is_closing_delimiter(chars[0])) {
             const node = self.rope.node_at_line(self.cursor.line) orelse break :b;
-            // Look for the matching opening delimiter
+            // Look if it has a matching opening delimiter
             if (self.search_opening_delimiter(node, .{ .line = self.cursor.line, .col = self.cursor.col -| 1 }, chars[0])) |pos| {
                 // If it's on the same line we don't want to do anything, break
                 // out
