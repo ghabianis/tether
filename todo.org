@@ -16,8 +16,21 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
 *** TODO Incremental parsing [0/2]
 **** TODO Edits to text return an =Edit= struct
 ***** TODO Insertions
+TSEdit properties:
+- start   => the point where the text was added
+- old_end => same as start
+- new_end => length of insertion
 ***** TODO Deletions
+TSEdit properties:
+- start   => the start of the range of text to be deleted
+- old_end => the end of the range of text to be deleted
+- new_end => 0
+
 ***** TODO Replacement
+TSEdit properties:
+- start   => the start of the range of text to be deleted
+- old_end => the end of the range of text to be deleted
+- new_end => the new end
 ** TODO Command palette [/]
 *** TODO Minibuffer [/]
 Command palette appears in a minibuffer, heavily inspired by Doom Emacs.

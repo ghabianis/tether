@@ -13,7 +13,6 @@ const Event = @import("./event.zig");
 const strutil = @import("./strutil.zig");
 const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
-const Highlight = @import("./highlight.zig");
 const earcut = @import("earcut");
 const fullthrottle = @import("./full_throttle.zig");
 const Diagnostics = @import("./diagnostics.zig");
@@ -69,7 +68,6 @@ const Renderer = struct {
     font: Font,
     frame_arena: std.heap.ArenaAllocator,
     editor: Editor,
-    highlight: ?Highlight = null,
     fullthrottle: FullThrottle,
     diagnostic_renderer: Diagnostics,
 
@@ -79,7 +77,6 @@ const Renderer = struct {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
-        const highlight = Highlight.init(alloc, &ts.C, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
 
         var renderer: Renderer = .{
             .view = view,
@@ -100,7 +97,6 @@ const Renderer = struct {
             // frame arena
             .frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .editor = Editor{},
-            .highlight = highlight,
             .fullthrottle = FullThrottle.init(device, view),
             .diagnostic_renderer = Diagnostics.init(std.heap.c_allocator, device, view),
 
@@ -175,7 +171,7 @@ const Renderer = struct {
         }
 
         if (self.editor.text_dirty) {
-            if (self.highlight) |*h| {
+            if (self.editor.highlight) |*h| {
                 const ts_edit = if (edit) |e| e.to_treesitter(&self.editor.rope) else null;
                 h.update_tree(str, ts_edit);
             }
@@ -635,7 +631,7 @@ const Renderer = struct {
         self.text_width = text_max_width;
         self.text_height = @fabs(starting_y);
 
-        if (self.highlight) |*highlight| {
+        if (self.editor.highlight) |*highlight| {
             try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty);
             try highlight.find_errors(str, self.editor.text_dirty, start_byte, end_byte);
             try self.diagnostic_renderer.update(

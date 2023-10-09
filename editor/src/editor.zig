@@ -20,6 +20,7 @@ const Key = Event.Key;
 
 const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
+const Highlight = @import("./highlight.zig");
 
 const Self = @This();
 
@@ -35,6 +36,7 @@ vim: Vim = Vim{},
 selection: ?Selection = null,
 clipboard: Clipboard = undefined,
 desired_col: ?u32 = null,
+highlight: ?Highlight = null,
 
 pub fn init(self: *Self) !void {
     try self.rope.init();
@@ -45,6 +47,11 @@ pub fn init(self: *Self) !void {
         const str = @embedFile("./editor.zig");
         self.cursor = try self.rope.insert_text(self.cursor, str);
     }
+}
+
+pub fn init_with_highlighter(self: *Self, highlight: Highlight) !void {
+    try self.init();
+    self.highlight = highlight;
 }
 
 pub fn keydown(self: *Self, key: Key) !?Edit {
@@ -414,39 +421,48 @@ fn paste(self: *Self, before: bool) !void {
 }
 
 pub fn insert_char(self: *Self, c: u8) !void {
-    try self.insert_at(self.cursor, &[_]u8{c}, false, null);
+    try self.insert_at(self.cursor, &[_]u8{c});
 }
 
 pub fn insert_char_at(self: *Self, cursor: TextPos, c: u8) !void {
-    try self.insert_at(cursor, &[_]u8{c}, false, null);
+    try self.insert_at(cursor, &[_]u8{c});
 }
 
 pub fn insert(self: *Self, chars: []const u8) !void {
-    try self.insert_at(self.cursor, chars, false, null);
+    try self.insert_at(self.cursor, chars);
 }
 
-pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_delimiter_indentation: bool, indent_level_: ?IndentLevel) !void {
+/// Inserts text at the given cursor position.
+/// 
+/// This may require indentation to be increased/decreased. For example if a
+/// newline is entered between two delimiters (e.g. "{}"), this will cause the
+/// newline to be have an increased indentation and the closing delimiter to be on a dedented new line:
+/// ```
+/// {
+///     
+/// }
+/// ```
+pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8) !void {
     self.text_dirty = true;
-    if (comptime fix_delimiter_indentation) {
-        const indent_level = indent_level_.?;
-        var char_buf = [_]u8{0} ** 256;
-        const char_buf_slice = indent_level.fill_str(char_buf[0..]);
-        var ins_cursor = try self.rope.insert_text(cursor, chars);
-        _ = try self.rope.insert_text(ins_cursor, char_buf_slice);
-        self.text_dirty = true;
-        return;
-    }
-
     if (chars.len == 1) b: {
+        // If the char closes a previous delimiter, then dedent.
         if (self.is_closing_delimiter(chars[0])) {
             const node = self.rope.node_at_line(self.cursor.line) orelse break :b;
-            if (self.has_opening_delimiter(node, .{ .line = self.cursor.line, .col = self.cursor.col -| 1 }, chars[0])) |pos| {
+            // Look for the matching opening delimiter
+            if (self.search_opening_delimiter(node, .{ .line = self.cursor.line, .col = self.cursor.col -| 1 }, chars[0])) |pos| {
+                // If it's on the same line we don't want to do anything, break
+                // out
                 if (pos.line == self.cursor.line) break :b;
             } else {
+                // No matching opening delimiter, break out
                 break :b;
             }
-            const prev = node.prev orelse @panic("This is bad");
-            const new_indent = self.get_indent_level(prev).decrement();
+
+            // The new indentation should be the current indentation level
+            // decremented by one
+            const new_indent = self.get_indent_level(node).decrement();
+
+            // Add the indentation white space and then the text to insert
             var char_buf = [_]u8{0} ** 256;
             const indent_buf = new_indent.fill_str(char_buf[0..]);
             try self.rope.replace_line(node, indent_buf);
@@ -457,12 +473,17 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
         }
     }
 
+    // If the last char is a newline, we need to give the newline some
+    // indentation. There are two cases:
+    // 1. If newline is entered inbetween two delimiters (e.g. in between "{}"), then increase indentation level
+    // 2. Otherwise, simply indent by current indentation level
     if (chars.len > 0 and strutil.is_newline(chars[chars.len - 1])) {
         var char_buf = [_]u8{0} ** 256;
 
         const prev_cursor = self.cursor;
         const node = self.rope.node_at_line(prev_cursor.line) orelse @panic("Well that's fucked.");
 
+        // If we enter a newline, and the cursor is inbetween an opening and closing delimiter
         var after_opening_delimiter = false;
         var before_closing_delimiter = false;
         if (self.succeeds_opening_delimiter(node, cursor.col)) |open_delimiter| {
@@ -473,17 +494,25 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
         const indent_level = self.get_indent_level(node);
         self.cursor = try self.rope.insert_text(cursor, chars);
 
-        // increase indentation of newly inserted line
+        // Increase indentation of newly inserted line, and put the closing
+        // delimiter on a dedented newline
         if (after_opening_delimiter) {
+            // Insert newline with inreased indentation
             const inner_indent_level = indent_level.increment();
             const char_buf_slice = inner_indent_level.fill_str(char_buf[0..]);
             self.cursor = try self.rope.insert_text(.{ .line = self.cursor.line, .col = 0 }, char_buf_slice);
-            // add a newline and dedent the closing bracket
+
+            // Add a newline and dedent the closing bracket
             if (before_closing_delimiter) {
                 const cached = self.cursor;
-                try self.insert_at(self.cursor, "\n", true, indent_level);
+                var dedent_char_buf = [_]u8{0} ** 256;
+                const dedent_char_slice = indent_level.fill_str(dedent_char_buf[0..]);
+                var ins_cursor = try self.rope.insert_text(self.cursor, chars);
+                _ = try self.rope.insert_text(ins_cursor, dedent_char_slice);
+                self.text_dirty = true;
                 self.cursor = cached;
             }
+
             self.text_dirty = true;
             return;
         }
@@ -496,18 +525,8 @@ pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8, comptime fix_d
         return;
     }
 
-    // const start_byte: u32 = @intCast(self.rope.pos_to_idx(self.cursor) orelse @panic("Woops"));
+    // Otherwise we can insert text normally
     const new_cursor = try self.rope.insert_text(cursor, chars);
-    // const edit: ts.Edit = .{
-    //     .start_point = @bitCast(self.cursor),
-    //     .old_end_point = @bitCast(self.cursor),
-    //     .new_end_point = @bitCast(new_cursor),
-
-    //     .start_byte = @intCast(start_byte),
-    //     .old_end_byte = @intCast(start_byte),
-    //     .new_end_byte = @intCast(self.rope.pos_to_idx(new_cursor) orelse @panic("Woops")),
-    // };
-    // _ = edit;
 
     self.cursor = new_cursor;
     self.text_dirty = true;
@@ -556,12 +575,14 @@ fn move_to_matching_pair(self: *Self) void {
     } else {
         var new_pos = self.cursor;
         Rope.Node.decrement_textpos(&node, &new_pos);
-        if (self.has_opening_delimiter(node, new_pos, current_char)) |open_pos| {
+        if (self.search_opening_delimiter(node, new_pos, current_char)) |open_pos| {
             self.cursor = open_pos;
         }
     }
 }
 
+/// If the cursor appears directly after an opening delimiter (excluding
+/// whitespace), return the ASCII char code of this delimiter
 fn succeeds_opening_delimiter(self: *Self, node_: ?*const Rope.Node, col: u32) ?u8 {
     const node = node_ orelse return null;
     if (node.data.items.len == 0) return null;
@@ -578,6 +599,7 @@ fn succeeds_opening_delimiter(self: *Self, node_: ?*const Rope.Node, col: u32) ?
     return null;
 }
 
+/// Returns true if the cursor is on a closing delimiter
 fn precedes_closing_delimiter(self: *Self, node: *const Rope.Node, col: u32, opening: u8) bool {
     _ = self;
     if (col >= node.data.items.len) return false;
@@ -612,9 +634,9 @@ pub fn matches_opening_delimiter(self: *Self, opening: u8, c: u8) bool {
     };
 }
 
-/// Returns the position of a matching open delimiter for the given delimiter
+/// Searches for the position of a matching open delimiter for the given delimiter, if it exists
 /// NOTE: Cursor should be BEFORE the closing delimiter
-fn has_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
+fn search_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
     var iter = Rope.iter_chars_rev(node, cursor);
 
     var open_count: u32 = 0;
