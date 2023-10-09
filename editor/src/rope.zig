@@ -5,6 +5,8 @@ const print = std.debug.print;
 
 const strutil = @import("./strutil.zig");
 
+/// Represents a position in text by line and col.
+/// This struct is `packed` so it is interoperable with tree-sitter's TSPoint.
 pub const TextPos = packed struct {
     line: u32,
     /// An important thing to note is that in VISUAL and INSERT mode,
@@ -179,7 +181,7 @@ pub const Rope = struct {
         return .{ .node = node, .i = i };
     }
 
-    pub fn pos_to_idx(self: *Self, pos: TextPos) ?usize {
+    pub fn pos_to_idx(self: *const Self, pos: TextPos) ?usize {
         var line: usize = pos.line;
         var iter_node: ?*Node = self.nodes.first;
         var i: usize = 0;

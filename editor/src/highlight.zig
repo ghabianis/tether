@@ -9,6 +9,7 @@ const Rope = @import("./rope.zig").Rope;
 const math = @import("./math.zig");
 const r = @import("./regex.zig");
 const strutil = @import("./strutil.zig");
+const Edit = @import("./editor.zig").Edit;
 
 const Highlight = @This();
 
@@ -17,6 +18,11 @@ lang: *const ts.Language,
 tree: ?*c.TSTree = null,
 
 query: *c.TSQuery,
+
+/// Represents the byte of the starting character of the window
+start_byte: u32 = 0,
+end_byte: u32 = 0,
+
 /// Mapping of TSQuery pattern index -> color
 theme: []const ?math.Float4,
 /// Cached regex state machines for pattern predicates. For the key we use tree-sitter's "value ID", which is an index to the store of values internally in tree-sitter
@@ -183,11 +189,31 @@ fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []con
     return theme;
 }
 
-pub fn update_tree(self: *Highlight, str: []const u8) void {
-    if (self.tree) |tstree| {
-        c.ts_tree_delete(tstree);
+pub fn update_tree(self: *Highlight, str: []const u8, edit: ?ts.Edit) void {
+    // If `self.tree` exists, either apply the edit to it, or delete it so we
+    // can reparse the source from scratch.
+    const old_tree = old_tree: {
+        if (self.tree) |tstree| {
+            if (edit) |e| {
+                c.ts_tree_edit(tstree, &e);
+                break :old_tree tstree;
+            }
+            c.ts_tree_delete(tstree);
+            self.tree = null;
+            break :old_tree null;
+        }
+        break :old_tree null;
+    };
+    defer {
+        if (old_tree) |old| c.ts_tree_delete(old);
     }
-    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @intCast(str.len));
+    
+    // We reset the parser each time this is called
+    defer c.ts_parser_reset(self.parser);
+    if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
+        @panic("Failed to set parser!");
+    }
+    const tree = c.ts_parser_parse_string(self.parser, old_tree, str.ptr, @intCast(str.len));
     self.tree = tree;
 }
 
@@ -199,26 +225,25 @@ pub fn update_tree(self: *Highlight, str: []const u8) void {
 pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32, text_dirty: bool) !void {
     if (str.len == 0) return;
 
-    // We reset the parser each time this is called
-    defer c.ts_parser_reset(self.parser);
-    if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
-        @panic("Failed to set parser!");
-    }
-
     // Create a tree if we don't have one already
     const tree = self.tree_or_init(str);
 
     var root_node = c.ts_tree_root_node(tree);
     var query_cursor = c.ts_query_cursor_new() orelse @panic("Failed to make query cursor.");
+    c.ts_query_cursor_set_byte_range(query_cursor, window_start_byte, window_end_byte);
     defer c.ts_query_cursor_delete(query_cursor);
 
     c.ts_query_cursor_exec(query_cursor, self.query, root_node);
 
     var highlight_buf = &self.buf;
-    // If the text has not been updated, we don't need to run the queries again
-    if (!text_dirty) {
+    // If the text has not been updated, or the window range has not changed, we don't need to run the queries again
+    if (!text_dirty and window_start_byte == self.start_byte and window_end_byte == self.end_byte) {
         highlight_buf.cpy_to_vertices(vertices, window_start_byte, window_end_byte);
         return;
+    }
+    defer {
+        self.start_byte = window_start_byte;
+        self.end_byte = window_start_byte;
     }
 
     // Otherwise, clear our highlight captures and run the queries
@@ -274,8 +299,12 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
     }
 }
 
-pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool) !void {
-    if (!text_dirty) return;
+pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool, window_start_byte: u32, window_end_byte: u32) !void {
+    if (!text_dirty and window_start_byte == self.start_byte and window_end_byte == self.end_byte) return;
+    defer {
+        self.start_byte = window_start_byte;
+        self.end_byte = window_start_byte;
+    }
 
     self.errors.clearRetainingCapacity();
     const tree = self.tree_or_init(src);
@@ -283,6 +312,8 @@ pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool) !void {
 
     var query_cursor = c.ts_query_cursor_new();
     defer c.ts_query_cursor_delete(query_cursor);
+    c.ts_query_cursor_set_byte_range(query_cursor, window_start_byte, window_end_byte);
+
     var match: c.TSQueryMatch = undefined;
 
     c.ts_query_cursor_exec(query_cursor, self.error_query, root_node);
@@ -514,6 +545,7 @@ pub const HighlightBuf = struct {
         /// self.start < self.end
         /// self.start >= window_start_byte
         pub fn cpy_to_vertices(self: *const HighlightCapture, vertices: []math.Vertex, window_start_byte: u32, window_end_byte: u32) bool {
+            // TODO: Now that we call `ts_query_cursor_set_byte_range()` to narrow the range of highlights, these two conditions should always be true.
             if (self.end <= window_start_byte) return false;
             if (self.start >= window_end_byte) return false;
             for (self.start..self.end) |i| {

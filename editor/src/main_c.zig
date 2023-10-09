@@ -79,7 +79,7 @@ const Renderer = struct {
         const device = metal.MTLDevice.from_id(device_);
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
-        const highlight = Highlight.init(alloc, &ts.ZIG, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
+        const highlight = Highlight.init(alloc, &ts.C, Highlight.TokyoNightStorm.to_indices()) catch @panic("SHIT");
 
         var renderer: Renderer = .{
             .view = view,
@@ -128,18 +128,18 @@ const Renderer = struct {
 
     fn resize(self: *Self, alloc: Allocator, new_size: metal.CGSize) !void {
         self.screen_size = new_size;
-        try self.update(alloc);
+        try self.update(alloc, null);
     }
 
-    fn update_if_needed(self: *Self, alloc: Allocator) !void {
+    fn update_if_needed(self: *Self, alloc: Allocator, edit: ?Editor.Edit) !void {
         if (self.editor.cursor_dirty or self.editor.text_dirty) {
             self.adjust_scroll_to_cursor(@floatCast(self.screen_size.height));
-            try self.update(alloc);
+            try self.update(alloc, edit);
         }
     }
 
-    fn update(self: *Self, alloc: Allocator) !void {
-        try self.update_text(alloc);
+    fn update(self: *Self, alloc: Allocator, edit: ?Editor.Edit) !void {
+        try self.update_text(alloc, edit);
     }
 
     fn digits(val: usize) u32 {
@@ -165,7 +165,7 @@ const Renderer = struct {
         return @as(f32, @floatCast(width));
     }
 
-    fn update_text(self: *Self, alloc: Allocator) !void {
+    fn update_text(self: *Self, alloc: Allocator, edit: ?Editor.Edit) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
         defer {
             if (str.len > 0) {
@@ -176,7 +176,8 @@ const Renderer = struct {
 
         if (self.editor.text_dirty) {
             if (self.highlight) |*h| {
-                h.update_tree(str);
+                const ts_edit = if (edit) |e| e.to_treesitter(&self.editor.rope) else null;
+                h.update_tree(str, ts_edit);
             }
         }
 
@@ -636,7 +637,7 @@ const Renderer = struct {
 
         if (self.highlight) |*highlight| {
             try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty);
-            try highlight.find_errors(str, self.editor.text_dirty);
+            try highlight.find_errors(str, self.editor.text_dirty, start_byte, end_byte);
             try self.diagnostic_renderer.update(
                 frame_arena,
                 &self.editor.rope,
@@ -994,10 +995,11 @@ const Renderer = struct {
 
     pub fn keydown(self: *Renderer, alloc: Allocator, event: metal.NSEvent) !void {
         const key = Event.Key.from_nsevent(event) orelse return;
-        const add_cluster = try self.editor.keydown_fullthrottle(key);
+        const maybe_edit = try self.editor.keydown(key);
 
-        try self.update_if_needed(alloc);
-        if (add_cluster) {
+        try self.update_if_needed(alloc, maybe_edit);
+
+        if (maybe_edit != null) {
             // cursor vertices are first 6 vertices of text
             const tl: Vertex = self.vertices.items.ptr[0];
             const br: Vertex = self.vertices.items.ptr[4];
@@ -1019,7 +1021,7 @@ const Renderer = struct {
         self.scroll_phase = phase;
         self.ty = self.ty + @as(f32, @floatCast(dy));
         self.editor.cursor_dirty = true;
-        self.update_if_needed(std.heap.c_allocator) catch @panic("test");
+        self.update_if_needed(std.heap.c_allocator, null) catch @panic("test");
         // const vertical = std.math.fabs(dy) > std.math.fabs(dx);
         // if (vertical) {
         //     self.ty = @min(self.text_height, @max(0.0, self.ty + @as(f32, @floatCast(dy))));
@@ -1049,7 +1051,7 @@ export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {
 
 export fn renderer_insert_text(renderer: *Renderer, text: [*:0]const u8, len: usize) void {
     renderer.editor.insert(text[0..len]) catch @panic("oops");
-    renderer.update_if_needed(std.heap.c_allocator) catch @panic("oops");
+    renderer.update_if_needed(std.heap.c_allocator, null) catch @panic("oops");
 }
 
 export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void {

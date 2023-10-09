@@ -169,7 +169,6 @@ pub fn update(
 pub fn render(self: *Diagnostics, dt: f32, command_encoder: metal.MTLRenderCommandEncoder, render_pass_desc: objc.Object, width: f64, height: f64, color_attachment_desc: objc.Object, camera_matrix: *math.Float4x4) void {
     if (self.instances.items.len == 0) return;
     _ = render_pass_desc;
-    _ = camera_matrix;
     self.time += dt;
     color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
 
@@ -181,8 +180,8 @@ pub fn render(self: *Diagnostics, dt: f32, command_encoder: metal.MTLRenderComma
     const uniforms: Uniforms = .{
         .projection_matrix = ortho,
         // .model_view_matrix = scale,
-        // .model_view_matrix = camera_matrix.*,
-        .model_view_matrix = math.Float4x4.scale_by(1.0),
+        .model_view_matrix = camera_matrix.*,
+        // .model_view_matrix = math.Float4x4.scale_by(1.0),
         .color_in = Diagnostics.COLOR_IN,
         .color_out = Diagnostics.COLOR_OUT,
         .time = self.time,

@@ -11,9 +11,13 @@ Smash Bros. example: https://www.youtube.com/watch?v=TqsXl8rj5q0 (watch at 0.25x
 
 ***** TODO Each number/glyph shakes as score increases
 ***** TODO Flashes in and out of red/white
-** TODO Tree-sitter optimizations
-*** TODO Run query cursor only on range of edited text
-*** TODO Incremental parsing
+** TODO Tree-sitter optimizations [1/2]
+*** DONE Run query cursor only on range of edited text
+*** TODO Incremental parsing [0/2]
+**** TODO Edits to text return an =Edit= struct
+***** TODO Insertions
+***** TODO Deletions
+***** TODO Replacement
 ** TODO Command palette [/]
 *** TODO Minibuffer [/]
 Command palette appears in a minibuffer, heavily inspired by Doom Emacs.

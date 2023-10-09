@@ -47,37 +47,30 @@ pub fn init(self: *Self) !void {
     }
 }
 
-pub fn keydown(self: *Self, key: Key) !void {
+pub fn keydown(self: *Self, key: Key) !?Edit {
     if (self.vim.parse(key)) |cmd| {
         switch (self.vim.mode) {
             .Insert => try self.handle_cmd_insert(cmd),
             .Normal => try self.handle_cmd_normal(cmd),
             .Visual => try self.handle_cmd_visual(cmd),
         }
-        return;
+        // TODO: Return the edit
+        return null;
     }
 
     if (self.vim.mode == .Insert) {
+        const prev_cursor = self.cursor;
+        const old_end_byte = self.rope.pos_to_idx(prev_cursor) orelse @panic("OHNO!");
         try self.handle_key_insert(key);
-    }
-}
-
-pub fn keydown_fullthrottle(self: *Self, key: Key) !bool {
-    if (self.vim.parse(key)) |cmd| {
-        switch (self.vim.mode) {
-            .Insert => try self.handle_cmd_insert(cmd),
-            .Normal => try self.handle_cmd_normal(cmd),
-            .Visual => try self.handle_cmd_visual(cmd),
-        }
-        return false;
+        return .{
+            .start = prev_cursor,
+            .new_end = self.cursor,
+            .old_end = prev_cursor,
+            .old_end_byte = @intCast(old_end_byte),
+        };
     }
 
-    if (self.vim.mode == .Insert) {
-        try self.handle_key_insert(key);
-        return true;
-    }
-
-    return false;
+    return null;
 }
 
 pub fn handle_cmd_insert(self: *Self, cmd: Vim.Cmd) !void {
@@ -1084,6 +1077,28 @@ const IndentLevel = struct {
         if (len > 128) @panic("Indentation too big!");
         @memset(char_buf_slice, ' ');
         return buf[0..len];
+    }
+};
+
+/// Represents an edit to text
+pub const Edit = struct {
+    start: TextPos,
+    new_end: TextPos,
+    old_end: TextPos,
+    old_end_byte: u32,
+
+    pub fn to_treesitter(self: Edit, rope_: *const Rope) ts.Edit {
+        const start_byte = rope_.pos_to_idx(self.start) orelse @panic("Oh no!");
+        const new_end_byte = rope_.pos_to_idx(self.new_end) orelse @panic("Oh no!");
+
+        return .{
+            .start_byte = @intCast(start_byte), 
+            .old_end_byte = self.old_end_byte,
+            .new_end_byte = @intCast(new_end_byte),
+            .start_point = @bitCast(self.start),
+            .old_end_point = @bitCast(self.old_end),
+            .new_end_point = @bitCast(self.new_end),
+        };
     }
 };
 
