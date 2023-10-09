@@ -10,7 +10,7 @@ const objc = @import("zig-objc");
 const strutil = @import("./strutil.zig");
 
 const rope = @import("./rope.zig");
-const TextPos = rope.TextPos;
+const TextPoint = rope.TextPoint;
 const Rope = rope.Rope;
 
 const Vim = @import("./vim.zig");
@@ -26,7 +26,7 @@ const Self = @This();
 
 rope: Rope = Rope{},
 // TODO: also store the node of the current line?
-cursor: TextPos = .{ .line = 0, .col = 0 },
+cursor: TextPoint = .{ .line = 0, .col = 0 },
 /// Any time the text is modified, this is set to true. When true, it tells the
 /// renderer to rebuild the text geometry and recalculate highlights.
 text_dirty: bool = true,
@@ -173,7 +173,7 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
             // the cursor has to be moved back to the start
             const cursor_abs = self.rope.pos_to_idx(self.cursor) orelse std.math.maxInt(usize);
             if (cursor_abs != sel.start) {
-                const pos: TextPos = self.rope.idx_to_pos(sel.start) orelse .{ .line = 0, .col = 0 };
+                const pos: TextPoint = self.rope.idx_to_pos(sel.start) orelse .{ .line = 0, .col = 0 };
                 self.cursor = pos;
             }
         }
@@ -250,8 +250,8 @@ fn move_impl(self: *Self, mv: Vim.MoveKind) void {
         // Bool is true if find in reverse
         .Find => |f| {
             var node = self.rope.node_at_line(self.cursor.line) orelse @panic("FUCK");
-            var prev_cursor: TextPos = self.cursor;
-            Rope.Node.increment_textpos(&node, &prev_cursor);
+            var prev_cursor: TextPoint = self.cursor;
+            Rope.Node.increment_textpoint(&node, &prev_cursor);
             var iter = Rope.iter_chars(node, prev_cursor);
             while (iter.next_update_prev_cursor(&prev_cursor)) |c| {
                 if (strutil.is_newline(c)) break;
@@ -429,7 +429,7 @@ pub fn insert_char(self: *Self, c: u8) !void {
     try self.insert_at(self.cursor, &[_]u8{c});
 }
 
-pub fn insert_char_at(self: *Self, cursor: TextPos, c: u8) !void {
+pub fn insert_char_at(self: *Self, cursor: TextPoint, c: u8) !void {
     try self.insert_at(cursor, &[_]u8{c});
 }
 
@@ -447,7 +447,7 @@ pub fn insert(self: *Self, chars: []const u8) !void {
 ///     
 /// }
 /// ```
-pub fn insert_at(self: *Self, cursor: TextPos, chars: []const u8) !void {
+pub fn insert_at(self: *Self, cursor: TextPoint, chars: []const u8) !void {
     self.text_dirty = true;
     // If the char closes a prevoius delimiter, then dedent.
     if (chars.len == 1) b: {
@@ -580,7 +580,7 @@ fn move_to_matching_pair(self: *Self) void {
         }
     } else {
         var new_pos = self.cursor;
-        Rope.Node.decrement_textpos(&node, &new_pos);
+        Rope.Node.decrement_textpoint(&node, &new_pos);
         if (self.search_opening_delimiter(node, new_pos, current_char)) |open_pos| {
             self.cursor = open_pos;
         }
@@ -642,7 +642,7 @@ pub fn matches_opening_delimiter(self: *Self, opening: u8, c: u8) bool {
 
 /// Searches for the position of a matching open delimiter for the given delimiter, if it exists
 /// NOTE: Cursor should be BEFORE the closing delimiter
-fn search_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
+fn search_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPoint, delimiter: u8) ?TextPoint {
     var iter = Rope.iter_chars_rev(node, cursor);
 
     var open_count: u32 = 0;
@@ -659,7 +659,7 @@ fn search_opening_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos
     return null;
 }
 
-fn has_closing_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPos, delimiter: u8) ?TextPos {
+fn has_closing_delimiter(self: *Self, node: *const Rope.Node, cursor: TextPoint, delimiter: u8) ?TextPoint {
     var iter = Rope.iter_chars(node, cursor);
 
     var prev_cursor = cursor;
@@ -844,7 +844,7 @@ fn forward_word(self: *Self, capital_key: bool) void {
     // var prev_char: u8 = 0;
     var starts_on_punctuation: bool = self.is_punctuation(node.data.items[self.cursor.col]);
 
-    var prev_cursor: TextPos = .{ .line = self.cursor.line, .col = self.cursor.col };
+    var prev_cursor: TextPoint = .{ .line = self.cursor.line, .col = self.cursor.col };
     var iter = Rope.iter_chars(
         node,
         prev_cursor,
@@ -888,7 +888,7 @@ fn backward_word(self: *Self, capital_key: bool) void {
 /// share this as the core logic
 fn backward_word_or_forward_word_end(self: *Self, capital_key: bool, comptime dir: Vim.MoveKindEnum) void {
     var node = self.rope.node_at_line(self.cursor.line) orelse return;
-    var prev_cursor: TextPos = .{ .line = self.cursor.line, .col = self.cursor.col };
+    var prev_cursor: TextPoint = .{ .line = self.cursor.line, .col = self.cursor.col };
     var skip_one: bool = false;
 
     // TODO: Initialize this properly
@@ -1110,9 +1110,9 @@ const IndentLevel = struct {
 
 /// Represents an edit to text
 pub const Edit = struct {
-    start: TextPos,
-    new_end: TextPos,
-    old_end: TextPos,
+    start: TextPoint,
+    new_end: TextPoint,
+    old_end: TextPoint,
     old_end_byte: u32,
 
     pub fn to_treesitter(self: Edit, rope_: *const Rope) ts.Edit {
@@ -1156,7 +1156,7 @@ test "backspace line" {
 }
 
 test "move word" {
-    var expected: TextPos = undefined;
+    var expected: TextPoint = undefined;
 
     var editor = Self{};
     try editor.init();
@@ -1195,7 +1195,7 @@ test "move word" {
 }
 
 test "move beginning word" {
-    var expected: TextPos = undefined;
+    var expected: TextPoint = undefined;
 
     var editor = Self{};
     try editor.init();

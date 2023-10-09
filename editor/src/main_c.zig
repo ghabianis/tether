@@ -23,7 +23,7 @@ const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
-const TextPos = rope.TextPos;
+const TextPoint = rope.TextPoint;
 const Rope = rope.Rope;
 
 const Vertex = math.Vertex;

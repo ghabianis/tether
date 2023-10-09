@@ -5,15 +5,20 @@ const print = std.debug.print;
 
 const strutil = @import("./strutil.zig");
 
+pub const TextPos = union(enum) {
+    point: TextPoint,
+    byte: u32,
+};
+
 /// Represents a position in text by line and col.
 /// This struct is `packed` so it is interoperable with tree-sitter's TSPoint.
-pub const TextPos = packed struct {
+pub const TextPoint = packed struct {
     line: u32,
     /// An important thing to note is that in VISUAL and INSERT mode,
     /// the cursor is allowed to go past the end of the line. See `Editor.cursor_eol_for_mode()`
     col: u32,
 
-    pub fn cmp(a: TextPos, b: TextPos) enum { Less, Equal, Greater } {
+    pub fn cmp(a: TextPoint, b: TextPoint) enum { Less, Equal, Greater } {
         if (a.line < b.line) return .Less;
         if (a.line > b.line) return .Greater;
         if (a.col < b.col) return .Less;
@@ -97,7 +102,7 @@ pub const Rope = struct {
     }
 
     /// TODO: allowing passing initial node to this function
-    pub fn insert_text(self: *Self, pos_: TextPos, text: []const u8) !TextPos {
+    pub fn insert_text(self: *Self, pos_: TextPoint, text: []const u8) !TextPoint {
         var pos = pos_;
         var nlr = next_line(text);
         var prev_node: ?*Node = null;
@@ -181,7 +186,7 @@ pub const Rope = struct {
         return .{ .node = node, .i = i };
     }
 
-    pub fn pos_to_idx(self: *const Self, pos: TextPos) ?usize {
+    pub fn pos_to_idx(self: *const Self, pos: TextPoint) ?usize {
         var line: usize = pos.line;
         var iter_node: ?*Node = self.nodes.first;
         var i: usize = 0;
@@ -196,7 +201,7 @@ pub const Rope = struct {
         return i + @as(usize, @intCast(pos.col));
     }
 
-    pub fn idx_to_pos(self: *Self, idx: usize) ?TextPos {
+    pub fn idx_to_pos(self: *Self, idx: usize) ?TextPoint {
         var line: u32 = 0;
         var col: u32 = 0;
 
@@ -348,14 +353,14 @@ pub const Rope = struct {
         };
     }
 
-    pub fn iter_chars(starting_node: *const Node, cursor: TextPos) RopeCharIterator {
+    pub fn iter_chars(starting_node: *const Node, cursor: TextPoint) RopeCharIterator {
         return .{
             .node = starting_node,
             .cursor = cursor,
         };
     }
 
-    pub fn iter_chars_rev(starting_node: *const Node, cursor: TextPos) RopeCharIteratorRev {
+    pub fn iter_chars_rev(starting_node: *const Node, cursor: TextPoint) RopeCharIteratorRev {
         return .{
             .node = starting_node,
             .cursor = cursor,
@@ -383,7 +388,7 @@ fn _SIMDRopeCharIterator() type {
         const VectorWidth: usize = 8;
         const Vector = @Vector(VectorWidth, u8);
         node: ?*Rope.Node,
-        cursor: TextPos,
+        cursor: TextPoint,
         last_imcomplete: ?u8 = null,
 
         fn reverse_buf(buf: *[VectorWidth]u8) void {
@@ -494,7 +499,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
         node: *const Rope.Node,
 
         /// Points to the NEXT position to look at
-        cursor: TextPos,
+        cursor: TextPoint,
 
         past_boundary: if (Reverse) bool else void = if (Reverse) false else undefined,
 
@@ -512,7 +517,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
             return ret;
         }
 
-        pub fn next_update_prev_cursor(self: *@This(), prev: *TextPos) ?u8 {
+        pub fn next_update_prev_cursor(self: *@This(), prev: *TextPoint) ?u8 {
             const temp = self.cursor;
             if (self.next()) |ret| {
                 prev.* = temp;
@@ -552,7 +557,7 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
             return ret;
         }
 
-        pub fn back(self: *@This(), prev: *TextPos) void {
+        pub fn back(self: *@This(), prev: *TextPoint) void {
             if (self.cursor.col == 0) {
                 self.node = self.node.prev orelse @panic("Back on col 0 line 0");
             }
@@ -626,7 +631,7 @@ fn DoublyLinkedList(comptime T: type) type {
                 return if (self.data.items.len == 0) 0 else self.data.items.len - 1;
             }
 
-            pub fn decrement_textpos(node: **const Node, pos: *TextPos) void {
+            pub fn decrement_textpoint(node: **const Node, pos: *TextPoint) void {
                 if (pos.col == 0) {
                     if (node.*.prev) |prev| {
                         pos.line -= 1;
@@ -638,7 +643,7 @@ fn DoublyLinkedList(comptime T: type) type {
                 }
             }
 
-            pub fn increment_textpos(node: **const Node, pos: *TextPos) void {
+            pub fn increment_textpoint(node: **const Node, pos: *TextPoint) void {
                 pos.col += 1;
                 if (pos.col >= node.*.data.items.len) {
                     if (node.*.next) |next| {
@@ -773,7 +778,7 @@ test "basic insertion" {
     try rope.init();
 
     var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "pls work wtf");
-    var expected_pos: TextPos = .{ .line = 0, .col = 12 };
+    var expected_pos: TextPoint = .{ .line = 0, .col = 12 };
     try std.testing.expectEqual(expected_pos, pos);
 
     var str = try rope.as_str(std.heap.c_allocator);
@@ -803,7 +808,7 @@ test "multi-line insertion" {
     try rope.init();
 
     var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "hello\nfriends\n");
-    var expected_pos: TextPos = .{ .line = 2, .col = 0 };
+    var expected_pos: TextPoint = .{ .line = 2, .col = 0 };
     try std.testing.expectEqual(expected_pos, pos);
 
     var str = try rope.as_str(std.heap.c_allocator);
