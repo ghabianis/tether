@@ -97,7 +97,7 @@ const RndGen = std.rand.DefaultPrng;
 pub var rnd = RndGen.init(0);
 
 const ClusterBufPool = std.heap.MemoryPool(UnifiedBuf);
-// const alignOf = @alignOf(UnifiedBuf);
+// for some reason this causes a segfault in zig build:
 // const ClusterBufPool = mempool.MemoryPoolExtra(UnifiedBuf, .{ .alignment = @alignOf(UnifiedBuf), .growable = false });
 
 pub const FullThrottleMode = struct {
