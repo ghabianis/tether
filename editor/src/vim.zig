@@ -52,7 +52,6 @@ pub const DEFAULT_PARSERS = [_]CommandParser{
     CommandParser.comptime_new(.PasteBefore, "<#> P", .{ .normal = true, .visual = true }),
 };
 
-
 pub fn init(self: *Self, alloc: Allocator, parsers: []const CommandParser) !void {
     _ = alloc;
     self.parsers = try std.heap.c_allocator.alloc(CommandParser, parsers.len);
@@ -250,7 +249,7 @@ pub const Find = packed struct {
         return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b01111111) };
         // return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b11111110) };
         // switch (comptime native_endian) {
-        //     .Big => { 
+        //     .Big => {
         //         std.debug.assert(c <= 0b01111111);
         //         return .{ ._reverse = @bitCast(r), ._char = @intCast(c & 0b01111111) };
         //     },
@@ -271,18 +270,16 @@ pub const Find = packed struct {
     }
 };
 
-pub const CustomCmd = struct {
-    name: []const u8
-};
+pub const CustomCmd = struct { name: []const u8 };
 
 /// TODO: We might be able to slim this down to 8 bytes
-/// Instead of storing a pointer to the start of this CommandParser's inputs, we 
+/// Instead of storing a pointer to the start of this CommandParser's inputs, we
 pub const CommandParser = struct {
     const Self = @This();
 
     inputs: [*]CommandParser.Input,
     data: Metadata,
-    tag: CmdTag,   
+    tag: CmdTag,
 
     comptime {
         std.debug.assert(@sizeOf(CommandParser) == 16);
@@ -301,7 +298,7 @@ pub const CommandParser = struct {
         }
 
         pub fn from_valid_modes(modes: ValidMode) Metadata {
-            var ret: Metadata = .{ .idx = 0, .insert_mode = if (modes.insert) 1 else 0, .normal_mode = if (modes.normal) 1 else 0, .visual_mode = if (modes.visual) 1 else 0 };
+            const ret: Metadata = .{ .idx = 0, .insert_mode = if (modes.insert) 1 else 0, .normal_mode = if (modes.normal) 1 else 0, .visual_mode = if (modes.visual) 1 else 0 };
             return ret;
         }
 
@@ -566,7 +563,7 @@ pub const CommandParser = struct {
     }
 
     pub fn copy(self: *const CommandParser, alloc: Allocator) !CommandParser {
-        var inputs = try alloc.alloc(Input, self.data.len);
+        const inputs = try alloc.alloc(Input, self.data.len);
         var cpy = CommandParser{
             .data = self.data,
             .tag = self.tag,
@@ -792,7 +789,7 @@ pub const CommandParser = struct {
         //     CommandParser.populate_from_str(inputs[0..N], str);
         //     break :_ inputs;
         // };
-        var inputs = comptime input_blah(N, str);
+        const inputs = comptime input_blah(N, str);
 
         const metadata = comptime Metadata.from_valid_modes(valid_modes);
         const parser = CommandParser.new(tag, inputs, metadata);
@@ -803,7 +800,7 @@ pub const CommandParser = struct {
     fn input_blah(comptime N: usize, comptime str: []const u8) []Input {
         @setEvalBranchQuota(100000);
         var inputs = [_]Input{.{ .Number = .{} }} ** N;
-        var n: usize = N;
+        const n: usize = N;
         CommandParser.populate_from_str(inputs[0..N], str);
         return inputs[0..n];
     }
@@ -835,7 +832,7 @@ pub const CommandParser = struct {
                 if (token.len != 1) {
                     @panic("Invalid token");
                 }
-                var val: Input = .{ .Key = .{ .desired = .{ .Char = token[0] } } };
+                const val: Input = .{ .Key = .{ .desired = .{ .Char = token[0] } } };
                 input[i] = val;
                 i += 1;
                 continue;
@@ -942,8 +939,8 @@ test "command parse visual" {
     const val: u69 = 420;
     const val2: u11 = 1024;
     const PathIntLen = std.math.IntFittingRange(0, 1024);
-    print("VAL: {d} {d}\n", .{val, val2});
-    print("sizes: {d} {s}\n", .{@bitSizeOf(PathIntLen), @typeName(PathIntLen)});
+    print("VAL: {d} {d}\n", .{ val, val2 });
+    print("sizes: {d} {s}\n", .{ @bitSizeOf(PathIntLen), @typeName(PathIntLen) });
     const rope = @import("./rope.zig");
     _ = rope;
     const alloc = std.heap.c_allocator;

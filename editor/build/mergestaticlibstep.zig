@@ -85,7 +85,7 @@ const GlobsStep = struct {
 
     pub fn create(b: *std.Build, name: []const u8, inputs: []const FileSource) *GlobsStep {
         var self = b.allocator.create(GlobsStep) catch @panic("OOM");
-        var step = Step.init(.{
+        const step = Step.init(.{
             .id = .custom,
             .name = name,
             .owner = b,
@@ -97,7 +97,7 @@ const GlobsStep = struct {
         var outputs = b.allocator.alloc(FileSource, inputs.len) catch @panic("OOM");
         var i: usize = 0;
         while (i < inputs.len) : (i += 1) {
-            var generated_file = b.allocator.create(std.build.GeneratedFile) catch @panic("OOM");
+            const generated_file = b.allocator.create(std.build.GeneratedFile) catch @panic("OOM");
             generated_file.* = .{ .step = &self.step };
             outputs[i] = .{ .generated = generated_file };
         }

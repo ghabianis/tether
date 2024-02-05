@@ -14,7 +14,7 @@ const strutil = @import("./strutil.zig");
 const Conf = @import("./conf.zig");
 const ts = @import("./treesitter.zig");
 const Highlight = @import("./highlight.zig");
-const earcut = @import("earcut");
+// const earcut = @import("earcut");
 const fullthrottle = @import("./full_throttle.zig");
 const Diagnostics = @import("./diagnostics.zig");
 const Time = @import("time.zig");
@@ -33,12 +33,7 @@ const FullThrottle = fullthrottle.FullThrottleMode;
 var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
-const WindowLineRange = struct { 
-    start: u32, 
-    start_y: f32, 
-    end: u32, 
-    end_y: f32
-};
+const WindowLineRange = struct { start: u32, start_y: f32, end: u32, end_y: f32 };
 
 const TEXT_COLOR = math.hex4("#b8c1ea");
 const CURSOR_COLOR = math.hex4("#b4f9f8");
@@ -110,7 +105,7 @@ const Renderer = struct {
 
         renderer.texture = renderer.font.create_texture(device);
 
-        const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
+        const sampler_descriptor = objc.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
         sampler_descriptor.setProperty("magFilter", metal.MTLSamplerMinMagFilter.linear);
         sampler_descriptor.setProperty("sAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
@@ -119,7 +114,7 @@ const Renderer = struct {
         const sampler_state = device.new_sampler_state(sampler_descriptor);
         renderer.sampler_state = sampler_state;
 
-        var ptr = alloc.create(Renderer) catch @panic("oom!");
+        const ptr = alloc.create(Renderer) catch @panic("oom!");
         ptr.* = renderer;
         return ptr;
     }
@@ -503,7 +498,7 @@ const Renderer = struct {
         const starting_line: u32 = start_end.start;
         var iter = self.editor.rope.iter_lines(self.editor.rope.node_at_line(starting_line) orelse return);
 
-        var start_byte: u32 = @intCast(self.editor.rope.pos_to_idx(.{ .line = starting_line, .col = 0 }) orelse 0);
+        const start_byte: u32 = @intCast(self.editor.rope.pos_to_idx(.{ .line = starting_line, .col = 0 }) orelse 0);
         var end_byte: u32 = 0;
         var cursor_line: u32 = starting_line;
         var cursor_col: u32 = 0;
@@ -526,7 +521,7 @@ const Renderer = struct {
 
             const has_newline = strutil.is_newline(the_line[the_line.len - 1]);
             _ = has_newline;
-            var line = the_line;
+            const line = the_line;
 
             var last_x: f32 = initial_x;
             if (line.len > 0) {
@@ -630,25 +625,12 @@ const Renderer = struct {
         end_byte = start_byte + index;
 
         self.text_width = text_max_width;
-        self.text_height = @fabs(starting_y);
+        self.text_height = @abs(starting_y);
 
         if (self.editor.highlight) |*highlight| {
             try highlight.highlight(alloc, str, self.vertices.items, start_byte, end_byte, self.editor.text_dirty());
             try highlight.find_errors(str, self.editor.text_dirty(), start_byte, end_byte);
-            try self.diagnostic_renderer.update(
-                frame_arena,
-                &self.editor.rope,
-                highlight.errors.items, 
-                self.vertices.items, 
-                start_end.start_y,
-                start_byte, 
-                end_byte, 
-                math.float2(@floatCast(self.screen_size.width), 
-                @floatCast(self.screen_size.height)), 
-                self.font.ascent, 
-                self.font.descent, 
-                self.editor.text_dirty()
-            );
+            try self.diagnostic_renderer.update(frame_arena, &self.editor.rope, highlight.errors.items, self.vertices.items, start_end.start_y, start_byte, end_byte, math.float2(@floatCast(self.screen_size.width), @floatCast(self.screen_size.height)), self.font.ascent, self.font.descent, self.editor.text_dirty());
         }
 
         if (cursor_vert_index) |cvi| {
@@ -752,7 +734,7 @@ const Renderer = struct {
                     break :num @as(u32, @intCast(i));
                 }
 
-                break :num @as(u32, @intCast(std.math.absInt(@as(i64, @intCast(self.editor.cursor.line)) - @as(i64, @intCast(i))) catch @panic("oops")));
+                break :num @as(u32, @intCast(@abs(@as(i64, @intCast(self.editor.cursor.line)) - @as(i64, @intCast(i)))));
             };
             const digit_count = digits(num);
             const str = strutil.number_to_str(num, digit_count, &number_buf);
@@ -843,7 +825,7 @@ const Renderer = struct {
         var y: f32 = start_end.start_y;
         const starting_x: f32 = text_start_x;
         var x: f32 = starting_x;
-        var text = text_;
+        const text = text_;
 
         var i: u32 = 0;
         var line_state = false;
@@ -928,7 +910,7 @@ const Renderer = struct {
         };
 
         self.fullthrottle.compute_shake(dt, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
-        
+
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
         const command_buffer = self.queue.command_buffer();
@@ -975,7 +957,7 @@ const Renderer = struct {
         command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
         command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
 
-        var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0};
+        var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0 };
         var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
         self.fullthrottle.render_particles(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
         self.fullthrottle.render_explosions(command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
@@ -1034,7 +1016,9 @@ const Renderer = struct {
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
     const font = Font.init(alloc, 64.0, 1024, 1024) catch @panic("Failed to create Font");
-    const class = objc.Class.getClass("TetherFont").?;
+    // var buf = std.ArrayList(u8).init(alloc);
+    // font.serialize(alloc, &buf);
+    const class = objc.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
     defer obj.msgSend(void, objc.sel("release"), .{});
     return Renderer.init(std.heap.c_allocator, font, view, device);
@@ -1068,34 +1052,34 @@ export fn renderer_get_val(renderer: *Renderer) u64 {
     return renderer.some_val;
 }
 
-test "selection triangulation" {
-    const alloc = std.heap.c_allocator;
-    var processor = earcut.Processor(f32){};
-    var vertices = ArrayList(f32){};
+// test "selection triangulation" {
+//     const alloc = std.heap.c_allocator;
+//     var processor = earcut.Processor(f32){};
+//     var vertices = ArrayList(f32){};
 
-    try vertices.appendSlice(alloc, &.{
-        // line 1
-        0.0,  100.0, 40.0, 100.0, 40.0, 90.0,
-        // line 2
-        20.0, 90.0,  20.0, 80.0,
-        // last point
-         0.0,  80.0,
-    });
+//     try vertices.appendSlice(alloc, &.{
+//         // line 1
+//         0.0,  100.0, 40.0, 100.0, 40.0, 90.0,
+//         // line 2
+//         20.0, 90.0,  20.0, 80.0,
+//         // last point
+//          0.0,  80.0,
+//     });
 
-    try processor.process(alloc, vertices.items, null, 2);
+//     try processor.process(alloc, vertices.items, null, 2);
 
-    var j: usize = 0;
-    while (j < processor.triangles.items.len) : (j += 3) {
-        print("TRI\n", .{});
-        const idx0 = processor.triangles.items[j] * 2;
-        const idx1 = processor.triangles.items[j + 1] * 2;
-        const idx2 = processor.triangles.items[j + 2] * 2;
-        const v0 = math.Float2.new(vertices.items[idx0], vertices.items[idx0 + 1]);
-        const v1 = math.Float2.new(vertices.items[idx1], vertices.items[idx1 + 1]);
-        const v2 = math.Float2.new(vertices.items[idx2], vertices.items[idx2 + 1]);
-        v0.debug();
-        v1.debug();
-        v2.debug();
-        print("\n", .{});
-    }
-}
+//     var j: usize = 0;
+//     while (j < processor.triangles.items.len) : (j += 3) {
+//         print("TRI\n", .{});
+//         const idx0 = processor.triangles.items[j] * 2;
+//         const idx1 = processor.triangles.items[j + 1] * 2;
+//         const idx2 = processor.triangles.items[j + 2] * 2;
+//         const v0 = math.Float2.new(vertices.items[idx0], vertices.items[idx0 + 1]);
+//         const v1 = math.Float2.new(vertices.items[idx1], vertices.items[idx1 + 1]);
+//         const v2 = math.Float2.new(vertices.items[idx2], vertices.items[idx2 + 1]);
+//         v0.debug();
+//         v1.debug();
+//         v2.debug();
+//         print("\n", .{});
+//     }
+// }

@@ -17,6 +17,7 @@ const Font = @This();
 /// Visible ASCII characters
 const ASCII_CHAR_END: u8 = 127;
 const ASCII_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~\n\r";
+const ASCII_CHAR_START: u8 = 10;
 
 /// Common ligatures to pre-populate atlas with
 const COMMON_LIGATURES = [_][]const u8{
@@ -66,6 +67,7 @@ max_adv: f32,
 
 pub fn init(alloc: Allocator, font_size: u16, atlas_width: u32, atlas_height: u32) !Font {
     const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
+    // const iosevka = metal.NSString.new_with_bytes("Fira Code", .ascii);
     defer iosevka.release();
     const nsfont = metal.NSFont.from_name_and_size(iosevka, @floatFromInt(font_size));
     nsfont.retain();
@@ -126,7 +128,7 @@ fn load_default(self: *Font) !void {
         const region = try self.add_glyph_to_atlas_no_resize(rect);
         const advance: f32 = @floatFromInt(self.get_advance(glyph));
         const glyph_info: GlyphInfo = .{
-            .rect = rect, 
+            .rect = rect,
             .advance = advance,
             .tx = cast.num(f32, region.x) / cast.num(f32, self.atlas.width),
             .ty = cast.num(f32, region.y) / cast.num(f32, self.atlas.height),
@@ -158,7 +160,7 @@ fn load_default(self: *Font) !void {
 
         const cursor_region = try self.add_glyph_to_atlas_no_resize(cursor_rect);
         const border_cursor_region = try self.add_glyph_to_atlas_no_resize(cursor_rect);
-        cursor_glyph_info.tx = @as(f32, @floatFromInt(cursor_region.x)) /  @as(f32, @floatFromInt(self.atlas.width));
+        cursor_glyph_info.tx = @as(f32, @floatFromInt(cursor_region.x)) / @as(f32, @floatFromInt(self.atlas.width));
         cursor_glyph_info.ty = @as(f32, @floatFromInt(cursor_region.y)) / @as(f32, @floatFromInt(self.atlas.height));
         border_cursor_glyph_info.tx = @as(f32, @floatFromInt(border_cursor_region.x)) / @as(f32, @floatFromInt(self.atlas.width));
         border_cursor_glyph_info.ty = @as(f32, @floatFromInt(border_cursor_region.y)) / @as(f32, @floatFromInt(self.atlas.height));
@@ -171,15 +173,7 @@ fn load_default(self: *Font) !void {
         const height: usize = @intFromFloat(@ceil(cursor_rect.size.height));
         const color_space = ct.CGColorSpaceCreateDeviceGray();
         defer ct.CGColorRelease(color_space);
-        const ctx = ct.CGBitmapContextCreate(
-            null, 
-            width,
-            height,
-            8, 
-            width, 
-            color_space, 
-            ct.kCGImageAlphaNone & ct.kCGBitmapAlphaInfoMask
-        );
+        const ctx = ct.CGBitmapContextCreate(null, width, height, 8, width, color_space, ct.kCGImageAlphaNone & ct.kCGBitmapAlphaInfoMask);
 
         if (ctx == null) @panic("Failed to make CGContext");
         defer ct.CGContextRelease(ctx);
@@ -188,7 +182,7 @@ fn load_default(self: *Font) !void {
         ct.CGContextSetGrayFillColor(ctx, 1.0, 1.0);
         ct.CGContextFillRect(ctx, cursor_rect);
         var data: [*]u8 = @ptrCast(@alignCast(ct.CGBitmapContextGetData(ctx)));
-        self.atlas.set_region(cursor_region, data[0..width * height * self.atlas.depth]);
+        self.atlas.set_region(cursor_region, data[0 .. width * height * self.atlas.depth]);
 
         // Draw the border cursor
         // https://stackoverflow.com/questions/14258924/uiview-drawrect-is-it-possible-to-stroke-inside-a-path
@@ -200,7 +194,7 @@ fn load_default(self: *Font) !void {
         ct.CGContextSetGrayStrokeColor(ctx, 1.0, 1.0);
         ct.CGContextStrokeRectWithWidth(ctx, cursor_rect, 4.0);
         data = @ptrCast(@alignCast(ct.CGBitmapContextGetData(ctx)));
-        self.atlas.set_region(border_cursor_region, data[0..width * height * self.atlas.depth]);
+        self.atlas.set_region(border_cursor_region, data[0 .. width * height * self.atlas.depth]);
     }
 
     // // Now properly assign the correct texture coordinates to the glyphs
@@ -233,14 +227,14 @@ fn add_glyph_to_atlas_impl(self: *Font, rect: metal.CGRect, comptime allow_resiz
     const height: u32 = @intFromFloat(@ceil(rect.size.height));
 
     if (width == 0 and height == 0) return Atlas.Region.default();
-    
+
     var region = try self.atlas.get_region(self.alloc, width + border * 2, height + border * 2);
     if (region == null) {
         if (comptime allow_resize) @panic("Exceeded atlas dimensions but resizing not allowed in this context.");
         try self.atlas.enlarge(self.alloc, self.atlas.width * 2, self.atlas.height * 2);
         return try self.add_glyph_to_atlas_impl(rect, allow_resize);
     }
-    
+
     region.?.width -= border * 2;
     region.?.height -= border * 2;
     region.?.x += border;
@@ -249,10 +243,10 @@ fn add_glyph_to_atlas_impl(self: *Font, rect: metal.CGRect, comptime allow_resiz
     return region.?;
 }
 
-/// Grow the atlas bitmap to the new size. 
-/// 
+/// Grow the atlas bitmap to the new size.
+///
 /// This updates the texture coordinates of each GlyphInfo in `self.glyphs`
-/// 
+///
 /// TODO: Recalculating texcoords involves multiplying original texcoords with original atlas size. Does this result in floating point miscalculations that cause artifacts? Investigate.
 fn enlarge_atlas(self: *Font, new_width: u32, new_height: u32) !void {
     const old_width = self.atlas.width;
@@ -266,8 +260,8 @@ fn enlarge_atlas(self: *Font, new_width: u32, new_height: u32) !void {
 }
 
 fn rasterize_glyph(self: *Font, glyph: metal.CGGlyph, rect: metal.CGRect, region: Atlas.Region) !void {
-    var width: u32 = @intFromFloat(@ceil(rect.size.width));
-    var height: u32 = @intFromFloat(@ceil(rect.size.height));
+    const width: u32 = @intFromFloat(@ceil(rect.size.width));
+    const height: u32 = @intFromFloat(@ceil(rect.size.height));
 
     const color_space = ct.CGColorSpaceCreateDeviceGray();
     const ctx = ct.CGBitmapContextCreate(null, @intCast(width), @intCast(height), 8, width, color_space, ct.kCGImageAlphaNone & ct.kCGBitmapAlphaInfoMask);
@@ -315,7 +309,7 @@ fn rasterize_glyph(self: *Font, glyph: metal.CGGlyph, rect: metal.CGRect, region
 
     const data: [*]u8 = @ptrCast(@alignCast(ct.CGBitmapContextGetData(ctx)));
 
-    self.atlas.set_region(region, data[0..width * height * self.atlas.depth]);
+    self.atlas.set_region(region, data[0 .. width * height * self.atlas.depth]);
 }
 
 pub fn lookup(self: *Font, g: metal.CGGlyph) !*const GlyphInfo {
@@ -354,7 +348,7 @@ fn get_glyph(self: *Font, glyph: metal.CGGlyph) !void {
     const region = try self.add_glyph_to_atlas(rect);
     const advance: f32 = @floatFromInt(self.get_advance(glyph));
     const glyph_info: GlyphInfo = .{
-        .rect = rect, 
+        .rect = rect,
         .advance = advance,
         .tx = cast.num(f32, region.x) / cast.num(f32, self.atlas.width),
         .ty = cast.num(f32, region.y) / cast.num(f32, self.atlas.height),
@@ -398,11 +392,11 @@ pub fn create_texture(self: *Font, device: metal.MTLDevice) metal.MTLTexture {
     tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
     tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(0), metal.MTKTextureLoaderOptionSRGB });
 
-    const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
+    const tex_loader_class = objc.getClass("MTKTextureLoader").?;
     var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
     tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
 
-    var err: ?*anyopaque = null;
+    const err: ?*anyopaque = null;
     const tex = tex_loader.msgSend(objc.Object, objc.sel("newTextureWithCGImage:options:error:"), .{
         image,
         tex_opts,
@@ -442,7 +436,6 @@ fn font_attribute_string(self: *Font, chars_c: []const u8, comptime enable_ligat
     return attributed_string;
 }
 
-
 pub fn str_width(self: *Font, str: []const u8) f64 {
     // TODO: PERF: create this string once at startup
     const attributed_string = self.font_attribute_string(str, false);
@@ -471,6 +464,10 @@ pub fn cursor_w(self: *const Font) f32 {
     return @floatCast(self.cursor.rect.height());
 }
 
+pub fn serialize(self: *const Font, alloc: Allocator, buf: *ArrayList(u8)) !void {
+    try Serialize.serialize(self, alloc, buf);
+}
+
 pub const Serialize = struct {
     pub const Glyph = extern struct {
         tx: f32 align(8),
@@ -483,12 +480,12 @@ pub const Serialize = struct {
     };
 
     pub const Header = extern struct {
-         width: u32 align(8),
-         height: u32,
-         ascent: u32,
-         descent: u32,
-         glyph_len: u32,
-         _pad: u32 = 0,
+        width: u32 align(8),
+        height: u32,
+        ascent: u32,
+        descent: u32,
+        glyph_len: u32,
+        _pad: u32 = 0,
     };
 
     pub fn serialize(self: *const Font, alloc: Allocator, buf: *ArrayList(u8)) !void {
@@ -502,7 +499,27 @@ pub const Serialize = struct {
         };
 
         try buf.appendSlice(alloc, cast.bytes(&header));
-        
+
+        for (ASCII_CHAR_START..ASCII_CHAR_END) |char_raw| {
+            const glyph = self.char_to_glyph[char_raw];
+            const glyph_info = self.glyphs.get(glyph) orelse @panic("WOOPS!");
+
+            const ser_glyph = Serialize.Glyph{
+                .tx = glyph_info.tx,
+                .ty = glyph_info.ty,
+                .bitmap_w = glyph_info.rect.size.width,
+                .bitmap_h = glyph_info.rect.size.height,
+                .bitmap_t = glyph_info.rect.origin.y + glyph_info.rect.size.height,
+                .bitmap_l = glyph_info.rect.origin.x + glyph_info.rect.size.width,
+                .advance_x = glyph_info.advance,
+            };
+
+            try buf.appendSlice(alloc, cast.bytes(&ser_glyph));
+        }
+
+        var file = std.fs.cwd().createFile("atlas.bin", .{}) catch @panic("woops");
+        defer file.close();
+        file.writeAll(buf.items[0..]) catch @panic("oops");
     }
 };
 
@@ -542,7 +559,7 @@ const Atlas = struct {
         y: u32,
         width: u32,
     };
-    
+
     const Region = struct {
         x: u32,
         y: u32,
@@ -571,7 +588,7 @@ const Atlas = struct {
             .depth = depth,
             .dirty = true,
             .data = try alloc.alloc(u8, width * height * depth),
-        }; 
+        };
         @memset(self.data, 0);
         try self.enlarge(alloc, width, height);
 
@@ -589,7 +606,7 @@ const Atlas = struct {
 
     pub fn fit(self: *Atlas, index: usize, width: usize, height: usize) ?u32 {
         var node: *Node = &self.nodes.items[index];
-        var x = node.x;
+        const x = node.x;
         var y = node.y;
         // var width_left = node.width;
         var width_left = width;
@@ -621,16 +638,16 @@ const Atlas = struct {
         assert(region.y + region.height <= self.height - 1);
         assert(region.width * region.height * self.depth == data.len);
 
-        const depth = self.depth; 
+        const depth = self.depth;
 
         // Copy the data to the atlas data
         for (0..region.height) |i| {
             const len = region.width * depth;
             const dest_start = (((region.y + i) * self.width) + region.x) * depth;
-            const dest = self.data[dest_start..dest_start + len];
+            const dest = self.data[dest_start .. dest_start + len];
 
             const offset = i * region.width * depth;
-            const source = data[offset..offset + len];
+            const source = data[offset .. offset + len];
 
             @memcpy(dest, source);
         }
@@ -639,7 +656,7 @@ const Atlas = struct {
     }
 
     /// Reserves a `width` x `height` rectangle in the atlas, returning the region.
-    /// 
+    ///
     /// If you plan to reserve a region for a glyph, instead use
     /// `Font.add_glyph_to_atlas()`, which adds border to prevent artifacts from
     /// texture sampling.
@@ -661,9 +678,7 @@ const Atlas = struct {
             if (maybe_y) |y| {
                 const node = self.nodes.items[i];
 
-                if ((y + height < best_height) 
-                    or (y + height == best_height and node.width > 0 and node.width < best_width)) {
-                    
+                if ((y + height < best_height) or (y + height == best_height and node.width > 0 and node.width < best_width)) {
                     best_height = y + height;
                     maybe_best_index = @intCast(i);
                     best_width = node.width;
@@ -689,7 +704,7 @@ const Atlas = struct {
         try self.nodes.insert(alloc, best_index, node_to_add);
 
         var i: u32 = best_index + 1;
-        while (i < self.nodes.items.len): (i += 1) {
+        while (i < self.nodes.items.len) : (i += 1) {
             const node = &self.nodes.items[i];
             const prev = self.nodes.items[i - 1];
 
@@ -747,7 +762,7 @@ const Atlas = struct {
 
         self.width = width;
         self.height = height;
-        
+
         // Add node reflecting the gained space on the right
         try self.nodes.append(alloc, .{
             .x = width_old - 1,
@@ -763,6 +778,6 @@ const Atlas = struct {
             .y = 1,
             .width = width_old - 2,
             .height = height_old - 2,
-        }, data_old[old_row_size + pixel_size..]);
+        }, data_old[old_row_size + pixel_size ..]);
     }
 };

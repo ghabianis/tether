@@ -18,7 +18,6 @@ const Vertex = extern struct {
 
 pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projection_matrix: math.Float4x4 };
 
-
 // 16 alignment
 const Particle = extern struct {
     color: math.Float4 align(16),
@@ -26,60 +25,47 @@ const Particle = extern struct {
 };
 
 const opacity_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
-                    .{
-                        .time = 0.0, .value = Scalar.new(0.8), .in = Scalar.new(0.0), .out = Scalar.new(4.0)
-                    },
-                    .{
-                        .time = 0.05, .value = Scalar.new(1.0), .in = Scalar.new(0.0), .out = Scalar.new(0.0)
-                    },
-                    .{
-                        .time = 0.6, .value = Scalar.new(0.0), .in = Scalar.new(-0.5), .out = Scalar.new(0.0)
-                        // .time = 2.6, .value = Scalar.new(0.0), .in = Scalar.new(-0.5), .out = Scalar.new(0.0)
-                    }
-                };
-
-const velocity_factor_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
-        .{
-            .time = 0.0, .value = Scalar.new(2), .in = Scalar.new(8.0), .out = Scalar.new(8.0),
-        },
-        .{
-            .time = 0.03, .value = Scalar.new(6), .in = Scalar.new(1), .out = Scalar.new(1),
-        },
-        .{
-            .time = 0.1, .value = Scalar.new(1), .in = Scalar.new(1), .out = Scalar.new(1),
-        },
-        .{
-            .time = 0.5, .value = Scalar.default(), .in = Scalar.new(-3.0), .out = Scalar.default()
-        } 
+    .{ .time = 0.0, .value = Scalar.new(0.8), .in = Scalar.new(0.0), .out = Scalar.new(4.0) },
+    .{ .time = 0.05, .value = Scalar.new(1.0), .in = Scalar.new(0.0), .out = Scalar.new(0.0) },
+    .{
+        .time = 0.6,
+        .value = Scalar.new(0.0),
+        .in = Scalar.new(-0.5),
+        .out = Scalar.new(0.0),
+        // .time = 2.6, .value = Scalar.new(0.0), .in = Scalar.new(-0.5), .out = Scalar.new(0.0)
+    },
 };
 
-const screen_shake_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{
-        .{
-            .time = 0.0, .value = Scalar.new(1.0), .in = Scalar.new(0.0), .out = Scalar.new(4.0)
-        },
-        .{
-            .time = 0.05, .value = Scalar.new(4.0), .in = Scalar.new(0.0), .out = Scalar.new(0.0)
-        },
-        .{
-            .time = 0.2, .value = Scalar.new(0.0), .in = Scalar.new(-2.5), .out = Scalar.new(0.0)
-        }
-};
+const velocity_factor_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{ .{
+    .time = 0.0,
+    .value = Scalar.new(2),
+    .in = Scalar.new(8.0),
+    .out = Scalar.new(8.0),
+}, .{
+    .time = 0.03,
+    .value = Scalar.new(6),
+    .in = Scalar.new(1),
+    .out = Scalar.new(1),
+}, .{
+    .time = 0.1,
+    .value = Scalar.new(1),
+    .in = Scalar.new(1),
+    .out = Scalar.new(1),
+}, .{ .time = 0.5, .value = Scalar.default(), .in = Scalar.new(-3.0), .out = Scalar.default() } };
 
+const screen_shake_frames: []const anim.ScalarTrack.Frame = &[_]anim.ScalarTrack.Frame{ .{ .time = 0.0, .value = Scalar.new(1.0), .in = Scalar.new(0.0), .out = Scalar.new(4.0) }, .{ .time = 0.05, .value = Scalar.new(4.0), .in = Scalar.new(0.0), .out = Scalar.new(0.0) }, .{ .time = 0.2, .value = Scalar.new(0.0), .in = Scalar.new(-2.5), .out = Scalar.new(0.0) } };
 
 const MAX_CLUSTER_PARTICLE_AMOUNT = 128;
 const MAX_CLUSTERS = 99;
 const MAX_PARTICLES = MAX_CLUSTER_PARTICLE_AMOUNT * MAX_CLUSTERS;
 pub const ParticleCluster = struct {
     time: f32,
-    buf:  *align(16) Buf,
+    buf: *align(16) Buf,
 
-    pub const Buf = struct {
-        particles: [MAX_CLUSTER_PARTICLE_AMOUNT]Particle,
-        velocity: [MAX_CLUSTER_PARTICLE_AMOUNT]math.Float2
-    };
+    pub const Buf = struct { particles: [MAX_CLUSTER_PARTICLE_AMOUNT]Particle, velocity: [MAX_CLUSTER_PARTICLE_AMOUNT]math.Float2 };
 };
 
-pub const Explosions = struct { 
+pub const Explosions = struct {
     buf: *align(16) Buf,
     len: u8,
     // times: [MAX_CLUSTER_PARTICLE_AMOUNT]f32,
@@ -87,7 +73,6 @@ pub const Explosions = struct {
         explosions: [MAX_CLUSTER_PARTICLE_AMOUNT]Explosion,
     };
 };
-
 
 pub const UnifiedBuf = union {
     explosion: Explosions.Buf,
@@ -106,14 +91,14 @@ pub const Explosion = extern struct {
     time: f32 = 0.0,
 };
 
-
 const TEXTURE_DIMENSION = math.float2(1000, 100);
 
 const RndGen = std.rand.DefaultPrng;
 pub var rnd = RndGen.init(0);
 
-// const ClusterBufPool = std.heap.MemoryPool(ParticleCluster.Buf);
-const ClusterBufPool = mempool.MemoryPoolExtra(UnifiedBuf, .{ .alignment = @alignOf(UnifiedBuf), .growable = false });
+const ClusterBufPool = std.heap.MemoryPool(UnifiedBuf);
+// const alignOf = @alignOf(UnifiedBuf);
+// const ClusterBufPool = mempool.MemoryPoolExtra(UnifiedBuf, .{ .alignment = @alignOf(UnifiedBuf), .growable = false });
 
 pub const FullThrottleMode = struct {
     pipeline: metal.MTLRenderPipelineState,
@@ -146,7 +131,6 @@ pub const FullThrottleMode = struct {
     const INSTANCEBUF_EXPLOSION_START = 0.0;
     const INSTANCEBUF_PARTICLE_START = @sizeOf(Explosion) * MAX_CLUSTER_PARTICLE_AMOUNT;
 
-
     pub fn init(device: metal.MTLDevice, view: metal.MTKView) FullThrottleMode {
         var full_throttle: FullThrottleMode = .{
             .pipeline = undefined,
@@ -177,7 +161,7 @@ pub const FullThrottleMode = struct {
                 3, // Bottom-left corner
                 0, // Top-left corner
             },
-            
+
             .explosion_pipeline = undefined,
 
             .cluster_buf_pool = ClusterBufPool.initPreheated(std.heap.c_allocator, MAX_CLUSTERS + 1) catch @panic("OOM"),
@@ -252,7 +236,7 @@ pub const FullThrottleMode = struct {
 
         full_throttle.build_particles_pipeline(device, view);
         full_throttle.build_explosions_pipeline(device, view);
-        
+
         return full_throttle;
     }
 
@@ -260,8 +244,8 @@ pub const FullThrottleMode = struct {
         const contents = self.instance_buffer.contents();
         const start_byte = INSTANCEBUF_PARTICLE_START;
         const contents_particles = @as([*]Particle, @ptrCast(@alignCast(contents + start_byte)));
-        @memcpy(contents_particles[offset..offset + particles.len], particles[0..]);
-        self.instance_buffer.did_modify_range(.{.location = start_byte + offset * @sizeOf(Particle), .length = particles.len * @sizeOf(Particle) });
+        @memcpy(contents_particles[offset .. offset + particles.len], particles[0..]);
+        self.instance_buffer.did_modify_range(.{ .location = start_byte + offset * @sizeOf(Particle), .length = particles.len * @sizeOf(Particle) });
     }
 
     pub fn update_instance_buffer_explosion(self: *FullThrottleMode) void {
@@ -269,7 +253,7 @@ pub const FullThrottleMode = struct {
         const contents_explosions = @as([*]Explosion, @ptrCast(@alignCast(contents)));
         @memcpy(contents_explosions[0..self.explosions.len], self.explosions.buf.explosions[0..self.explosions.len]);
         const byte_length = @sizeOf(Explosion) * @as(usize, self.explosions.len);
-        self.instance_buffer.did_modify_range(.{.location = 0, .length = byte_length});
+        self.instance_buffer.did_modify_range(.{ .location = 0, .length = byte_length });
     }
 
     pub fn remove_cluster(self: *FullThrottleMode, idx: u8) void {
@@ -288,7 +272,7 @@ pub const FullThrottleMode = struct {
         self.explosions.len -= 1;
     }
 
-    pub fn add_explosion(self: *FullThrottleMode, offset_screen: math.Float2, w: f32, h:f32) void {
+    pub fn add_explosion(self: *FullThrottleMode, offset_screen: math.Float2, w: f32, h: f32) void {
         if (self.explosions.len == MAX_CLUSTER_PARTICLE_AMOUNT) @panic("OOM");
         self.time = 0;
         const aspect = w / h;
@@ -318,7 +302,7 @@ pub const FullThrottleMode = struct {
         cluster.buf = @ptrCast(@alignCast(self.cluster_buf_pool.create() catch @panic("OOM")));
 
         const PARTICLE_SHAPE_CIRCLE = false;
-        
+
         // const offsetx: f32 = rnd.random().float(f32) * 2.0 - 1.0;
         // const offsety: f32 = rnd.random().float(f32) * 2.0 - 1.0;
         for (0..MAX_CLUSTER_PARTICLE_AMOUNT) |i| {
@@ -483,7 +467,7 @@ pub const FullThrottleMode = struct {
         tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_enum(metal.MTLStorageMode.private), metal.MTKTextureLoaderOptionTextureStorageMode });
         tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(0), metal.MTKTextureLoaderOptionSRGB });
 
-        const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
+        const tex_loader_class = objc.getClass("MTKTextureLoader").?;
         var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
         tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
 
@@ -494,7 +478,7 @@ pub const FullThrottleMode = struct {
         metal.check_error(err) catch @panic("failed to make texture");
         self.explosion_texture = metal.MTLTexture.from_obj(tex);
 
-        const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
+        const sampler_descriptor = objc.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
         sampler_descriptor.setProperty("magFilter", metal.MTLSamplerMinMagFilter.linear);
         sampler_descriptor.setProperty("sAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
@@ -584,7 +568,7 @@ pub const FullThrottleMode = struct {
         self.index_buffer = device.new_buffer_with_bytes(@as([*]const u8, @ptrCast(&self.indices))[0..@sizeOf([6]u16)], .storage_mode_managed);
 
         const instance_buffer_size = @sizeOf([MAX_CLUSTER_PARTICLE_AMOUNT]Explosion) + @sizeOf([MAX_CLUSTER_PARTICLE_AMOUNT]Particle) * MAX_CLUSTERS;
-        self.instance_buffer = device.new_buffer_with_length(instance_buffer_size, .storage_mode_managed) orelse @panic("OOM"); 
+        self.instance_buffer = device.new_buffer_with_length(instance_buffer_size, .storage_mode_managed) orelse @panic("OOM");
     }
 
     fn model_matrix(self: *FullThrottleMode, side_length: f32, width: f32, height: f32) math.Float4x4 {
@@ -619,21 +603,16 @@ pub const FullThrottleMode = struct {
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
         const w: f32 = @floatCast(width);
         const h: f32 = @floatCast(height);
-        
+
         const aspect = w / h;
-        var toScreenSpaceMatrix2 = math.Float4x4.new(
-            math.float4(w / 2, 0, 0, 0),
-            math.float4(0, (h / 2), 0, 0),
-            math.float4(0, 0, 1, 0),
-            math.float4(w / 2, h / 2, 0, 1)
-        );
-        var toScreenSpaceMatrix = 
+        const toScreenSpaceMatrix2 = math.Float4x4.new(math.float4(w / 2, 0, 0, 0), math.float4(0, (h / 2), 0, 0), math.float4(0, 0, 1, 0), math.float4(w / 2, h / 2, 0, 1));
+        var toScreenSpaceMatrix =
             toScreenSpaceMatrix2;
-        var ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
+        const ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
         const origin = math.float4(-1.0, 0.0, 0.0, 1.0);
         const p = toScreenSpaceMatrix.mul_f4(origin);
         _ = p;
-        var scale = math.Float4x4.scale_by(0.05);
+        const scale = math.Float4x4.scale_by(0.05);
         _ = scale;
         const uniforms: Uniforms = .{
             .projection_matrix = ortho,
@@ -667,31 +646,22 @@ pub const FullThrottleMode = struct {
         color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.load);
         const w: f32 = @floatCast(width);
         const h: f32 = @floatCast(height);
-        
+
         const aspect = w / h;
-        var toScreenSpaceMatrix2 = math.Float4x4.new(
-            math.float4(w / 2, 0, 0, 0),
-            math.float4(0, (h / 2), 0, 0),
-            math.float4(0, 0, 1, 0),
-            math.float4(w / 2, h / 2, 0, 1)
-        );
-        var scaleAspect = math.Float4x4.new(
-            math.float4(0, 0, 0, 0),
-            math.float4(0, aspect, 0, 0),
-            math.float4(0, 0, 1, 0),
-            math.float4(0, 0, 0, 1));
+        const toScreenSpaceMatrix2 = math.Float4x4.new(math.float4(w / 2, 0, 0, 0), math.float4(0, (h / 2), 0, 0), math.float4(0, 0, 1, 0), math.float4(w / 2, h / 2, 0, 1));
+        const scaleAspect = math.Float4x4.new(math.float4(0, 0, 0, 0), math.float4(0, aspect, 0, 0), math.float4(0, 0, 1, 0), math.float4(0, 0, 0, 1));
         _ = scaleAspect;
-//         var toScreenSpaceMatrix = scaleAspect.mul(
-//             &toScreenSpaceMatrix2
-// );
-        var toScreenSpaceMatrix = 
+        //         var toScreenSpaceMatrix = scaleAspect.mul(
+        //             &toScreenSpaceMatrix2
+        // );
+        var toScreenSpaceMatrix =
             toScreenSpaceMatrix2;
         // var ortho = math.Float4x4.ortho(0.0, w, 0.0, h, 0.1, 100.0);
-        var ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
+        const ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
         const origin = math.float4(-1.0, 0.0, 0.0, 1.0);
         const p = toScreenSpaceMatrix.mul_f4(origin);
         _ = p;
-        var scale = math.Float4x4.scale_by(0.05);
+        const scale = math.Float4x4.scale_by(0.05);
         _ = scale;
         const uniforms: Uniforms = .{
             .projection_matrix = ortho,
@@ -823,10 +793,10 @@ const Fire = struct {
         const w: f32 = @floatCast(width);
         const h: f32 = @floatCast(height);
         const aspect = w / h;
-        var ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
+        const ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
         _ = ortho;
         // var pers = math.Float4x4.perspective(45 * std.math.pi  / 180.0, 1.0, 0.001, 100.0);
-        var pers = math.Float4x4.perspective(45 * std.math.pi  / 180.0, aspect, 0.001, 100.0);
+        const pers = math.Float4x4.perspective(45 * std.math.pi / 180.0, aspect, 0.001, 100.0);
         const uniforms: Uniforms = .{
             // .projection_matrix = ortho,
             .projection_matrix = pers,
@@ -853,18 +823,11 @@ const Fire = struct {
         var particles = self.particle_buffer.contents_typed(FireParticle)[0..self.particle_count];
         for (0..particles.len) |i| {
             var p: *FireParticle = &particles[i];
-            p.position = math.float2(0.0, -5.0).add(
-                math.float2(
-                    rnd.random().float(f32) * 0.2 - 0.1, 
-                    rnd.random().float(f32) * 0.2 - 0.1
-            ));
+            p.position = math.float2(0.0, -5.0).add(math.float2(rnd.random().float(f32) * 0.2 - 0.1, rnd.random().float(f32) * 0.2 - 0.1));
             p.life = 1.0;
             p.fade = (rnd.random().float(f32) * 100.0) / 1000.0 + 0.003;
             p.color = math.Float4.WHITE;
-            p.velocity = math.float2(
-                rnd.random().float(f32) * 2.0 - 1.0, 
-                rnd.random().float(f32) * 2.0 - 1.0
-            ).norm().mul_f(rnd.random().float(f32) * 2000);
+            p.velocity = math.float2(rnd.random().float(f32) * 2.0 - 1.0, rnd.random().float(f32) * 2.0 - 1.0).norm().mul_f(rnd.random().float(f32) * 2000);
             // p.velocity = math.float2(
             //     (rnd.random().float(f32) * 50.0 - 25.0) * 100.0,
             //     (rnd.random().float(f32) * 50.0 - 25.0) * 100.0
@@ -877,7 +840,7 @@ const Fire = struct {
             // );
             p.gravity = math.float2(0.0, 0.8);
         }
-        self.particle_buffer.did_modify_range(.{.location = 0, .length = @sizeOf(FireParticle) * self.particle_count});
+        self.particle_buffer.did_modify_range(.{ .location = 0, .length = @sizeOf(FireParticle) * self.particle_count });
     }
 
     fn build_pipelines(self: *Fire, device: metal.MTLDevice, view: metal.MTKView) void {
@@ -890,7 +853,7 @@ const Fire = struct {
         metal.check_error(err) catch @panic("failed to build library");
 
         const func_compute = func_compute: {
-             const str = metal.NSString.new_with_bytes(
+            const str = metal.NSString.new_with_bytes(
                 "compute_main",
                 .utf8,
             );
@@ -931,7 +894,7 @@ const Fire = struct {
             desc.set_attribute(2, .{ .format = .float2, .offset = @offsetOf(FireParticle, "position"), .buffer_index = 1 });
             desc.set_attribute(3, .{ .format = .float2, .offset = @offsetOf(FireParticle, "color"), .buffer_index = 1 });
             desc.set_layout(0, .{ .stride = @sizeOf(Fire.Vertex) });
-            desc.set_layout(1, .{ .stride = @sizeOf(FireParticle), .step_function = .PerInstance});
+            desc.set_layout(1, .{ .stride = @sizeOf(FireParticle), .step_function = .PerInstance });
             break :vertex_descriptor desc;
         };
 
@@ -990,7 +953,7 @@ const Fire = struct {
         // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.NSNumber.from_int(0), metal.MTKTextureLoaderOptionSRGB });
         // // tex_opts.msgSend(void, objc.sel("setObject:forKey:"), .{ metal.MTLPixelFormatR8Unorm, metal.MTKTextureLoaderOptionPixelFormat });
 
-        // const tex_loader_class = objc.Class.getClass("MTKTextureLoader").?;
+        // const tex_loader_class = objc.getClass("MTKTextureLoader").?;
         // var tex_loader = tex_loader_class.msgSend(objc.Object, objc.sel("alloc"), .{});
         // tex_loader = tex_loader.msgSend(objc.Object, objc.sel("initWithDevice:"), .{device});
 
@@ -1006,16 +969,12 @@ const Fire = struct {
         // //     tex_opts,
         // // });
         // metal.check_error(err) catch @panic("failed to make texture");
-        const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(
-            device, 
-            @embedFile("./assets/Particle.bmp")[0..], 
-            metal.MTLPixelFormatRGBA8Unorm
-        );
+        const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(device, @embedFile("./assets/Particle.bmp")[0..], metal.MTLPixelFormatRGBA8Unorm);
         // const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(device, @embedFile("./assets/fire2.png")[0..]);
         // const tex = @import("./texture_loader.zig").load_texture_from_img_bytes(device, @embedFile("./assets/flare.png")[0..]);
         self.texture = tex.obj;
 
-        const sampler_descriptor = objc.Class.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
+        const sampler_descriptor = objc.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
         sampler_descriptor.setProperty("minFilter", metal.MTLSamplerMinMagFilter.linear);
         sampler_descriptor.setProperty("magFilter", metal.MTLSamplerMinMagFilter.linear);
         sampler_descriptor.setProperty("sAddressMode", metal.MTLSamplerAddressMode.ClampToZero);

@@ -21,16 +21,19 @@ pub fn build(b: *std.build.Builder) !void {
     const zigobjc = b.createModule(.{
         .source_file = .{ .path = "lib/zig-objc/src/main.zig" },
     });
-    const earcut = b.createModule(.{
-        .source_file = .{ .path = "lib/mach-earcut/src/main.zig" },
-    });
-    const modules = [_]ModuleDef{ .{ .mod = zigobjc, .name = "zig-objc" }, .{ .mod = earcut, .name = "earcut" } };
+    // const earcut = b.createModule(.{
+    //     .source_file = .{ .path = "lib/mach-earcut/src/main.zig" },
+    // });
+    const modules = [_]ModuleDef{
+        .{ .mod = zigobjc, .name = "zig-objc" },
+        // .{ .mod = earcut, .name = "earcut" },
+    };
 
     build_tests(b, &modules, target, optimize);
 
     // Make static libraries for aarch64 and x86_64
-    var static_lib_aarch64 = try build_static_lib(b, target, optimize, "editor_aarch64", "libeditor-aarch64-bundle.a", .aarch64, &modules);
-    var static_lib_x86_64 = try build_static_lib(b, target, optimize, "editor_x86_64", "libeditor-x86_64-bundle.a", .x86_64, &modules);
+    const static_lib_aarch64 = try build_static_lib(b, target, optimize, "editor_aarch64", "libeditor-aarch64-bundle.a", .aarch64, &modules);
+    const static_lib_x86_64 = try build_static_lib(b, target, optimize, "editor_x86_64", "libeditor-x86_64-bundle.a", .x86_64, &modules);
 
     // Make a universal static library
     const static_lib_universal = LipoStep.create(b, .{
@@ -52,6 +55,7 @@ pub fn build(b: *std.build.Builder) !void {
 
     xcframework.step.dependOn(static_lib_universal.step);
     b.default_step.dependOn(xcframework.step);
+    b.default_step.dependOn(static_lib_aarch64.step);
 }
 
 fn build_treesitter(
@@ -71,9 +75,9 @@ fn build_treesitter(
     });
 
     lib.linkLibC();
-    lib.addCSourceFile("lib/tree-sitter/lib/src/lib.c", &.{});
-    lib.addIncludePath("lib/tree-sitter/lib/include");
-    lib.addIncludePath("lib/tree-sitter/lib/src");
+    lib.addCSourceFile(.{ .file = .{ .path = "lib/tree-sitter/lib/src/lib.c" }, .flags = &.{} });
+    lib.addIncludePath(.{ .path = "lib/tree-sitter/lib/include" });
+    lib.addIncludePath(.{ .path = "lib/tree-sitter/lib/src" });
 
     b.installArtifact(lib);
     return lib;
@@ -118,10 +122,11 @@ fn build_static_lib(
     }
 
     var lib_list = std.ArrayList(std.build.FileSource).init(alloc);
-    try lib_list.append(.{ .generated = &static_lib.output_path_source });
-    try lib_list.append(.{ .generated = &treesitter.output_path_source });
+    try lib_list.append(static_lib.getEmittedBin());
+    try lib_list.append(treesitter.getEmittedBin());
     if (cpu_arch == .aarch64) {
-        try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/libtree-sitter.a" });
+        // try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/libtree-sitter.a" });
+        try lib_list.append(.{ .path = "lib/tree-sitter/libtree-sitter.a" });
     } else {
         // try lib_list.append(.{ .path = "/Users/zackradisic/Code/tether/editor/lib/tree-sitter/libtree-sitter.a" });
     }
@@ -137,6 +142,7 @@ fn build_static_lib(
     b.installArtifact(static_lib);
 
     return .{ .out = libtool.output, .step = libtool.step };
+    // return .{ .out = static_lib.getEmittedBin(), .step = &static_lib.step };
 }
 
 fn add_libs(compile: *std.build.Step.Compile, modules: []const ModuleDef, treesitter: *std.build.Step.Compile) void {
@@ -144,9 +150,9 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const ModuleDef, treesi
     // compile.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include");
     // compile.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/lib");
 
-    compile.addFrameworkPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/System/Library/Frameworks");
-    compile.addSystemIncludePath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/usr/include");
-    compile.addLibraryPath("/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/usr/lib");
+    compile.addFrameworkPath(.{ .cwd_relative = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/System/Library/Frameworks" });
+    compile.addSystemIncludePath(.{ .cwd_relative = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/usr/include" });
+    compile.addLibraryPath(.{ .cwd_relative = "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX13.3.sdk/usr/lib" });
 
     compile.linkFramework("CoreText");
     compile.linkFramework("MetalKit");
@@ -154,6 +160,7 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const ModuleDef, treesi
     compile.linkFramework("AppKit");
     compile.linkFramework("CoreGraphics");
     compile.linkSystemLibraryName("System");
+    compile.linkSystemLibraryName("objc");
     compile.linkLibC();
 
     compile.bundle_compiler_rt = true;
@@ -162,14 +169,14 @@ fn add_libs(compile: *std.build.Step.Compile, modules: []const ModuleDef, treesi
     }
 
     // treesitter stuff
-    compile.addCSourceFile("src/syntax/tree-sitter-zig/src/parser.c", &.{});
+    compile.addCSourceFile(.{ .file = .{ .path = "src/syntax/tree-sitter-zig/src/parser.c" }, .flags = &.{} });
     // compile.addCSourceFile("src/syntax/tree-sitter-typescript/typescript/src/parser.c", &.{});
     // compile.addCSourceFile("src/syntax/tree-sitter-typescript/typescript/src/scanner.c", &.{});
-    compile.addCSourceFile("src/syntax/tree-sitter-c/src/parser.c", &.{});
-    compile.addCSourceFile("src/syntax/tree-sitter-rust/src/parser.c", &.{});
-    compile.addCSourceFile("src/syntax/tree-sitter-rust/src/scanner.c", &.{});
+    compile.addCSourceFile(.{ .file = .{ .path = "src/syntax/tree-sitter-c/src/parser.c" }, .flags = &.{} });
+    compile.addCSourceFile(.{ .file = .{ .path = "src/syntax/tree-sitter-rust/src/parser.c" }, .flags = &.{} });
+    compile.addCSourceFile(.{ .file = .{ .path = "src/syntax/tree-sitter-rust/src/scanner.c" }, .flags = &.{} });
     compile.linkLibrary(treesitter);
-    compile.addIncludePath("lib/tree-sitter/lib/include");
+    compile.addIncludePath(.{ .path = "lib/tree-sitter/lib/include" });
     compile.step.dependOn(&treesitter.step);
 }
 

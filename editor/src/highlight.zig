@@ -37,7 +37,7 @@ errors: std.ArrayList(ErrorRange),
 const ERROR_QUERY = "(ERROR) @__tether_error";
 
 /// Initializes the highlighter with the given language and color scheme. `colors` is from calling `.to_indices()` on the theme
-/// 
+///
 /// The highlighter must be configured to handle the queries (highlights):
 ///   1. If any queries have use `#match? <REGEX>` the REGEX needs to be compiled and stored
 ///   2. The given color scheme is turned into an array indexed by the TSQuery pattern index for easy retrieval of color to highlight text
@@ -48,7 +48,7 @@ pub fn init(alloc: Allocator, language: *const ts.Language, colors: []const Capt
 
     const query = c.ts_query_new(language.lang_fn(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type) orelse @panic("Query error!");
 
-    var parser = c.ts_parser_new();
+    const parser = c.ts_parser_new();
     if (!c.ts_parser_set_language(parser, language.lang_fn())) {
         @panic("Failed to set parser!");
     }
@@ -112,20 +112,20 @@ fn tree_or_init(self: *Highlight, str: []const u8) *c.TSTree {
     if (self.tree) |ts_tree| {
         return ts_tree;
     }
-    var tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len))) orelse @panic("FAILED TO PARSE TREE!");
+    const tree = c.ts_parser_parse_string(self.parser, null, str.ptr, @as(u32, @intCast(str.len))) orelse @panic("FAILED TO PARSE TREE!");
     self.tree = tree;
     return tree;
 }
 
 /// Adapted with minor changes from:
 /// https://github.com/tree-sitter/tree-sitter/blob/1c65ca24bc9a734ab70115188f465e12eecf224e/highlight/src/lib.rs#L366
-/// 
+///
 /// Basically handles finding the best match for capture names with multiple
 /// levels. For example, if the capture names of the query are @keyword.function
 /// and @keyword.operator, and the theme defines colors for only @keyword, then
 /// it makes sure @keyword.function and @keyword.operator get the color for
 /// @keyword.
-/// 
+///
 /// The return value is an array indexed by capture ID (basically index in the TSQuery) that contains the color for that capture.
 fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []const CaptureConfig) ![]?math.Float4 {
     const count: u32 = c.ts_query_capture_count(q);
@@ -144,7 +144,7 @@ fn configure_highlights(alloc: Allocator, q: *c.TSQuery, recognized_names: []con
 
         // Now find the best matching capture. "Best" meaning a capture in `recognized_names` with the most matching "parts".
         // "parts" are separated by dots: e.g. "@keyword.function" has two parts => "keyword", and "function"
-        var temp_part_iter = std.mem.split(u8, capture_name, ".");
+        const temp_part_iter = std.mem.split(u8, capture_name, ".");
         var part_iter = temp_part_iter;
         while (part_iter.next()) |part| {
             try capture_parts.append(part);
@@ -209,7 +209,7 @@ pub fn update_tree(self: *Highlight, str: []const u8, edits: ?[]const ts.Edit) v
     defer {
         if (old_tree) |old| c.ts_tree_delete(old);
     }
-    
+
     // We reset the parser each time this is called
     defer c.ts_parser_reset(self.parser);
     if (!c.ts_parser_set_language(self.parser, self.lang.lang_fn())) {
@@ -220,7 +220,7 @@ pub fn update_tree(self: *Highlight, str: []const u8, edits: ?[]const ts.Edit) v
 }
 
 /// This function assigns highlight colors to the text vertices in `vertices: []math.Vertex` parameter.
-/// 
+///
 /// NOTE: This function expects `self.tree` to either:
 ///       - contain a TSTree parsed to the latest version of the text
 ///       - OR be null, in which case it will parse and set `self.tree` itself
@@ -230,8 +230,8 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
     // Create a tree if we don't have one already
     const tree = self.tree_or_init(str);
 
-    var root_node = c.ts_tree_root_node(tree);
-    var query_cursor = c.ts_query_cursor_new() orelse @panic("Failed to make query cursor.");
+    const root_node = c.ts_tree_root_node(tree);
+    const query_cursor = c.ts_query_cursor_new() orelse @panic("Failed to make query cursor.");
     c.ts_query_cursor_set_byte_range(query_cursor, window_start_byte, window_end_byte);
     defer c.ts_query_cursor_delete(query_cursor);
 
@@ -257,8 +257,8 @@ pub fn highlight(self: *Highlight, alloc: Allocator, str: []const u8, vertices: 
         var length: u32 = undefined;
         const predicates_ptr = c.ts_query_predicates_for_pattern(self.query, result.match.pattern_index, &length);
 
-        const matches = length == 0 or 
-                      (length > 1 and self.satisfies_text_predicates(capture, predicates_ptr[0..length], str));
+        const matches = length == 0 or
+            (length > 1 and self.satisfies_text_predicates(capture, predicates_ptr[0..length], str));
 
         if (!matches) continue;
 
@@ -312,7 +312,7 @@ pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool, window_s
     const tree = self.tree_or_init(src);
     const root_node = c.ts_tree_root_node(tree);
 
-    var query_cursor = c.ts_query_cursor_new();
+    const query_cursor = c.ts_query_cursor_new();
     defer c.ts_query_cursor_delete(query_cursor);
     c.ts_query_cursor_set_byte_range(query_cursor, window_start_byte, window_end_byte);
 
@@ -325,20 +325,18 @@ pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool, window_s
 
         const capture_maybe: ?*const c.TSQueryCapture = &match.captures[0];
         const capture = capture_maybe.?;
-        
+
         const start = c.ts_node_start_byte(capture.node);
         const end = c.ts_node_end_byte(capture.node);
 
-        if (self.errors.items.len == 0) { 
-            try self.errors.append(
-                ErrorRange{
-                    .start = start,
-                    .end = end,
-                }
-            );
-            continue; 
+        if (self.errors.items.len == 0) {
+            try self.errors.append(ErrorRange{
+                .start = start,
+                .end = end,
+            });
+            continue;
         }
-        
+
         // Potentially merge overlapping ranges.
         // We assume the invariant that TSQueryMatches come in ordered by the
         // start byte. This means that if there is an overlapping range, it will
@@ -351,14 +349,12 @@ pub fn find_errors(self: *Highlight, src: []const u8, text_dirty: bool, window_s
                 last.end = end;
             }
             continue;
-        } 
+        }
 
-        try self.errors.append(
-            ErrorRange{
-                .start = start,
-                .end = end,
-            }
-        );
+        try self.errors.append(ErrorRange{
+            .start = start,
+            .end = end,
+        });
     }
 }
 
@@ -500,7 +496,7 @@ const CaptureConfig = struct {
     color: math.Float4,
 };
 
-pub const ErrorRange = struct{
+pub const ErrorRange = struct {
     start: u32,
     end: u32,
 };
@@ -508,7 +504,7 @@ pub const ErrorRange = struct{
 const HashMap = std.AutoHashMap;
 
 /// Contains a list of `HighlightCapture`: basically a list of text that need to be highlighted with a specific color.
-/// 
+///
 /// HighlightCaptures are a range of text which need to be highlighted. They are
 /// directly created from tree-sitter's query captures. The color is from taking
 /// the capture name and looking it up from the current theme.
@@ -565,7 +561,6 @@ pub const HighlightBuf = struct {
             return true;
         }
     };
-
 
     fn find_starting_insert_idx(self: *const HighlightBuf, start: u32) ?u32 {
         var size: usize = self.list.items.len;
@@ -726,7 +721,7 @@ test "configure highlights levels" {
 
     const query = c.ts_query_new(ts.tree_sitter_zig(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type) orelse @panic("Failed to set up query");
 
-    var parser = c.ts_parser_new();
+    const parser = c.ts_parser_new();
     if (!c.ts_parser_set_language(parser, ts.tree_sitter_zig())) {
         @panic("Failed to set parser!");
     }
@@ -774,7 +769,7 @@ test "configure highlights levels edge case" {
 
     const query = c.ts_query_new(ts.tree_sitter_zig(), language.highlights.ptr, @as(u32, @intCast(language.highlights.len)), &error_offset, &error_type) orelse @panic("Failed to set up query");
 
-    var parser = c.ts_parser_new();
+    const parser = c.ts_parser_new();
     if (!c.ts_parser_set_language(parser, ts.tree_sitter_zig())) {
         @panic("Failed to set parser!");
     }

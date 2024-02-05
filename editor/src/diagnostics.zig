@@ -66,20 +66,7 @@ pub fn init(alloc: Allocator, device: metal.MTLDevice, view: metal.MTKView) Diag
     return diagnostics;
 }
 
-pub fn update(
-    self: *Diagnostics, 
-    frame_arena: *ArenaAllocator,
-    rope: *Rope,
-    errors: []highlight.ErrorRange, 
-    vertices: []math.Vertex, 
-    starting_y: f32,
-    window_start_byte: u32, 
-    window_end_byte: u32, 
-    screen_size: math.Float2,
-    ascent: f32,
-    descent: f32,
-    text_dirty: bool
-) !void {
+pub fn update(self: *Diagnostics, frame_arena: *ArenaAllocator, rope: *Rope, errors: []highlight.ErrorRange, vertices: []math.Vertex, starting_y: f32, window_start_byte: u32, window_end_byte: u32, screen_size: math.Float2, ascent: f32, descent: f32, text_dirty: bool) !void {
     if (!text_dirty) return;
     self.instances.clearRetainingCapacity();
 
@@ -103,7 +90,6 @@ pub fn update(
         }
     }
 
-
     const squiggly_height = 40.0;
     const baseline_offset = -10.0;
     const aspect = screen_size.x / screen_size.y;
@@ -116,19 +102,14 @@ pub fn update(
             const vert_index = (i - window_start_byte) * 6 + 6;
             const end_vert_index = vert_index + 6;
             const verts = vertices[vert_index..end_vert_index];
-            
+
             const dummy_baseline: LineBaseline = .{
                 .start = @intCast(i),
                 .end = 420,
                 .baseline = 69.0,
             };
-            
-            const baseline_idx = binary_search.find_index(
-                LineBaseline, 
-                line_baselines.items, 
-                &dummy_baseline, 
-                Instance.cmp_linebase
-            ) orelse @panic("UH OH!");
+
+            const baseline_idx = binary_search.find_index(LineBaseline, line_baselines.items, &dummy_baseline, Instance.cmp_linebase) orelse @panic("UH OH!");
 
             const baseline = line_baselines.items[baseline_idx].baseline + baseline_offset;
 
@@ -174,9 +155,9 @@ pub fn render(self: *Diagnostics, dt: f32, command_encoder: metal.MTLRenderComma
 
     const w: f32 = @floatCast(width);
     const h: f32 = @floatCast(height);
-    
+
     const aspect = w / h;
-    var ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
+    const ortho = math.Float4x4.ortho(-aspect, aspect, -1.0, 1.0, 0.001, 100.0);
     const uniforms: Uniforms = .{
         .projection_matrix = ortho,
         // .model_view_matrix = scale,
@@ -278,9 +259,9 @@ fn build_pipeline(self: *Diagnostics, device: metal.MTLDevice, view: metal.MTKVi
     const pipeline = device.new_render_pipeline(pipeline_desc) catch @panic("failed to make pipeline");
     self.pipeline = pipeline;
 
-    // Pre initialize 
+    // Pre initialize
     const initial_size = 1024 / @sizeOf(Instance);
-    self.instance_buffer = device.new_buffer_with_length(@sizeOf(Instance) * initial_size, .storage_mode_managed) orelse @panic("OOM"); 
+    self.instance_buffer = device.new_buffer_with_length(@sizeOf(Instance) * initial_size, .storage_mode_managed) orelse @panic("OOM");
 }
 
 const Vertex = extern struct {
@@ -294,7 +275,7 @@ const Instance = extern struct {
     right: f32,
 
     fn debug(self: Instance) void {
-        print("INSTANCE: t={d} b={d} l={d} r={d}\n", .{self.top, self.bot, self.left, self.right});
+        print("INSTANCE: t={d} b={d} l={d} r={d}\n", .{ self.top, self.bot, self.left, self.right });
     }
 
     fn cmp_linebase(search: *const LineBaseline, check: *const LineBaseline) binary_search.Order {
@@ -310,12 +291,7 @@ const Instance = extern struct {
             .baseline = 69.0,
         };
 
-        const baseline_idx = binary_search.find_index(
-            LineBaseline, 
-            line_baselines, 
-            &dummy_baseline, 
-            Instance.cmp_linebase
-        ) orelse @panic("UH OH!");
+        const baseline_idx = binary_search.find_index(LineBaseline, line_baselines, &dummy_baseline, Instance.cmp_linebase) orelse @panic("UH OH!");
 
         const squiggly_height = 40.0;
         const baseline_offset = -10.0;
@@ -340,17 +316,16 @@ const Instance = extern struct {
     }
 };
 
-pub const Uniforms = extern struct { 
-    model_view_matrix: math.Float4x4 align(16), 
+pub const Uniforms = extern struct {
+    model_view_matrix: math.Float4x4 align(16),
     projection_matrix: math.Float4x4 align(16),
     color_in: math.Float3 align(16),
     color_out: math.Float3 align(16),
     time: f32 align(16),
 };
 
-const LineBaseline = struct { 
-    start: u32, 
-    end: u32, 
+const LineBaseline = struct {
+    start: u32,
+    end: u32,
     baseline: f32,
 };
-

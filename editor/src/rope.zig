@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const print = std.debug.print;
 const dbgassert = std.debug.assert;
+const objc = @import("zig-objc");
 
 const strutil = @import("./strutil.zig");
 
@@ -30,7 +31,7 @@ pub const TextPoint = extern struct {
 
 /// Data structure to make text editing operations more efficient for longer text.
 /// This implementation uses a doubly linked list where each node is a line.
-/// 
+///
 /// Some invariants:
 /// - There is at least always 1 node, even if text is empty that 1 node will have empty items
 /// - Each node = 1 line, the newline char is on the preceeding node
@@ -221,7 +222,7 @@ pub const Rope = struct {
 
     /// Converts a byte position in the text to a TextPoint, allowing positions
     /// that go beyond the length to be represented as a TextPoint.
-    /// 
+    ///
     /// This is mostly used when interfacing with the tree-sitter API. The
     /// `TSEdit` struct has `new_end_point` and `old_end_point` fields which can
     /// possibly represent points outside of the text. For example, you can
@@ -247,21 +248,21 @@ pub const Rope = struct {
             node = n.next;
         }
 
-        if (comptime allow_out_of_bounds) 
+        if (comptime allow_out_of_bounds)
             unreachable;
 
         return null;
     }
 
     pub fn remove_line(self: *Self, line: u32) !void {
-        var node = self.node_at_line(line) orelse unreachable;
+        const node = self.node_at_line(line) orelse unreachable;
 
         try self.remove_node(node);
     }
 
     pub fn remove_text(self: *Self, text_start_: usize, text_end: usize) !void {
         var text_start = text_start_;
-        var index_result = self.char_index_node(text_start, null) orelse return;
+        const index_result = self.char_index_node(text_start, null) orelse return;
         var node: *Node = index_result.node;
         var i: usize = index_result.i;
 
@@ -270,8 +271,8 @@ pub const Rope = struct {
             // If within the cut range
             if (text_start >= i and text_start < i + len) {
                 // Convert global string index => local node string index
-                var node_cut_start = (text_start - i);
-                var node_cut_end: usize = if (text_end - i > len) len else text_end - i;
+                const node_cut_start = (text_start - i);
+                const node_cut_end: usize = if (text_end - i > len) len else text_end - i;
 
                 const cut_len = node_cut_end - node_cut_start;
                 self.len -= cut_len;
@@ -304,7 +305,7 @@ pub const Rope = struct {
         // h e l l o
         node.data.items.len = if (node.data.items.len == 0) 0 else loc;
 
-        var new_node = try self.nodes.insert(self.node_alloc, new_node_data, node);
+        const new_node = try self.nodes.insert(self.node_alloc, new_node_data, node);
         return new_node;
     }
 
@@ -435,7 +436,7 @@ fn _SIMDRopeCharIterator() type {
         }
 
         fn next(self: *@This()) ?Vector {
-            var buf = self.next_impl() orelse return null;
+            const buf = self.next_impl() orelse return null;
             // reverse_buf(&buf);
             return buf;
         }
@@ -561,9 +562,9 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
 
         /// Look at the current char without consuming it
         pub fn peek(self: *@This()) ?u8 {
-            var node_cpy = self.node;
-            var cursor_cpy = self.cursor;
-            var past_boundary_cpy = self.past_boundary;
+            const node_cpy = self.node;
+            const cursor_cpy = self.cursor;
+            const past_boundary_cpy = self.past_boundary;
 
             const ret = self.next();
 
@@ -576,9 +577,9 @@ fn _RopeCharIterator(comptime Reverse: bool) type {
 
         /// Look at the next char without consuming anythign
         pub fn peek2(self: *@This()) ?u8 {
-            var node_cpy = self.node;
-            var cursor_cpy = self.cursor;
-            var past_boundary_cpy = self.past_boundary;
+            const node_cpy = self.node;
+            const cursor_cpy = self.cursor;
+            const past_boundary_cpy = self.past_boundary;
 
             _ = self.next();
             const ret = self.next();
@@ -788,15 +789,15 @@ test "linked list impl" {
     const alloc = std.heap.c_allocator;
     var list = DoublyLinkedList([]const u8){};
 
-    var a = try list.insert(alloc, "HELLO", null);
-    var b = try list.insert(alloc, "NICE", a);
+    const a = try list.insert(alloc, "HELLO", null);
+    const b = try list.insert(alloc, "NICE", a);
 
     try std.testing.expectEqual(a.next, b);
     try std.testing.expectEqual(b.prev, a);
     try std.testing.expectEqual(list.first, a);
     try std.testing.expectEqual(list.last, b);
 
-    var c = try list.insert(alloc, "in between", a);
+    const c = try list.insert(alloc, "in between", a);
     try std.testing.expectEqual(a.next, c);
     try std.testing.expectEqual(c.prev, a);
     try std.testing.expectEqual(c.next, b);
@@ -832,7 +833,7 @@ test "basic insertion2" {
     var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "pls work wtf");
     pos.col -= 5;
     pos = try rope.insert_text(pos, "!!!");
-    var str = try rope.as_str(std.heap.c_allocator);
+    const str = try rope.as_str(std.heap.c_allocator);
     print("str: {s}\n", .{str});
 }
 
@@ -840,8 +841,8 @@ test "multi-line insertion" {
     var rope = Rope{};
     try rope.init();
 
-    var pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "hello\nfriends\n");
-    var expected_pos: TextPoint = .{ .line = 2, .col = 0 };
+    const pos = try rope.insert_text(.{ .line = 0, .col = 0 }, "hello\nfriends\n");
+    const expected_pos: TextPoint = .{ .line = 2, .col = 0 };
     try std.testing.expectEqual(expected_pos, pos);
 
     var str = try rope.as_str(std.heap.c_allocator);
@@ -895,208 +896,22 @@ test "delete all" {
     _ = try rope.insert_text(.{ .line = 0, .col = 0 }, insertion_text);
     try rope.remove_text(0, insertion_text.len);
 
-    var str = try rope.as_str(std.heap.c_allocator);
+    const str = try rope.as_str(std.heap.c_allocator);
     try std.testing.expectEqualStrings("", str);
 }
 
 test "remove range" {
     var input = [_]u8{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-    var expected = [_]u8{9};
+    const expected: []const u8 = &[_]u8{9};
 
     const result = remove_range(&input, 0, 9);
-    var known_at_runtime_zero: usize = 0;
+    const known_at_runtime_zero: usize = 0;
 
-    try std.testing.expectEqualDeep(expected[known_at_runtime_zero..expected.len], result[known_at_runtime_zero..result.len]);
+    const resultt: []const u8 = result[known_at_runtime_zero..result.len];
+    try std.testing.expectEqualDeep(expected, resultt);
 }
 
-const TagSize = u15;
-const AddressableSize = u49;
-
-pub const TaggedPointer = packed struct {
-    _ptr: AddressableSize,
-    data: TagSize,
-
-    pub inline fn init(ptr: anytype, data: TagSize) TaggedPointer {
-        const Ptr = @TypeOf(ptr);
-
-        if (comptime @typeInfo(Ptr) != .Pointer and Ptr != ?*anyopaque) {
-            @compileError(@typeName(Ptr) ++ " must be a ptr, received: " ++ @tagName(@typeInfo(Ptr)));
-        }
-
-        const address = @intFromPtr(ptr);
-
-        return TaggedPointer{
-            ._ptr = @as(AddressableSize, @truncate(address)),
-            .data = data,
-        };
-    }
-
-    pub inline fn get(this: TaggedPointer, comptime Type: type) *Type {
-        return @as(*Type, @ptrFromInt(@as(usize, @intCast(this._ptr))));
-    }
-
-    pub inline fn from(val: anytype) TaggedPointer {
-        const ValueType = @TypeOf(val);
-        return switch (ValueType) {
-            f64, i64, u64 => @as(TaggedPointer, @bitCast(val)),
-            ?*anyopaque, *anyopaque => @as(TaggedPointer, @bitCast(@intFromPtr(val))),
-            else => @compileError("Unsupported type: " ++ @typeName(ValueType)),
-        };
-    }
-
-    pub inline fn to(this: TaggedPointer) *anyopaque {
-        return @as(*anyopaque, @ptrFromInt(@as(u64, @bitCast(this))));
-    }
-};
-
-// partially emulates behaviour of @typeName in previous Zig versions,
-// converting "some.namespace.MyType" to "MyType"
-pub fn typeBaseName(comptime fullname: []const u8) []const u8 {
-
-    // leave type name like "namespace.WrapperType(namespace.MyType)" as it is
-    const baseidx = comptime std.mem.indexOf(u8, fullname, "(");
-    if (baseidx != null) return fullname;
-
-    const idx = comptime std.mem.lastIndexOf(u8, fullname, ".");
-
-    const name = if (idx == null) fullname else fullname[(idx.? + 1)..];
-    return comptime std.fmt.comptimePrint("{s}", .{name});
-}
-
-pub fn TaggedPointerUnion(comptime Types: anytype) type {
-    const TagType: type = tag_break: {
-        if (std.meta.trait.isIndexable(@TypeOf(Types))) {
-            var enumFields: [Types.len]std.builtin.Type.EnumField = undefined;
-            var decls = [_]std.builtin.Type.Declaration{};
-
-            inline for (Types, 0..) |field, i| {
-                enumFields[i] = .{
-                    .name = comptime typeBaseName(@typeName(field)),
-                    .value = 1024 - i,
-                };
-            }
-
-            break :tag_break @Type(.{
-                .Enum = .{
-                    .tag_type = TagSize,
-                    .fields = &enumFields,
-                    .decls = &decls,
-                    .is_exhaustive = false,
-                },
-            });
-        } else {
-            const Fields: []const std.builtin.Type.StructField = std.meta.fields(@TypeOf(Types));
-            var enumFields: [Fields.len]std.builtin.Type.EnumField = undefined;
-            var decls = [_]std.builtin.Type.Declaration{};
-
-            inline for (Fields, 0..) |field, i| {
-                enumFields[i] = .{
-                    .name = comptime typeBaseName(@typeName(field.default_value.?)),
-                    .value = 1024 - i,
-                };
-            }
-
-            break :tag_break @Type(.{
-                .Enum = .{
-                    .tag_type = TagSize,
-                    .fields = &enumFields,
-                    .decls = &decls,
-                    .is_exhaustive = false,
-                },
-            });
-        }
-    };
-
-    return struct {
-        pub const Tag = TagType;
-        repr: TaggedPointer,
-
-        const This = @This();
-        fn assert_type(comptime Type: type) void {
-            var name = comptime typeBaseName(@typeName(Type));
-            if (!comptime @hasField(Tag, name)) {
-                @compileError("TaggedPointerUnion does not have " ++ name ++ ".");
-            }
-        }
-        pub inline fn get(this: This, comptime Type: anytype) ?*Type {
-            comptime assert_type(Type);
-
-            return if (this.is(Type)) this.as(Type) else null;
-        }
-
-        pub inline fn tag(this: This) TagType {
-            return @as(TagType, @enumFromInt(this.repr.data));
-        }
-
-        /// unsafely cast a tagged pointer to a specific type, without checking that it's really that type
-        pub inline fn as(this: This, comptime Type: type) *Type {
-            comptime assert_type(Type);
-            return this.repr.get(Type);
-        }
-
-        pub inline fn is(this: This, comptime Type: type) bool {
-            comptime assert_type(Type);
-            return this.repr.data == comptime @intFromEnum(@field(Tag, typeBaseName(@typeName(Type))));
-        }
-
-        pub fn set(this: *@This(), _ptr: anytype) void {
-            this.* = @This().init(_ptr);
-        }
-
-        pub inline fn isValidPtr(_ptr: ?*anyopaque) bool {
-            return This.isValid(This.from(_ptr));
-        }
-
-        pub inline fn isValid(this: This) bool {
-            return switch (this.repr.data) {
-                @intFromEnum(
-                    @field(Tag, typeBaseName(@typeName(Types[Types.len - 1]))),
-                )...@intFromEnum(
-                    @field(Tag, typeBaseName(@typeName(Types[0]))),
-                ) => true,
-                else => false,
-            };
-        }
-
-        pub inline fn from(_ptr: ?*anyopaque) This {
-            return This{ .repr = TaggedPointer.from(_ptr) };
-        }
-
-        pub inline fn ptr(this: This) *anyopaque {
-            return this.repr.to();
-        }
-
-        pub inline fn ptrUnsafe(this: This) *anyopaque {
-            @setRuntimeSafety(false);
-            return this.repr.to();
-        }
-
-        pub inline fn init(_ptr: anytype) This {
-            const Type = std.meta.Child(@TypeOf(_ptr));
-            return initWithType(Type, _ptr);
-        }
-
-        pub inline fn initWithType(comptime Type: type, _ptr: anytype) This {
-            const name = comptime typeBaseName(@typeName(Type));
-
-            // there will be a compiler error if the passed in type doesn't exist in the enum
-            return This{ .repr = TaggedPointer.init(_ptr, @intFromEnum(@field(Tag, name))) };
-        }
-    };
-}
-
-test "tagged pointer" {
-    const IntPrimitive = struct { val: u32 = 0 };
-    const StringPrimitive = struct { val: []const u8 = "" };
-    const Object = struct { blah: u32, val: u32 };
-    // const Invalid = struct {
-    //     wrong: bool = true,
-    // };
-    const Union = TaggedPointerUnion(.{ IntPrimitive, StringPrimitive, Object });
-    var str = try std.heap.c_allocator.create(StringPrimitive);
-    str.* = StringPrimitive{ .val = "hello!" };
-    var un = Union.init(str);
-    try std.testing.expect(un.is(StringPrimitive));
-    try std.testing.expectEqualStrings(un.as(StringPrimitive).val, "hello!");
-    try std.testing.expect(!un.is(IntPrimitive));
+test "yoops" {
+    const class = objc.getClass("NSPasteboard");
+    try std.testing.expect(class != null);
 }

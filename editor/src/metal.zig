@@ -254,7 +254,7 @@ pub const NSURL = struct {
     pub usingnamespace DefineObject(@This());
 
     pub fn file_url_with_path(path: NSString) Self {
-       return Self.from_obj(Self.get_class().msgSend(objc.Object, objc.sel("fileURLWithPath:"), .{path}));
+        return Self.from_obj(Self.get_class().msgSend(objc.Object, objc.sel("fileURLWithPath:"), .{path}));
     }
 };
 
@@ -272,7 +272,7 @@ pub const NSImage = struct {
     }
 
     pub fn cgimage_for_proposed_rect(self: NSImage, rect: ?*CGRect, context: ?*anyopaque, hints: ?*anyopaque) objc.c.id {
-        return self.obj.msgSend(objc.c.id, objc.sel("CGImageForProposedRect:context:hints:"), .{rect, context, hints});
+        return self.obj.msgSend(objc.c.id, objc.sel("CGImageForProposedRect:context:hints:"), .{ rect, context, hints });
     }
 
     pub fn size(self: NSImage) CGSize {
@@ -327,7 +327,7 @@ pub const NSDictionary = struct {
     pub usingnamespace DefineObject(@This());
 
     pub fn new_mutable() objc.Object {
-        const Class = objc.Class.getClass("NSMutableDictionary").?;
+        const Class = objc.getClass("NSMutableDictionary").?;
         var dict = Class.msgSend(objc.Object, objc.sel("alloc"), .{});
         dict = dict.msgSend(objc.Object, objc.sel("init"), .{});
         return dict;
@@ -344,7 +344,7 @@ pub const NSData = struct {
     pub usingnamespace DefineObject(@This());
 
     pub fn new_with_bytes_no_copy(bytes: []const u8, free_when_done: bool) Self {
-        const obj = Self.get_class().msgSend(objc.Object, objc.sel("dataWithBytesNoCopy:length:freeWhenDone:"), .{bytes.ptr, bytes.len, free_when_done});
+        const obj = Self.get_class().msgSend(objc.Object, objc.sel("dataWithBytesNoCopy:length:freeWhenDone:"), .{ bytes.ptr, bytes.len, free_when_done });
         return Self.from_obj(obj);
     }
 };
@@ -468,15 +468,15 @@ pub const MTLComputeCommandEncoder = struct {
     }
 
     pub fn set_buffer(self: Self, buffer: MTLBuffer, offset: NSUInteger, idx: NSUInteger) void {
-        self.obj.msgSend(void, objc.sel("setBuffer:offset:atIndex:"), .{buffer, offset, idx});
+        self.obj.msgSend(void, objc.sel("setBuffer:offset:atIndex:"), .{ buffer, offset, idx });
     }
 
     pub fn dispatch_threadgroups(self: Self, threadgroups_per_grid: MTLSize, threads_per_threadgroup: MTLSize) void {
-        self.obj.msgSend(void, objc.sel("dispatchThreadgroups:threadsPerThreadgroup:"), .{threadgroups_per_grid, threads_per_threadgroup});
+        self.obj.msgSend(void, objc.sel("dispatchThreadgroups:threadsPerThreadgroup:"), .{ threadgroups_per_grid, threads_per_threadgroup });
     }
 
     pub fn set_bytes(self: Self, bytes: []const u8, idx: NSUInteger) void {
-        self.obj.msgSend(void, objc.sel("setBytes:length:atIndex:"), .{bytes.ptr, bytes.len, idx});
+        self.obj.msgSend(void, objc.sel("setBytes:length:atIndex:"), .{ bytes.ptr, bytes.len, idx });
     }
 
     pub fn end_encoding(self: Self) void {
@@ -507,7 +507,7 @@ pub const MTLRenderCommandEncoder = struct {
     }
 
     pub fn set_fragment_bytes(self: Self, bytes: []const u8, index: NSUInteger) void {
-        return self.obj.msgSend(void, objc.sel("setFragmentBytes:length:atIndex:"), .{bytes.ptr, bytes.len, index});
+        return self.obj.msgSend(void, objc.sel("setFragmentBytes:length:atIndex:"), .{ bytes.ptr, bytes.len, index });
     }
 
     pub fn set_fragment_texture(self: Self, tex: MTLTexture, index: usize) void {
@@ -527,7 +527,7 @@ pub const MTLRenderCommandEncoder = struct {
     }
 
     pub fn draw_indexed_primitives_instanced(self: Self, primitive_type: MTLPrimitiveType, index_count: NSUInteger, index_type: MTLIndexType, index_buffer: MTLBuffer, index_buffer_offset: NSUInteger, instance_count: NSUInteger) void {
-        self.obj.msgSend(void, objc.sel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:"), .{ primitive_type, index_count, index_type, index_buffer, index_buffer_offset, instance_count});
+        self.obj.msgSend(void, objc.sel("drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:instanceCount:"), .{ primitive_type, index_count, index_type, index_buffer, index_buffer_offset, instance_count });
     }
 
     pub fn end_encoding(self: Self) void {
@@ -561,8 +561,8 @@ pub const MTLBuffer = struct {
     pub fn update(self: Self, comptime T: type, data: []const T, offset: usize) void {
         const contents_buf = self.contents();
         const contents_t = @as([*]T, @ptrCast(@alignCast(contents_buf)));
-        @memcpy(contents_t[offset..offset + data.len], data[0..]);
-        self.did_modify_range(.{.location = offset * @sizeOf(T), .length = data.len * @sizeOf(T) });
+        @memcpy(contents_t[offset .. offset + data.len], data[0..]);
+        self.did_modify_range(.{ .location = offset * @sizeOf(T), .length = data.len * @sizeOf(T) });
     }
 
     pub fn contents(self: Self) [*]u8 {
@@ -615,14 +615,14 @@ pub const MTLDevice = struct {
     }
 
     pub fn new_render_pipeline(self: Self, desc: MTLRenderPipelineDescriptor) !MTLRenderPipelineState {
-        var err: ?*anyopaque = null;
+        const err: ?*anyopaque = null;
         const pipeline_state = self.obj.msgSend(objc.Object, objc.sel("newRenderPipelineStateWithDescriptor:error:"), .{ desc.obj, err });
         try check_error(err);
         return MTLRenderPipelineState.from_obj(pipeline_state);
     }
 
     pub fn new_compute_pipeline_with_function(self: Self, function: objc.Object) !MTLComputePipelineState {
-        var err: ?*anyopaque = null;
+        const err: ?*anyopaque = null;
         const pipeline_state = self.obj.msgSend(objc.Object, objc.sel("newComputePipelineStateWithFunction:error:"), .{ function, err });
         try check_error(err);
         return MTLComputePipelineState.from_obj(pipeline_state);
@@ -661,7 +661,7 @@ pub const MTLTextureDescriptor = struct {
     pub usingnamespace DefineObject(Self);
 
     pub fn new_2d_with_pixel_format(pixel_fmt: MTLPixelFormat, width: NSUInteger, height: NSUInteger, mipmapped: bool) Self {
-        return Self.get_class().msgSend(Self, objc.sel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), .{pixel_fmt, width, height, mipmapped});
+        return Self.get_class().msgSend(Self, objc.sel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), .{ pixel_fmt, width, height, mipmapped });
     }
 };
 
@@ -671,18 +671,15 @@ pub const MTLOrigin = extern struct {
     z: NSUInteger,
 };
 
-pub const MTLRegion2D = extern struct {
-    origin: MTLOrigin,
-    size: MTLSize
-};
+pub const MTLRegion2D = extern struct { origin: MTLOrigin, size: MTLSize };
 
 pub const MTLTexture = struct {
     const Self = @This();
     obj: objc.Object,
     pub usingnamespace DefineObject(Self);
 
-    pub fn replace_region_with_bytes(self: Self, region: MTLRegion2D, mipmap_level: NSUInteger, bytes:  [*]const void, bytes_per_row: NSUInteger) void {
-        return self.obj.msgSend(void, objc.sel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), .{region, mipmap_level, bytes, bytes_per_row});
+    pub fn replace_region_with_bytes(self: Self, region: MTLRegion2D, mipmap_level: NSUInteger, bytes: [*]const void, bytes_per_row: NSUInteger) void {
+        return self.obj.msgSend(void, objc.sel("replaceRegion:mipmapLevel:withBytes:bytesPerRow:"), .{ region, mipmap_level, bytes, bytes_per_row });
     }
 };
 
@@ -843,7 +840,7 @@ fn DefineObject(comptime T: type) type {
         }
 
         pub fn get_class() objc.Class {
-            const class = objc.Class.getClass(comptime classTypeName(T)).?;
+            const class = objc.getClass(comptime classTypeName(T)).?;
             return class;
         }
 

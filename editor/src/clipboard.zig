@@ -48,8 +48,8 @@ pub fn copy_text_cstr(self: *Self, alloc: Allocator) !?struct { str: [*:0]u8, le
 
     const str = self.copy_text() orelse return null;
     const len = str.length();
-    var buf = try alloc.alloc(u8, len + 1);
-    var cstr = str.to_c_string(buf) orelse {
+    const buf = try alloc.alloc(u8, len + 1);
+    const cstr = str.to_c_string(buf) orelse {
         alloc.free(buf);
         return null;
     };

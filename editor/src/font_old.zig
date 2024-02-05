@@ -84,13 +84,13 @@ pub const Atlas = struct {
         // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Light", .ascii);
         // const iosevka = metal.NSString.new_with_bytes("Iosevka-SS04-Italic", .ascii);
         // const iosevka = metal.NSString.new_with_bytes("Fira Code", .ascii);
-        const Class = objc.Class.getClass("NSFont").?;
+        const Class = objc.getClass("NSFont").?;
         const font = Class.msgSend(objc.Object, objc.sel("fontWithName:size:"), .{ iosevka, font_size });
         const baseline_nsnumber = metal.NSNumber.from_id(ct.CTFontCopyAttribute(font.value, ct.kCTFontBaselineAdjustAttribute));
         defer baseline_nsnumber.release();
         const baseline = baseline_nsnumber.float_value();
         const bb = ct.CTFontGetBoundingBox(font.value);
-       print("BOUNDING BOX: {}\n", .{bb});
+        print("BOUNDING BOX: {}\n", .{bb});
         const glyph_info = HashMap(metal.CGGlyph, GlyphInfo).init(alloc);
 
         return Self{
@@ -468,4 +468,3 @@ pub const Atlas = struct {
         print("MAX ADV BEFORE LIGATURES: {d}\n", .{self.max_glyph_width_before_ligatures});
     }
 };
-

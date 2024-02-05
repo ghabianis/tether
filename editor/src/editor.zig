@@ -2,12 +2,10 @@
 /// A. `cursor_dirty` must be set to true anytime the cursor is modified.
 /// B. ALL modifications to text must create and append an Edit to `self.edits`:
 ///    In practice, most of the functions that modify text (`self.delete_range()`, `self.insert()`, etc.) will do this for you.
-
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const print = std.debug.print;
 const dbgassert = std.debug.assert;
-
 
 const objc = @import("zig-objc");
 const strutil = @import("./strutil.zig");
@@ -216,7 +214,7 @@ fn handle_cmd_move(self: *Self, comptime cmd_kind: Vim.CmdKindEnum, repeat: u16,
     var i: usize = 0;
     while (i < repeat) : (i += 1) {
         if (comptime cmd_kind == .Change) {
-            try self.change_line(); 
+            try self.change_line();
         } else if (cmd_kind == .Delete) {
             try self.delete_line();
         } else {
@@ -429,7 +427,6 @@ fn paste(self: *Self, before: bool) !void {
     dbgassert(self.text_dirty());
 }
 
-
 pub fn insert(self: *Self, chars: []const u8) !void {
     try self.insert_at(self.cursor, chars);
 }
@@ -452,13 +449,13 @@ pub fn insert_char(self: *Self, c: u8) !void {
 }
 
 /// Inserts text at the given cursor position.
-/// 
+///
 /// This may require indentation to be increased/decreased. For example if a
 /// newline is entered between two delimiters (e.g. "{}"), this will cause the
 /// newline to be have an increased indentation and the closing delimiter to be on a dedented new line:
 /// ```
 /// {
-///     
+///
 /// }
 /// ```
 fn insert_at_impl(self: *Self, cursor: TextPoint, chars: []const u8) !void {
@@ -525,7 +522,7 @@ fn insert_at_impl(self: *Self, cursor: TextPoint, chars: []const u8) !void {
                 const cached = self.cursor;
                 var dedent_char_buf = [_]u8{0} ** 256;
                 const dedent_char_slice = indent_level.fill_str(dedent_char_buf[0..]);
-                var ins_cursor = try self.rope.insert_text(self.cursor, chars);
+                const ins_cursor = try self.rope.insert_text(self.cursor, chars);
                 _ = try self.rope.insert_text(ins_cursor, dedent_char_slice);
                 self.cursor = cached;
             }
@@ -740,7 +737,7 @@ pub fn backspace(self: *Self) !void {
         }
     };
 
-    try self.delete_range(.{ .start = cast.num(u32, idx_pos) -| 1, .end = cast.num(u32, idx_pos)});
+    try self.delete_range(.{ .start = cast.num(u32, idx_pos) -| 1, .end = cast.num(u32, idx_pos) });
     const new_len = self.rope.len;
 
     // Sanity check in dev mode
@@ -815,7 +812,7 @@ pub fn start_of_line(self: *Self) void {
 }
 
 pub fn end_of_line(self: *Self) void {
-    var cur_node = self.rope.node_at_line(self.cursor.line) orelse @panic("No node");
+    const cur_node = self.rope.node_at_line(self.cursor.line) orelse @panic("No node");
     self.cursor.col = self.cursor_eol_for_mode(cur_node) -| 1;
     self.cursor_dirty = true;
 }
@@ -849,11 +846,11 @@ fn get_selection_impl(self: *Self, alloc: Allocator, sel: Selection) !?[]const u
 ///
 /// w/W => always goes to next word, if EOL then go to the last char
 fn forward_word(self: *Self, capital_key: bool) void {
-    var node = self.rope.node_at_line(self.cursor.line) orelse return;
+    const node = self.rope.node_at_line(self.cursor.line) orelse return;
 
     // TODO: initialize this properly
     // var prev_char: u8 = 0;
-    var starts_on_punctuation: bool = self.is_punctuation(node.data.items[self.cursor.col]);
+    const starts_on_punctuation: bool = self.is_punctuation(node.data.items[self.cursor.col]);
 
     var prev_cursor: TextPoint = .{ .line = self.cursor.line, .col = self.cursor.col };
     var iter = Rope.iter_chars(
@@ -898,7 +895,7 @@ fn backward_word(self: *Self, capital_key: bool) void {
 /// b/B and e/E are the inverse of each other so the two functions for them
 /// share this as the core logic
 fn backward_word_or_forward_word_end(self: *Self, capital_key: bool, comptime dir: Vim.MoveKindEnum) void {
-    var node = self.rope.node_at_line(self.cursor.line) orelse return;
+    const node = self.rope.node_at_line(self.cursor.line) orelse return;
     var prev_cursor: TextPoint = .{ .line = self.cursor.line, .col = self.cursor.col };
     var skip_one: bool = false;
 
@@ -925,7 +922,7 @@ fn backward_word_or_forward_word_end(self: *Self, capital_key: bool, comptime di
         }
         // Otherwise, check if already at end of word
         else if (iter.peek2()) |initial_peek2| {
-            var starts_on_punctuation = self.is_punctuation(initial_peek);
+            const starts_on_punctuation = self.is_punctuation(initial_peek);
             if (self.breaks_word(capital_key, starts_on_punctuation, initial_peek2, &skip_one)) {
                 _ = iter.next_update_prev_cursor(&prev_cursor);
                 prev_cursor = iter.cursor;
@@ -944,7 +941,7 @@ fn backward_word_or_forward_word_end(self: *Self, capital_key: bool, comptime di
         return;
     }
 
-    var starts_on_punctuation = self.is_punctuation(iter.peek() orelse return);
+    const starts_on_punctuation = self.is_punctuation(iter.peek() orelse return);
     while (iter.next_update_prev_cursor(&prev_cursor)) |char| {
         _ = char;
         // Check if at end of word
@@ -1013,7 +1010,7 @@ pub fn move_line(self: *Self, delta: i64) void {
 
 pub fn move_char(self: *Self, delta_: i64, limited_to_line: bool) void {
     const Dir = enum { Left, Right };
-    var dir = if (delta_ > 0) Dir.Right else Dir.Left;
+    const dir = if (delta_ > 0) Dir.Right else Dir.Left;
 
     var cur_node = self.rope.node_at_line(self.cursor.line) orelse @panic("No node");
     var line: u32 = self.cursor.line;
@@ -1080,17 +1077,17 @@ pub fn filter_chars(in: []const u8, out: []u8) []u8 {
 }
 
 /// Represents an edit to text, this mimics the TSEdit struct of tree-sitter
-/// 
+///
 /// Insertions:
 /// - start   => the point where the text was added
 /// - old_end => same as start
 /// - new_end => length of insertion
-/// 
+///
 /// Deletions:
 /// - start   => the start of the range of text to be deleted
 /// - old_end => the end of the range of text to be deleted
 /// - new_end => 0
-/// 
+///
 /// Replacements:
 /// - start   => the start of the range of text to be deleted
 /// - old_end => the end of the range of text to be deleted
@@ -1164,13 +1161,7 @@ pub const Edit = extern struct {
             .line = line,
             .col = start_byte + cast.num(u32, node_and_idx.node.data.items.len),
         };
-        const new_end: TextPoint = if (last_char_is_newline) .{
-            .line = line,
-            .col = start.col + 1
-        } else .{
-            .line = line,
-            .col = start.col
-        };
+        const new_end: TextPoint = if (last_char_is_newline) .{ .line = line, .col = start.col + 1 } else .{ .line = line, .col = start.col };
         const new_end_byte = if (last_char_is_newline) start_byte + 1 else start_byte;
         return .{
             .start = start,
@@ -1249,10 +1240,10 @@ test "backspace simple" {
     var editor = Self{};
     try editor.init();
 
-    var pos = try editor.insert("HEY MAN!");
+    const pos = try editor.insert("HEY MAN!");
     _ = pos;
     try editor.backspace();
-    var str = try editor.text(std.heap.c_allocator);
+    const str = try editor.text(std.heap.c_allocator);
     try std.testing.expectEqualStrings("HEY MAN", str);
 }
 
