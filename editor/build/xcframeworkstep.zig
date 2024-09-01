@@ -4,9 +4,9 @@
 const XCFrameworkStep = @This();
 
 const std = @import("std");
-const Step = std.build.Step;
-const RunStep = std.build.RunStep;
-const FileSource = std.build.FileSource;
+const Step = std.Build.Step;
+const RunStep = std.Build.Step.Run;
+const FileSource = std.Build.LazyPath;
 
 pub const Options = struct {
     /// The name of the xcframework to create.
@@ -16,10 +16,10 @@ pub const Options = struct {
     out_path: []const u8,
 
     /// Library file (dylib, a) to package.
-    library: std.build.FileSource,
+    library: FileSource,
 
     /// Path to a directory with the headers.
-    headers: std.build.FileSource,
+    headers: FileSource,
 };
 
 step: *Step,
@@ -42,9 +42,9 @@ pub fn create(b: *std.Build, opts: Options) *XCFrameworkStep {
         run.has_side_effects = true;
         run.addArgs(&.{ "xcodebuild", "-create-xcframework" });
         run.addArg("-library");
-        run.addFileSourceArg(opts.library);
+        run.addFileArg(opts.library);
         run.addArg("-headers");
-        run.addFileSourceArg(opts.headers);
+        run.addFileArg(opts.headers);
         run.addArg("-output");
         run.addArg(opts.out_path);
         break :run run;

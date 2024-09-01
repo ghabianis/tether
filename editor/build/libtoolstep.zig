@@ -3,9 +3,9 @@
 const LibtoolStep = @This();
 
 const std = @import("std");
-const Step = std.build.Step;
-const RunStep = std.build.RunStep;
-const FileSource = std.build.FileSource;
+const Step = std.Build.Step;
+const RunStep = std.Build.Step.Run;
+const FileSource = std.Build.LazyPath;
 
 pub const Options = struct {
     /// The name of this step.
@@ -33,7 +33,7 @@ pub fn create(b: *std.Build, opts: Options) *LibtoolStep {
     const run_step = RunStep.create(b, b.fmt("libtool {s}", .{opts.name}));
     run_step.addArgs(&.{ "libtool", "-static", "-o" });
     const output = run_step.addOutputFileArg(opts.out_name);
-    for (opts.sources) |source| run_step.addFileSourceArg(source);
+    for (opts.sources) |source| run_step.addFileArg(source);
 
     self.* = .{
         .step = &run_step.step,

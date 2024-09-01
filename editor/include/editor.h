@@ -15,6 +15,7 @@ void renderer_resize(Renderer renderer, CGSize new_size);
 void renderer_handle_keydown(Renderer renderer, NSEvent *event);
 void renderer_handle_scroll(Renderer renderer, CGFloat dx, CGFloat dy,
                             NSEventPhase phase);
+id renderer_get_atlas_image(Renderer renderer);
 
 // debugging functions
 void renderer_insert_text(Renderer renderer, const char *text, size_t len);

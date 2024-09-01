@@ -291,7 +291,12 @@ pub const FullThrottleMode = struct {
     pub fn add_cluster(self: *FullThrottleMode, offset_screen: math.Float2, w: f32, h: f32) void {
         self.time = 0;
         const aspect = w / h;
-        var offset = math.float2((offset_screen.x - w * 0.5) / (w * 0.5), (offset_screen.y - h * 0.5) / (h * 0.5));
+        var offset = math.float2(
+            // (offset_screen.x - w * 0.5) / (w * 0.5),
+            // (offset_screen.y - h * 0.5) / (h * 0.5),
+            (offset_screen.x - w * 0.5) / (w * 0.5),
+            (offset_screen.y - h * 0.5) / (h * 0.5),
+        );
         offset.x *= aspect;
 
         const idx = self.clusters_len;
@@ -809,7 +814,7 @@ const Fire = struct {
         render_command_encoder.set_vertex_buffer(self.particle_buffer, 0, 1);
         render_command_encoder.set_vertex_bytes(cast.bytes(&uniforms), 2);
 
-        render_command_encoder.set_fragment_texture(self.texture, 0);
+        render_command_encoder.set_fragment_texture(.{ .obj = self.texture }, 0);
         render_command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
 
         render_command_encoder.draw_indexed_primitives_instanced(.triangle, 6, .UInt16, self.index_buffer, 0, self.particle_count);

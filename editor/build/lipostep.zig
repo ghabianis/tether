@@ -3,9 +3,9 @@
 const LipoStep = @This();
 
 const std = @import("std");
-const Step = std.build.Step;
-const RunStep = std.build.RunStep;
-const FileSource = std.build.FileSource;
+const Step = std.Build.Step;
+const RunStep = Step.Run;
+const FileSource = std.Build.LazyPath;
 
 pub const Options = struct {
     /// The name of the xcframework to create.
@@ -30,8 +30,8 @@ pub fn create(b: *std.Build, opts: Options) *LipoStep {
     const run_step = RunStep.create(b, b.fmt("lipo {s}", .{opts.name}));
     run_step.addArgs(&.{ "lipo", "-create", "-output" });
     const output = run_step.addOutputFileArg(opts.out_name);
-    run_step.addFileSourceArg(opts.input_a);
-    run_step.addFileSourceArg(opts.input_b);
+    run_step.addFileArg(opts.input_a);
+    run_step.addFileArg(opts.input_b);
 
     self.* = .{
         .step = &run_step.step,

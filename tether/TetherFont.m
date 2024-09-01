@@ -10,9 +10,13 @@
 #import <Metal/Metal.h>
 #import <Metal/MTLDevice.h>
 #import <Metal/MTLCommandQueue.h>
+#import <Metal/MTLComputePipeline.h>
 #import <Metal/MTLCommandBuffer.h>
+#import <Metal/MTLTexture.h>
 #import <Metal/MTLBuffer.h>
 #import <Metal/MTLRenderCommandEncoder.h>
+#import <Metal/MTLComputeCommandEncoder.h>
+#import <Metal/MTLFunctionDescriptor.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <CoreGraphics/CGFont.h>
@@ -71,7 +75,16 @@ void SetTextMatrix(CGContextRef ctx, CGAffineTransform t) {
     CGContextSetTextMatrix(ctx, t);
 }
 
-void RandomTest(CFAttributedStringRef str, NSWindow *window, MTLVertexDescriptor *v) {
+void RandomTest(MTLRenderPipelineDescriptor *p, NSFont *f, NSImage *img) {
+    //    [[NSImage alloc] initWithData]
+    //    kCImageAlphaNone//    [NSFont fontWithName:<#(nonnull NSString *)#> size:<#(CGFloat)#>]
+    
+    CGContextSetGrayStrokeColor;
+    CGContextRestoreGState;
+    CGContextClearRect;
+//    CGContextSetStrok
+//   p.label
+//    [img ]
 }
 
 

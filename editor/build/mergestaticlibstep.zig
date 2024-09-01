@@ -111,7 +111,7 @@ const GlobsStep = struct {
         const b = step.owner;
         const arena = b.allocator;
         _ = arena;
-        const self = @fieldParentPtr(GlobsStep, "step", step);
+        const self: *GlobsStep = @fieldParentPtr("step", step);
 
         var i: usize = 0;
         for (self.inputs) |input| {

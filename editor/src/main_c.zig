@@ -936,7 +936,8 @@ const Renderer = struct {
         // for some reason this causes crash
         // defer command_encoder.autorelease();
         const drawable_size = view.drawable_size();
-        command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
+        std.debug.print("DRAW: {d} {d}", .{ drawable_size.width, drawable_size.height });
+        // command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
         var model_matrix = math.Float4x4.scale_by(1.0);
         var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
@@ -961,7 +962,7 @@ const Renderer = struct {
         var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
         self.fullthrottle.render_particles(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
         self.fullthrottle.render_explosions(command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        // self.fullthrottle.fire.render(dt, self.queue, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+        self.fullthrottle.fire.render(dt, self.queue, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
 
         self.diagnostic_renderer.render(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
         command_encoder.end_encoding();
@@ -1015,9 +1016,9 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const alloc = std.heap.c_allocator;
-    const font = Font.init(alloc, 64.0, 1024, 1024) catch @panic("Failed to create Font");
-    // var buf = std.ArrayList(u8).init(alloc);
-    // font.serialize(alloc, &buf);
+    const font = Font.init(alloc, 48.0, 1024, 1024) catch @panic("Failed to create Font");
+    var buf = std.ArrayListUnmanaged(u8){};
+    font.serialize(alloc, &buf) catch @panic("OOPS");
     const class = objc.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
     defer obj.msgSend(void, objc.sel("release"), .{});
@@ -1046,6 +1047,10 @@ export fn renderer_handle_keydown(renderer: *Renderer, event_id: objc.c.id) void
 export fn renderer_handle_scroll(renderer: *Renderer, dx: metal.CGFloat, dy: metal.CGFloat, phase: metal.NSEvent.Phase) void {
     // renderer.scroll(-dx * 10.0, -dy * 10.0, phase);
     renderer.scroll(-dx * 10.0, -dy, phase);
+}
+
+export fn renderer_get_atlas_image(renderer: *Renderer) objc.c.id {
+    return renderer.font.create_image();
 }
 
 export fn renderer_get_val(renderer: *Renderer) u64 {

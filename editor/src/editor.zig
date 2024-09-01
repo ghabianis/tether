@@ -42,7 +42,7 @@ edits: ArrayList(Edit) = ArrayList(Edit).init(std.heap.c_allocator),
 
 pub fn init(self: *Self) !void {
     try self.rope.init();
-    try self.vim.init(std.heap.c_allocator, &Vim.DEFAULT_PARSERS);
+    try self.vim.init(std.heap.c_allocator, Vim.DEFAULT_PARSERS);
     self.clipboard = Clipboard.init();
     if (comptime Conf.ENABLE_TEST_TEXT) {
         // const str = @embedFile("./lines.txt");

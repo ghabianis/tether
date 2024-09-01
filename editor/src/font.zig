@@ -66,7 +66,8 @@ leading: f32,
 max_adv: f32,
 
 pub fn init(alloc: Allocator, font_size: u16, atlas_width: u32, atlas_height: u32) !Font {
-    const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
+    // const iosevka = metal.NSString.new_with_bytes("Iosevka SS04", .ascii);
+    const iosevka = metal.NSString.new_with_bytes("Rec Mono Linear", .ascii);
     // const iosevka = metal.NSString.new_with_bytes("Fira Code", .ascii);
     defer iosevka.release();
     const nsfont = metal.NSFont.from_name_and_size(iosevka, @floatFromInt(font_size));
@@ -378,6 +379,15 @@ fn get_glyphs_from_str(self: *Font, alloc: Allocator, glyphs: *ArrayList(metal.C
     _ = ct.CTFontGetBoundingRectsForGlyphs(self.font.obj.value, .horizontal, glyph_slice.ptr, glyph_rects_slice.ptr, @as(i64, @intCast(glyph_count)));
 }
 
+pub fn create_image(self: *Font) ct.CGImageRef {
+    const color_space = ct.CGColorSpaceCreateDeviceGray();
+    defer ct.CGColorSpaceRelease(color_space);
+    const ctx = ct.CGBitmapContextCreate(@ptrCast(self.atlas.data.ptr), self.atlas.width, self.atlas.height, 8, self.atlas.width, color_space, ct.kCGImageAlphaNone & ct.kCGBitmapAlphaInfoMask);
+    defer ct.CGContextRelease(ctx);
+    const image = ct.CGBitmapContextCreateImage(ctx);
+    return image;
+}
+
 pub fn create_texture(self: *Font, device: metal.MTLDevice) metal.MTLTexture {
     const color_space = ct.CGColorSpaceCreateDeviceGray();
     defer ct.CGColorSpaceRelease(color_space);
@@ -493,8 +503,8 @@ pub const Serialize = struct {
         const header: Header = .{
             .width = self.atlas.width,
             .height = self.atlas.height,
-            .ascent = @floatFromInt(@ceil(self.ascent)),
-            .descent = @floatFromInt(@ceil(self.descent)),
+            .ascent = @intFromFloat(@ceil(self.ascent)),
+            .descent = @intFromFloat(@ceil(self.descent)),
             .glyph_len = glyph_len,
         };
 
@@ -502,22 +512,22 @@ pub const Serialize = struct {
 
         for (ASCII_CHAR_START..ASCII_CHAR_END) |char_raw| {
             const glyph = self.char_to_glyph[char_raw];
-            const glyph_info = self.glyphs.get(glyph) orelse @panic("WOOPS!");
+            const glyph_info = self.glyphs.get(glyph) orelse continue;
 
             const ser_glyph = Serialize.Glyph{
                 .tx = glyph_info.tx,
                 .ty = glyph_info.ty,
-                .bitmap_w = glyph_info.rect.size.width,
-                .bitmap_h = glyph_info.rect.size.height,
-                .bitmap_t = glyph_info.rect.origin.y + glyph_info.rect.size.height,
-                .bitmap_l = glyph_info.rect.origin.x + glyph_info.rect.size.width,
-                .advance_x = glyph_info.advance,
+                .bitmap_w = @floatCast(glyph_info.rect.size.width),
+                .bitmap_h = @floatCast(glyph_info.rect.size.height),
+                .bitmap_t = @floatCast(glyph_info.rect.origin.y + glyph_info.rect.size.height),
+                .bitmap_l = @floatCast(glyph_info.rect.origin.x + glyph_info.rect.size.width),
+                .advance_x = @floatCast(glyph_info.advance),
             };
 
             try buf.appendSlice(alloc, cast.bytes(&ser_glyph));
         }
 
-        var file = std.fs.cwd().createFile("atlas.bin", .{}) catch @panic("woops");
+        var file = std.fs.createFileAbsolute("/Users/zackradisic/Code/tether/editor/atlas.bin", .{}) catch @panic("OOPS");
         defer file.close();
         file.writeAll(buf.items[0..]) catch @panic("oops");
     }
