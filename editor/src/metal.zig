@@ -698,6 +698,10 @@ pub const MTLRenderCommandEncoder = struct {
     pub fn end_encoding(self: Self) void {
         self.obj.msgSend(void, objc.sel("endEncoding"), .{});
     }
+
+    pub fn set_label_comptime(self: @This(), comptime label: []const u8) void {
+        self.obj.setProperty("label", NSString.new_with_bytes_no_copy(label, .utf8));
+    }
 };
 
 pub const MTLPrimitiveType = enum(NSUInteger) {

@@ -18,9 +18,14 @@ const QUAD_VERTEX_INPUT: [24]f32 = .{
     1.0, -1.0, 1.0, 1.0, // D: position, texCoord
 };
 
+// This is good!
 const NUMBER_OF_MIPS = 2;
 const FILTER_RADIUS: f32 = 10;
 const BRIGHTNESS_THRESHOLD: f32 = 2;
+
+// const NUMBER_OF_MIPS = 2;
+// const FILTER_RADIUS: f32 = 1.0;
+// const BRIGHTNESS_THRESHOLD: f32 = 2;
 
 const MipLevel = struct {
     texture: metal.MTLTexture,
@@ -93,8 +98,8 @@ pub const Bloom = struct {
         const extract_texture = extract_texture: {
             const desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
                 Hdr.format,
-                @intFromFloat(width),
-                @intFromFloat(height),
+                @intFromFloat(width * 2.0),
+                @intFromFloat(height * 2.0),
                 false,
             );
             desc.set_usage(@intFromEnum(metal.MTLTextureUsage.shader_read) |
@@ -330,6 +335,8 @@ pub const Bloom = struct {
                 break :pass pass;
             };
 
+            pass.set_label_comptime("downsample");
+
             const read_texture = self.read_texture_for_mip_level(mip_level);
 
             pass.set_render_pipeline_state(self.downsample_pipeline);
@@ -341,26 +348,35 @@ pub const Bloom = struct {
             pass.end_encoding();
         }
 
-        // Upsample
-        // Only doing once because I like the effect, and it's cheap
-        {
+        // SRC -> 1024 -> 512 -> 256 -> 128
+        //
+        // 128 -> 256 -> 512 -> 1024 -> SRC
+        for (0..NUMBER_OF_MIPS) |_i| {
+            const i = self.mip_levels.len - 1 - _i;
+
+            const mip_level = self.mip_levels.get(i);
+            const output = if (i == 0) self.output else self.mip_levels.get(i - 1).texture;
+
             const pass = pass: {
                 const render_pass_desc = metal.MTLRenderPassDescriptor.render_pass_descriptor();
                 const attachments = render_pass_desc.attachments();
                 const attachment = attachments.object_at(0).?;
-                attachment.set_texture(self.output);
+                attachment.set_texture(output);
                 attachment.set_load_action(.load);
                 attachment.set_store_action(.store);
                 const pass = command_buffer.new_render_command_encoder(render_pass_desc);
                 break :pass pass;
             };
 
+            pass.set_label_comptime("upsample");
+
             pass.set_render_pipeline_state(self.upsample_pipeline);
             pass.set_fragment_texture(
-                if (self.mip_levels.len == 0)
-                    self.extract_texture
-                else
-                    self.mip_levels.buffer[self.mip_levels.len - 1].texture,
+                // if (self.mip_levels.len == 0)
+                //     self.extract_texture
+                // else
+                //     self.mip_levels.buffer[self.mip_levels.len - 1].texture,
+                mip_level.texture,
                 0,
             );
             const filter_radius_buf: [2]f32 = .{
@@ -374,5 +390,39 @@ pub const Bloom = struct {
             pass.draw_primitives(.triangle, 0, 6);
             pass.end_encoding();
         }
+
+        // Upsample
+        // Only doing once because I like the effect, and it's cheap
+        // {
+        //     const pass = pass: {
+        //         const render_pass_desc = metal.MTLRenderPassDescriptor.render_pass_descriptor();
+        //         const attachments = render_pass_desc.attachments();
+        //         const attachment = attachments.object_at(0).?;
+        //         attachment.set_texture(self.output);
+        //         attachment.set_load_action(.load);
+        //         attachment.set_store_action(.store);
+        //         const pass = command_buffer.new_render_command_encoder(render_pass_desc);
+        //         break :pass pass;
+        //     };
+
+        //     pass.set_render_pipeline_state(self.upsample_pipeline);
+        //     pass.set_fragment_texture(
+        //         if (self.mip_levels.len == 0)
+        //             self.extract_texture
+        //         else
+        //             self.mip_levels.buffer[self.mip_levels.len - 1].texture,
+        //         0,
+        //     );
+        //     const filter_radius_buf: [2]f32 = .{
+        //         FILTER_RADIUS,
+        //         69420.0, // padding
+        //     };
+        //     pass.set_vertex_bytes(cast.bytes(&QUAD_VERTEX_INPUT), 0);
+        //     pass.set_fragment_sampler_state(self.downsample_sampler.obj, 1);
+        //     pass.set_fragment_bytes(cast.bytes(&filter_radius_buf), 2);
+        //     pass.set_fragment_bytes(cast.bytes(&dimensions), 3);
+        //     pass.draw_primitives(.triangle, 0, 6);
+        //     pass.end_encoding();
+        // }
     }
 };

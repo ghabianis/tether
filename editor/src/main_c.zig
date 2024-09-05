@@ -1114,7 +1114,8 @@ const Renderer = struct {
 
 export fn renderer_create(view: objc.c.id, device: objc.c.id, width: metal.CGFloat, height: metal.CGFloat) *Renderer {
     const alloc = std.heap.c_allocator;
-    const font = Font.init(alloc, 48.0, 1024, 1024) catch @panic("Failed to create Font");
+    // const font = Font.init(alloc, 48.0, 1024, 1024) catch @panic("Failed to create Font");
+    const font = Font.init(alloc, 96.0, 1024, 1024) catch @panic("Failed to create Font");
     var buf = std.ArrayListUnmanaged(u8){};
     font.serialize(alloc, &buf) catch @panic("OOPS");
     const class = objc.getClass("TetherFont").?;
