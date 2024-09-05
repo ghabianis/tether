@@ -158,7 +158,16 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         self.mtkView = view
         self.device = device
         
-        self.zig = renderer_create(view, device);
+        // Configure the MTKView with Metal device and pixel format
+        view.device = device
+        
+        // Equivalent to `format: SURFACE_FORMAT`
+        view.colorPixelFormat = .bgra8Unorm_srgb
+        view.sampleCount = 4
+        
+        self.zig = renderer_create(view, device, size!.width, size!.height);
+        print("Init")
+        
         
         let image: CGImage = renderer_get_atlas_image(self.zig) as! CGImage
         view.renderer = self.zig
@@ -185,7 +194,7 @@ class SwiftRenderer: NSObject, MTKViewDelegate {
         //        }
         self.mtkView.handleAccumulatedScroll()
         
-        renderer_draw(self.zig, view)
+        renderer_draw(self.zig, view, view.currentDrawable!.texture, view.multisampleColorTexture!)
     }
     
     func getNextEvent() -> NSEvent? {

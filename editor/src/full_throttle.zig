@@ -5,6 +5,7 @@ const math = @import("math.zig");
 const anim = @import("anim.zig");
 const mempool = @import("./memory_pool.zig");
 const cast = @import("./cast.zig");
+const Hdr = @import("./hdr.zig").Hdr;
 
 const print = std.debug.print;
 const ArrayList = std.ArrayListUnmanaged;
@@ -388,6 +389,7 @@ pub const FullThrottleMode = struct {
     }
 
     pub fn build_explosions_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
+        _ = view; // autofix
         var err: ?*anyopaque = null;
         const shader_str = @embedFile("./shaders/explosion.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
@@ -446,9 +448,10 @@ pub const FullThrottleMode = struct {
                 .{@as(c_ulong, 0)},
             );
 
-            const pix_fmt = view.color_pixel_format();
             // Value is MTLPixelFormatBGRA8Unorm
-            attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+            // const pix_fmt = view.color_pixel_format();
+            // attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+            attachment.setProperty("pixelFormat", Hdr.format);
 
             // Blending. This is required so that our text we render on top
             // of our drawable properly blends into the bg.
@@ -490,10 +493,11 @@ pub const FullThrottleMode = struct {
         sampler_descriptor.setProperty("tAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
 
         const sampler_state = device.new_sampler_state(sampler_descriptor);
-        self.explosion_sampler_state = sampler_state;
+        self.explosion_sampler_state = sampler_state.obj;
     }
 
     pub fn build_particles_pipeline(self: *FullThrottleMode, device: metal.MTLDevice, view: metal.MTKView) void {
+        _ = view; // autofix
         var err: ?*anyopaque = null;
         const shader_str = @embedFile("./shaders/particle.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
@@ -551,9 +555,10 @@ pub const FullThrottleMode = struct {
                 .{@as(c_ulong, 0)},
             );
 
-            const pix_fmt = view.color_pixel_format();
             // Value is MTLPixelFormatBGRA8Unorm
-            attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+            // const pix_fmt = view.color_pixel_format();
+            // attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+            attachment.setProperty("pixelFormat", Hdr.format);
 
             // Blending. This is required so that our text we render on top
             // of our drawable properly blends into the bg.
@@ -986,6 +991,6 @@ const Fire = struct {
         sampler_descriptor.setProperty("tAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
 
         const sampler_state = device.new_sampler_state(sampler_descriptor);
-        self.sampler_state = sampler_state;
+        self.sampler_state = sampler_state.obj;
     }
 };

@@ -29,6 +29,8 @@ const Rope = rope.Rope;
 
 const Vertex = math.Vertex;
 const FullThrottle = fullthrottle.FullThrottleMode;
+const Hdr = @import("./hdr.zig").Hdr;
+const Bloom = @import("./bloom.zig").Bloom;
 
 var Arena = std.heap.ArenaAllocator.init(std.heap.c_allocator);
 
@@ -36,6 +38,7 @@ pub const Uniforms = extern struct { model_view_matrix: math.Float4x4, projectio
 const WindowLineRange = struct { start: u32, start_y: f32, end: u32, end_y: f32 };
 
 const TEXT_COLOR = math.hex4("#b8c1ea");
+// const TEXT_COLOR = math.hex4("#b8c1ea").mul_f(1.57);
 const CURSOR_COLOR = math.hex4("#b4f9f8");
 const BORDER_CURSOR_COLOR = math.hex4("#454961");
 
@@ -65,14 +68,84 @@ const Renderer = struct {
     frame_arena: std.heap.ArenaAllocator,
     editor: Editor,
     fullthrottle: FullThrottle,
+    hdr: Hdr,
+    bloom: Bloom,
+    // surface_texture: metal.MTLTexture,
+    resolve_texture: metal.MTLTexture,
     diagnostic_renderer: Diagnostics,
 
     last_clock: ?c_ulong,
 
-    pub fn init(alloc: Allocator, font: Font, view_: objc.c.id, device_: objc.c.id) *Renderer {
+    pub fn init(alloc: Allocator, font: Font, view_: objc.c.id, device_: objc.c.id, width_: metal.CGFloat, height_: metal.CGFloat) *Renderer {
         const device = metal.MTLDevice.from_id(device_);
+        device.retain();
+        defer device.release();
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
+        const size = metal.CGSize{
+            .height = height_,
+            .width = width_,
+        };
+
+        const width: f32 = @floatCast(size.width);
+        const height: f32 = @floatCast(size.height);
+
+        const hdr_texture = hdr_texture: {
+            const tex_desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
+                Hdr.format,
+                @intFromFloat(size.width * 2.0),
+                @intFromFloat(size.height * 2.0),
+                false,
+            );
+            tex_desc.set_usage(@intFromEnum(metal.MTLTextureUsage.pixel_format_view) |
+                @intFromEnum(metal.MTLTextureUsage.render_target) |
+                @intFromEnum(metal.MTLTextureUsage.shader_read));
+
+            break :hdr_texture device.new_texture_with_descriptor(tex_desc);
+        };
+
+        const bloom_texture = bloom_texture: {
+            const tex_desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
+                Hdr.format,
+                @intFromFloat(size.width),
+                @intFromFloat(size.height),
+                false,
+            );
+            tex_desc.set_usage(@intFromEnum(metal.MTLTextureUsage.pixel_format_view) |
+                @intFromEnum(metal.MTLTextureUsage.render_target) |
+                @intFromEnum(metal.MTLTextureUsage.shader_read));
+
+            break :bloom_texture device.new_texture_with_descriptor(tex_desc);
+        };
+
+        const hdr = Hdr.init(device, hdr_texture, bloom_texture);
+        const bloom = Bloom.init(device, bloom_texture, width, height);
+
+        // const surface_texture = surface_texture: {
+        //     const tex_desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
+        //         Hdr.SURFACE_FORMAT,
+        //         @intFromFloat(size.width),
+        //         @intFromFloat(size.height),
+        //         false,
+        //     );
+        //     tex_desc.set_usage(@intFromEnum(metal.MTLTextureUsage.render_target) | @intFromEnum(metal.MTLTextureUsage.shader_read));
+        //     tex_desc.set_sample_count(Hdr.SAMPLE_COUNT);
+        //     tex_desc.set_texture_type(metal.MTLTextureType.texture_2d_multisample);
+        //     break :surface_texture device.new_texture_with_descriptor(tex_desc);
+        // };
+        const resolve_texture = resolve_texture: {
+            const tex_desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
+                Hdr.SURFACE_FORMAT,
+                @intFromFloat(size.width),
+                @intFromFloat(size.height),
+                false,
+            );
+            tex_desc.set_usage(@intFromEnum(metal.MTLTextureUsage.render_target) | @intFromEnum(metal.MTLTextureUsage.shader_read));
+            tex_desc.set_sample_count(1);
+            // tex_desc.set_texture_type(metal.MTLTextureType.texture_2d_multisample);
+            tex_desc.set_storage_mode(metal.MTLStorageMode.private);
+            break :resolve_texture device.new_texture_with_descriptor(tex_desc);
+        };
 
         var renderer: Renderer = .{
             .view = view,
@@ -89,12 +162,16 @@ const Renderer = struct {
             .font = font,
             .texture = undefined,
             .sampler_state = undefined,
-            .screen_size = view.drawable_size(),
+            .screen_size = size,
             // frame arena
             .frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .editor = Editor{},
             .fullthrottle = FullThrottle.init(device, view),
             .diagnostic_renderer = Diagnostics.init(std.heap.c_allocator, device, view),
+            .hdr = hdr,
+            .bloom = bloom,
+            // .surface_texture = surface_texture,
+            .resolve_texture = resolve_texture,
 
             .last_clock = null,
         };
@@ -112,7 +189,7 @@ const Renderer = struct {
         sampler_descriptor.setProperty("tAddressMode", metal.MTLSamplerAddressMode.ClampToZero);
 
         const sampler_state = device.new_sampler_state(sampler_descriptor);
-        renderer.sampler_state = sampler_state;
+        renderer.sampler_state = sampler_state.obj;
 
         const ptr = alloc.create(Renderer) catch @panic("oom!");
         ptr.* = renderer;
@@ -205,6 +282,7 @@ const Renderer = struct {
     }
 
     fn build_pipeline(device: metal.MTLDevice, view: metal.MTKView) metal.MTLRenderPipelineState {
+        _ = view; // autofix
         var err: ?*anyopaque = null;
         const shader_str = @embedFile("./shaders/text.metal");
         const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
@@ -251,6 +329,7 @@ const Renderer = struct {
             desc.set_vertex_function(func_vert);
             desc.set_fragment_function(func_frag);
             desc.set_vertex_descriptor(vertex_desc);
+            desc.set_raster_sample_count(if (Hdr.enable) 1 else Hdr.SAMPLE_COUNT);
             break :pipeline_desc desc;
         };
 
@@ -262,9 +341,10 @@ const Renderer = struct {
                 .{@as(c_ulong, 0)},
             );
 
-            const pix_fmt = view.color_pixel_format();
             // Value is MTLPixelFormatBGRA8Unorm
-            attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+            // const pix_fmt = view.color_pixel_format();
+
+            attachment.setProperty("pixelFormat", @as(c_ulong, Hdr.format));
 
             // Blending. This is required so that our text we render on top
             // of our drawable properly blends into the bg.
@@ -792,7 +872,9 @@ const Renderer = struct {
                 var pos = positions.items[j];
                 pos.x += origin_adjust;
 
+                // TODO ZACK BRING THIS SHIT BACK!
                 const color = if (on_current_line) math.hex4("#7279a1") else math.hex4("#353a52");
+                // const color = math.Float4.new(1.0, 1.0, 1.0, 1.0).mul_f(10.0);
 
                 const vertices = Vertex.square_from_glyph(
                     &rect,
@@ -897,7 +979,7 @@ const Renderer = struct {
         }
     }
 
-    pub fn draw(self: *Self, view: metal.MTKView) void {
+    pub fn draw(self: *Self, view: metal.MTKView, surface_texture: metal.MTLTexture, multisample_texture: metal.MTLTexture) void {
         const dt: f32 = dt: {
             if (self.last_clock) |lc| {
                 const now = Time.clock();
@@ -917,55 +999,71 @@ const Renderer = struct {
         // for some reason this causes crash
         // defer command_buffer.autorelease();
 
-        const render_pass_descriptor_id = view.obj.getProperty(objc.c.id, "currentRenderPassDescriptor");
         const drawable_id = view.obj.getProperty(objc.c.id, "currentDrawable");
-        if (render_pass_descriptor_id == 0 or drawable_id == 0) return;
-
-        const render_pass_desc = objc.Object.fromId(render_pass_descriptor_id);
         const drawable = objc.Object.fromId(drawable_id);
-
-        const attachments = render_pass_desc.getProperty(objc.Object, "colorAttachments");
-        const color_attachment_desc = attachments.msgSend(objc.Object, objc.sel("objectAtIndexedSubscript:"), .{@as(c_ulong, 0)});
-        color_attachment_desc.setProperty("loadAction", metal.MTLLoadAction.clear);
-        const bg = math.hex4("#1a1b26");
-        // color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
-        color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
-
-        const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
-        // command_encoder.set_label("Text");
-        // for some reason this causes crash
-        // defer command_encoder.autorelease();
         const drawable_size = view.drawable_size();
-        std.debug.print("DRAW: {d} {d}", .{ drawable_size.width, drawable_size.height });
-        // command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
+        {
+            // const render_pass_descriptor_id = view.obj.getProperty(objc.c.id, "currentRenderPassDescriptor");
+            // if (render_pass_descriptor_id == 0 or drawable_id == 0) return;
 
-        var model_matrix = math.Float4x4.scale_by(1.0);
-        var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
-        view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
-        const model_view_matrix = view_matrix.mul(&model_matrix);
-        const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
-        const uniforms = Uniforms{
-            .model_view_matrix = model_view_matrix,
-            .projection_matrix = projection_matrix,
-        };
+            // const render_pass_desc = objc.Object.fromId(render_pass_descriptor_id);
+            const render_pass_desc = metal.MTLRenderPassDescriptor.render_pass_descriptor();
 
-        command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&uniforms))[0..@sizeOf(Uniforms)], 1);
-        command_encoder.set_render_pipeline_state(self.pipeline);
+            const attachments = render_pass_desc.attachments();
+            const color_attachment_desc = attachments.object_at(0).?;
+            color_attachment_desc.set_load_action(metal.MTLLoadAction.clear);
+            color_attachment_desc.set_texture(self.hdr.texture);
+            const bg = math.hex4("#1a1b26");
+            // color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
+            color_attachment_desc.set_clear_color(metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
+            // color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
 
-        command_encoder.set_vertex_buffer(self.vertex_buffer, 0, 0);
+            const command_encoder = command_buffer.new_render_command_encoder(render_pass_desc);
+            // command_encoder.set_label("Text");
+            // for some reason this causes crash
+            // defer command_encoder.autorelease();
+            std.debug.print("DRAW: {d} {d}", .{ drawable_size.width, drawable_size.height });
+            // command_encoder.set_viewport(metal.MTLViewport{ .origin_x = 0.0, .origin_y = 0.0, .width = drawable_size.width, .height = drawable_size.height, .znear = 0.1, .zfar = 100.0 });
 
-        command_encoder.set_fragment_texture(self.texture, 0);
-        command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
-        command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
+            var model_matrix = math.Float4x4.scale_by(1.0);
+            var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
+            view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
+            const model_view_matrix = view_matrix.mul(&model_matrix);
+            const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
+            const uniforms = Uniforms{
+                .model_view_matrix = model_view_matrix,
+                .projection_matrix = projection_matrix,
+            };
 
-        var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0 };
-        var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
-        self.fullthrottle.render_particles(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        self.fullthrottle.render_explosions(command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        self.fullthrottle.fire.render(dt, self.queue, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
+            command_encoder.set_vertex_bytes(@as([*]const u8, @ptrCast(&uniforms))[0..@sizeOf(Uniforms)], 1);
+            command_encoder.set_render_pipeline_state(self.pipeline);
 
-        self.diagnostic_renderer.render(dt, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc, &view_matrix_ndc);
-        command_encoder.end_encoding();
+            command_encoder.set_vertex_buffer(self.vertex_buffer, 0, 0);
+
+            command_encoder.set_fragment_texture(self.texture, 0);
+            command_encoder.set_fragment_sampler_state(self.sampler_state, 0);
+            command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
+
+            var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0 };
+            var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
+            self.fullthrottle.render_particles(dt, command_encoder, render_pass_desc.obj, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
+            self.fullthrottle.render_explosions(command_encoder, render_pass_desc.obj, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
+            // self.fullthrottle.fire.render(dt, self.queue, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
+
+            self.diagnostic_renderer.render(dt, command_encoder, render_pass_desc.obj, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
+            command_encoder.end_encoding();
+        }
+
+        // const surface_texture = drawable.getProperty(metal.MTLTexture, "texture");
+
+        self.bloom.render(command_buffer, self.hdr.texture, @floatCast(drawable_size.width), @floatCast(drawable_size.height));
+        self.hdr.render(
+            command_buffer,
+            surface_texture,
+            multisample_texture,
+            @floatCast(drawable_size.width),
+            @floatCast(drawable_size.height),
+        );
 
         command_buffer.obj.msgSend(void, objc.sel("presentDrawable:"), .{drawable});
         command_buffer.obj.msgSend(void, objc.sel("commit"), .{});
@@ -1014,7 +1112,7 @@ const Renderer = struct {
     }
 };
 
-export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
+export fn renderer_create(view: objc.c.id, device: objc.c.id, width: metal.CGFloat, height: metal.CGFloat) *Renderer {
     const alloc = std.heap.c_allocator;
     const font = Font.init(alloc, 48.0, 1024, 1024) catch @panic("Failed to create Font");
     var buf = std.ArrayListUnmanaged(u8){};
@@ -1022,12 +1120,14 @@ export fn renderer_create(view: objc.c.id, device: objc.c.id) *Renderer {
     const class = objc.getClass("TetherFont").?;
     const obj = class.msgSend(objc.Object, objc.sel("alloc"), .{});
     defer obj.msgSend(void, objc.sel("release"), .{});
-    return Renderer.init(std.heap.c_allocator, font, view, device);
+    return Renderer.init(std.heap.c_allocator, font, view, device, width, height);
 }
 
-export fn renderer_draw(renderer: *Renderer, view_id: objc.c.id) void {
+export fn renderer_draw(renderer: *Renderer, view_id: objc.c.id, texture_id: objc.c.id, multisample_texture_id: objc.c.id) void {
     const view = metal.MTKView.from_id(view_id);
-    renderer.draw(view);
+    const texture = metal.MTLTexture.from_id(texture_id);
+    const multisample_texture = metal.MTLTexture.from_id(multisample_texture_id);
+    renderer.draw(view, texture, multisample_texture);
 }
 
 export fn renderer_resize(renderer: *Renderer, new_size: metal.CGSize) void {

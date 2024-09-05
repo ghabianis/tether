@@ -9,8 +9,9 @@ typedef void *Editor;
 
 #define ARENA_ALIGN (alignof(max_align_t))
 
-Renderer renderer_create(id view, id device);
-Renderer renderer_draw(Renderer renderer, id view);
+Renderer renderer_create(id view, id device, CGFloat width, CGFloat height);
+Renderer renderer_draw(Renderer renderer, id view, id texture,
+                       id multisample_texture);
 void renderer_resize(Renderer renderer, CGSize new_size);
 void renderer_handle_keydown(Renderer renderer, NSEvent *event);
 void renderer_handle_scroll(Renderer renderer, CGFloat dx, CGFloat dy,

@@ -6,6 +6,7 @@ const highlight = @import("./highlight.zig");
 const cast = @import("./cast.zig");
 const binary_search = @import("./binary_search.zig");
 const Rope = @import("./rope.zig").Rope;
+const Hdr = @import("./hdr.zig").Hdr;
 
 const print = std.debug.print;
 const Allocator = std.mem.Allocator;
@@ -185,6 +186,7 @@ pub fn render(self: *Diagnostics, dt: f32, command_encoder: metal.MTLRenderComma
 }
 
 fn build_pipeline(self: *Diagnostics, device: metal.MTLDevice, view: metal.MTKView) void {
+    _ = view; // autofix
     var err: ?*anyopaque = null;
     const shader_str = @embedFile("./shaders/squiggly.metal");
     const shader_nsstring = metal.NSString.new_with_bytes(shader_str, .utf8);
@@ -241,9 +243,7 @@ fn build_pipeline(self: *Diagnostics, device: metal.MTLDevice, view: metal.MTKVi
             .{@as(c_ulong, 0)},
         );
 
-        const pix_fmt = view.color_pixel_format();
-        // Value is MTLPixelFormatBGRA8Unorm
-        attachment.setProperty("pixelFormat", @as(c_ulong, pix_fmt));
+        attachment.setProperty("pixelFormat", Hdr.format);
 
         // Blending. This is required so that our text we render on top
         // of our drawable properly blends into the bg.

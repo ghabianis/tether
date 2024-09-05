@@ -103,7 +103,7 @@ pub const Scalar = extern struct {
     val: f32,
 
     pub fn new(v: f32) Scalar {
-        return .{.val = v};
+        return .{ .val = v };
     }
 
     pub fn interpolate(start: Scalar, end: Scalar, t: f32) Scalar {
@@ -168,7 +168,7 @@ pub const Float2 = extern struct {
     pub fn add(self: Float2, other: Float2) Float2 {
         return float2(self.x + other.x, self.y + other.y);
     }
-    
+
     pub fn mul_f(self: Float2, scalar: f32) Float2 {
         return float2(self.x * scalar, self.y * scalar);
     }
@@ -218,8 +218,7 @@ pub const Float3 = extern struct {
     }
 
     pub fn interpolate(start: Float3, end: Float3, t: f32) Float3 {
-        return float3(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t,
-                  start.z + (end.z - start.z) * t);
+        return float3(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t, start.z + (end.z - start.z) * t);
     }
 
     pub fn mul_f(self: Float3, scalar: f32) Float3 {
@@ -253,7 +252,6 @@ pub const Float3 = extern struct {
         }
         return self;
     }
-
 
     pub fn hex(str: []const u8) Float3 {
         var hex_str = str;
@@ -307,6 +305,10 @@ pub const Float4 = extern struct {
 
     pub fn add(self: Float4, other: Float4) Float4 {
         return float4(self.x + other.x, self.y + other.y, self.z + other.z, self.w + other.w);
+    }
+
+    pub fn mul_f(self: Float4, scalar: f32) Float4 {
+        return float4(self.x * scalar, self.y * scalar, self.z * scalar, self.w * scalar);
     }
 
     pub fn to_hex(self: Float4) [7]u8 {
@@ -400,16 +402,16 @@ pub const Float4x4 = extern struct {
     pub fn perspective(fovYRadians: f32, aspectRatio: f32, near: f32, far: f32) Float4x4 {
         const tanHalfFovy = std.math.tan(fovYRadians / 2.0);
 
-        var result = Float4x4.new(float4(0,0,0,0), float4(0,0,0,0), float4(0,0,0,0), float4(0,0,0,0));
+        var result = Float4x4.new(float4(0, 0, 0, 0), float4(0, 0, 0, 0), float4(0, 0, 0, 0), float4(0, 0, 0, 0));
 
         result._0.x = 1.0 / (aspectRatio * tanHalfFovy);
         result._1.y = 1.0 / tanHalfFovy;
 
         // This is where it's different for Metal's requirements:
-        result._2.z = far / (far - near);             // Scale for [0, 1] depth range
+        result._2.z = far / (far - near); // Scale for [0, 1] depth range
         result._2.w = 1.0;
 
-        result._3.z = -(far * near) / (far - near);   // Translation term
+        result._3.z = -(far * near) / (far - near); // Translation term
         result._3.w = 0.0;
 
         return result;
@@ -533,21 +535,15 @@ pub const Quat = struct {
     const EPSILON: f32 = 0.000001;
 
     pub fn mul_f(self: Quat, scalar: f32) Quat {
-        return Quat{
-            .v = float4(self.v.x * scalar, self.v.y * scalar, self.v.z * scalar, self.v.w * scalar)
-        };
+        return Quat{ .v = float4(self.v.x * scalar, self.v.y * scalar, self.v.z * scalar, self.v.w * scalar) };
     }
 
     pub fn add(self: Quat, other: Quat) Quat {
-        return Quat{
-            .v = self.v.add(other.v)
-        };
+        return Quat{ .v = self.v.add(other.v) };
     }
 
     pub fn dot(self: Quat, other: Quat) Quat {
-        return Quat{
-            .v = self.v.dot(other.v)
-        };
+        return Quat{ .v = self.v.dot(other.v) };
     }
 
     pub fn norm(self: Quat) Quat {
@@ -591,7 +587,7 @@ pub const Quat = struct {
 fn hermite_generic(comptime T: type, t: f32, p1: T, s1: T, _p2: T, s2: T) T {
     const tt = t * t;
     const ttt = tt * t;
-    
+
     var p2 = _p2;
 
     const h1 = 2.0 * ttt - 3.0 * tt + 1.0;

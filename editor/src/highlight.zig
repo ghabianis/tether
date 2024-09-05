@@ -550,7 +550,9 @@ pub const HighlightBuf = struct {
                 if (i < window_start_byte) continue;
                 if (i >= window_end_byte) break;
                 const vertIndex = (i - window_start_byte) * 6 + 6;
-                const color = self.color;
+                // const color = self.color;
+                // Giving the highlight some bloom
+                const color = self.color.mul_f(1.2);
                 vertices[vertIndex].color = color;
                 vertices[vertIndex + 1].color = color;
                 vertices[vertIndex + 2].color = color;

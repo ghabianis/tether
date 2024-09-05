@@ -349,10 +349,134 @@ pub const NSData = struct {
     }
 };
 
+pub const MTLRenderPipelineColorAttachmentDescriptorArray = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn object_at(self: Self, idx: NSUInteger) ?MTLRenderPipelineColorAttachmentDescriptor {
+        const result = self.obj.msgSend(
+            objc.Object,
+            objc.sel("objectAtIndexedSubscript:"),
+            .{@as(c_ulong, idx)},
+        );
+        if (result.value == null) return null;
+        return MTLRenderPipelineColorAttachmentDescriptor.from_id(result.value.?);
+    }
+};
+
+pub const MTLRenderPipelineColorAttachmentDescriptor = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn set_write_mask(self: Self, write_mask: MTLColorWriteMask) void {
+        self.obj.setProperty("writeMask", @intFromEnum(write_mask));
+    }
+
+    pub fn set_pixel_format(self: Self, pixel_format: MTLPixelFormat) void {
+        self.obj.setProperty("pixelFormat", @as(c_ulong, pixel_format));
+    }
+
+    pub fn set_blending_enabled(self: Self, blending_enabled: bool) void {
+        self.obj.setProperty("blendingEnabled", blending_enabled);
+    }
+
+    pub fn set_rgb_blend_operation(self: Self, blend_op: MTLBlendOperation) void {
+        self.obj.setProperty("rgbBlendOperation", @intFromEnum(blend_op));
+    }
+
+    pub fn set_alpha_blend_operation(self: Self, blend_op: MTLBlendOperation) void {
+        self.obj.setProperty("alphaBlendOperation", @intFromEnum(blend_op));
+    }
+
+    pub fn set_source_rgb_blend_factor(self: Self, blend_factor: MTLBlendFactor) void {
+        self.obj.setProperty("sourceRGBBlendFactor", @intFromEnum(blend_factor));
+    }
+
+    pub fn set_source_alpha_blend_factor(self: Self, blend_factor: MTLBlendFactor) void {
+        self.obj.setProperty("sourceAlphaBlendFactor", @intFromEnum(blend_factor));
+    }
+
+    pub fn set_destination_rgb_blend_factor(self: Self, blend_factor: MTLBlendFactor) void {
+        self.obj.setProperty("destinationRGBBlendFactor", @intFromEnum(blend_factor));
+    }
+
+    pub fn set_destination_alpha_blend_factor(self: Self, blend_factor: MTLBlendFactor) void {
+        self.obj.setProperty("destinationAlphaBlendFactor", @intFromEnum(blend_factor));
+    }
+};
+
+pub const MTLSamplerState = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+};
+
+pub const MTLSamplerDescriptor = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn new() Self {
+        const sampler_descriptor = objc.getClass("MTLSamplerDescriptor").?.msgSend(objc.Object, objc.sel("alloc"), .{}).msgSend(objc.Object, objc.sel("init"), .{});
+        return Self.from_obj(sampler_descriptor);
+    }
+
+    pub fn set_min_filter(self: Self, min_filter: MTLSamplerMinMagFilter) void {
+        self.obj.setProperty("minFilter", min_filter);
+    }
+
+    pub fn set_mag_filter(self: Self, mag_filter: MTLSamplerMinMagFilter) void {
+        self.obj.setProperty("magFilter", mag_filter);
+    }
+
+    pub fn set_s_address_mode(self: Self, s_address_mode: MTLSamplerAddressMode) void {
+        self.obj.setProperty("sAddressMode", s_address_mode);
+    }
+
+    pub fn set_t_address_mode(self: Self, t_address_mode: MTLSamplerAddressMode) void {
+        self.obj.setProperty("tAddressMode", t_address_mode);
+    }
+
+    pub fn set_r_address_mode(self: Self, r_address_mode: MTLSamplerAddressMode) void {
+        self.obj.setProperty("rAddressMode", r_address_mode);
+    }
+
+    pub fn set_lod_min_clamp(self: Self, lod_min_clamp: f32) void {
+        self.obj.setProperty("lodMinClamp", lod_min_clamp);
+    }
+
+    pub fn set_lod_max_clamp(self: Self, lod_max_clamp: f32) void {
+        self.obj.setProperty("lodMaxClamp", lod_max_clamp);
+    }
+
+    pub fn set_mip_filter(self: Self, mipmap_filter: MTLSamplerMipFilter) void {
+        self.obj.setProperty("mipFilter", mipmap_filter);
+    }
+};
+
 pub const MTKTextureLoader = struct {
     const Self = @This();
     obj: objc.Object,
     pub usingnamespace DefineObject(@This());
+
+    pub fn init_with_device(device: MTLDevice) MTKTextureLoader {
+        var result = MTKTextureLoader.alloc();
+        result = result.initWithDevice(device);
+        return result;
+    }
+
+    pub fn new_texture_with_data_and_options(self: MTKTextureLoader, data: NSData, options: NSDictionary) MTLTexture {
+        var err: ?*anyopaque = null;
+        const tex = self.msgSend(objc.Object, objc.sel("newTextureWithData:options:error:"), .{
+            data,
+            options,
+            &err,
+        });
+        check_error(err) catch @panic("failed to make texture");
+        return MTLTexture.from_obj(tex);
+    }
 };
 
 pub const MTKTextureLoaderOption = objc.c.id;
@@ -361,6 +485,19 @@ pub extern "C" const MTKTextureLoaderOptionTextureStorageMode: MTKTextureLoaderO
 pub extern "C" const MTKTextureLoaderOptionSRGB: MTKTextureLoaderOption;
 pub extern "C" fn NSLog(format: objc.c.id) void;
 // pub extern "C" const MTKTextureLoaderOptionPixelFormat: MTKTextureLoaderOption;
+
+pub const MTLTextureType = enum(NSUInteger) {
+    texture_1d = 0,
+    texture_1d_array = 1,
+    texture_2d = 2,
+    texture_2d_array = 3,
+    texture_2d_multisample = 4,
+    texture_cube = 5,
+    texture_cube_array = 6,
+    texture_3d = 7,
+    texture_2d_multisample_array = 8,
+    texture_buffer = 9,
+};
 
 pub const MTLTextureUsage = enum(NSUInteger) {
     unknown = 0x0000,
@@ -384,6 +521,12 @@ pub const MTLSamplerAddressMode = enum(NSUInteger) {
     ClampToBorderColor = 5,
 };
 
+pub const MTLSamplerMipFilter = enum(NSUInteger) {
+    NotMipmapped = 0,
+    Nearest = 1,
+    Linear = 2,
+};
+
 pub const MTLClearColor = struct {
     r: f64,
     g: f64,
@@ -391,10 +534,28 @@ pub const MTLClearColor = struct {
     a: f64,
 };
 
+pub const MTLColorWriteMask = enum(NSUInteger) {
+    None = 0,
+    Red = 0x1 << 3,
+    Green = 0x1 << 2,
+    Blue = 0x1 << 1,
+    Alpha = 0x1 << 0,
+    All = 0xf,
+};
+
 pub const MTLLoadAction = enum(NSUInteger) {
     dont_care = 0,
     load = 1,
     clear = 2,
+};
+
+pub const MTLStoreAction = enum(NSUInteger) {
+    dont_care = 0,
+    store = 1,
+    multisample_resolve = 2,
+    store_and_multisample_resolve = 3,
+    unknown = 4,
+    custom_sample_depth_store = 5,
 };
 
 pub const MTLBlendOperation = enum(NSUInteger) {
@@ -432,7 +593,11 @@ pub const MTLBlendFactor = enum(NSUInteger) {
 pub const MTLPixelFormat = NSUInteger;
 pub const MTLPixelFormatR8Unorm: NSUInteger = 10;
 pub const MTLPixelFormatRGBA8Unorm: NSUInteger = 70;
+pub const MTLPixelFormatRGBA16Float: NSUInteger = 115;
+
 pub const MTLPixelFormatRGBA8Unorm_sRGB: NSUInteger = 71;
+pub const MTLPixelFormatBGRA8Unorm: NSUInteger = 80;
+pub const MTLPixelFormatBGRA8Unorm_sRGB: NSUInteger = 81;
 
 pub const MTLViewport = extern struct { origin_x: f64, origin_y: f64, width: f64, height: f64, znear: f64, zfar: f64 };
 
@@ -441,7 +606,7 @@ pub const MTLCommandBuffer = struct {
     obj: objc.Object,
     pub usingnamespace DefineObject(Self);
 
-    pub fn new_render_command_encoder(self: Self, render_pass_descriptor: objc.Object) MTLRenderCommandEncoder {
+    pub fn new_render_command_encoder(self: Self, render_pass_descriptor: MTLRenderPassDescriptor) MTLRenderCommandEncoder {
         return self.obj.msgSend(MTLRenderCommandEncoder, objc.sel("renderCommandEncoderWithDescriptor:"), .{render_pass_descriptor});
     }
 
@@ -581,6 +746,63 @@ pub const MTLBuffer = struct {
 pub const MTLRenderPassDescriptor = struct {
     obj: objc.Object,
     pub usingnamespace DefineObject(@This());
+
+    pub fn render_pass_descriptor() MTLRenderPassDescriptor {
+        const Class = objc.getClass("MTLRenderPassDescriptor").?;
+        const desc = Class.msgSend(
+            objc.Object,
+            objc.sel("renderPassDescriptor"),
+            .{},
+        );
+        return MTLRenderPassDescriptor.from_obj(desc);
+    }
+
+    pub fn attachments(self: MTLRenderPassDescriptor) MTLRenderPassColorAttachmentDescriptorArray {
+        const a = objc.Object.fromId(self.obj.getProperty(?*anyopaque, "colorAttachments"));
+        return MTLRenderPassColorAttachmentDescriptorArray.from_obj(a);
+    }
+};
+
+pub const MTLRenderPassColorAttachmentDescriptorArray = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn object_at(self: Self, idx: NSUInteger) ?MTLRenderPassColorAttachmentDescriptor {
+        const result = self.obj.msgSend(
+            objc.Object,
+            objc.sel("objectAtIndexedSubscript:"),
+            .{@as(c_ulong, idx)},
+        );
+        if (result.value == null) return null;
+        return MTLRenderPassColorAttachmentDescriptor.from_id(result.value.?);
+    }
+};
+
+pub const MTLRenderPassColorAttachmentDescriptor = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(@This());
+
+    pub fn set_texture(self: Self, texture: MTLTexture) void {
+        self.obj.setProperty("texture", texture);
+    }
+
+    pub fn set_resolve_texture(self: Self, texture: MTLTexture) void {
+        self.obj.setProperty("resolveTexture", texture);
+    }
+
+    pub fn set_load_action(self: Self, action: MTLLoadAction) void {
+        self.obj.setProperty("loadAction", action);
+    }
+
+    pub fn set_store_action(self: Self, action: MTLStoreAction) void {
+        self.obj.setProperty("storeAction", action);
+    }
+
+    pub fn set_clear_color(self: Self, color: MTLClearColor) void {
+        self.obj.setProperty("clearColor", color);
+    }
 };
 
 pub const MTKView = struct {
@@ -615,8 +837,9 @@ pub const MTLDevice = struct {
     }
 
     pub fn new_render_pipeline(self: Self, desc: MTLRenderPipelineDescriptor) !MTLRenderPipelineState {
-        const err: ?*anyopaque = null;
-        const pipeline_state = self.obj.msgSend(objc.Object, objc.sel("newRenderPipelineStateWithDescriptor:error:"), .{ desc.obj, err });
+        var err: ?*anyopaque = null;
+        const sel = objc.sel("newRenderPipelineStateWithDescriptor:error:");
+        const pipeline_state = self.obj.msgSend(objc.Object, sel, .{ desc.obj.value, &err });
         try check_error(err);
         return MTLRenderPipelineState.from_obj(pipeline_state);
     }
@@ -646,13 +869,53 @@ pub const MTLDevice = struct {
         return buf;
     }
 
-    pub fn new_sampler_state(self: Self, descriptor: objc.Object) objc.Object {
-        return self.obj.msgSend(objc.Object, objc.sel("newSamplerStateWithDescriptor:"), .{descriptor});
+    pub fn new_sampler_state(self: Self, descriptor: objc.Object) MTLSamplerState {
+        return MTLSamplerState.from_obj(self.obj.msgSend(objc.Object, objc.sel("newSamplerStateWithDescriptor:"), .{descriptor}));
     }
 
     pub fn new_texture_with_descriptor(self: Self, descriptor: MTLTextureDescriptor) MTLTexture {
         return self.obj.msgSend(MTLTexture, objc.sel("newTextureWithDescriptor:"), .{descriptor});
     }
+};
+
+pub const MTLLibrary = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(Self);
+
+    pub fn new_with_utf8_source_options_error(device: MTLDevice, source: []const u8, options: ?objc.Object) Self {
+        // PERF: NSString.new_with_bytes_no_copy?
+        const shader_nsstring = NSString.new_with_bytes(source, .utf8);
+        defer shader_nsstring.release();
+
+        var err: ?*anyopaque = null;
+        const library = device.obj.msgSend(
+            objc.Object,
+            objc.sel("newLibraryWithSource:options:error:"),
+            .{ shader_nsstring, if (options) |o| @as(?*anyopaque, o.value) else @as(?*anyopaque, null), &err },
+        );
+
+        check_error(err) catch @panic("failed to build library");
+        return Self.from_obj(library);
+    }
+
+    pub fn new_function_with_utf8_name(self: Self, name: []const u8) MTLFunction {
+        // PERF: NSString.new_with_bytes_no_copy?
+        const str = NSString.new_with_bytes(
+            name,
+            .utf8,
+        );
+        defer str.release();
+
+        const ptr = self.obj.msgSend(?*anyopaque, objc.sel("newFunctionWithName:"), .{str});
+        return MTLFunction.from_obj(objc.Object.fromId(ptr.?));
+    }
+};
+
+pub const MTLFunction = struct {
+    const Self = @This();
+    obj: objc.Object,
+    pub usingnamespace DefineObject(Self);
 };
 
 pub const MTLTextureDescriptor = struct {
@@ -662,6 +925,22 @@ pub const MTLTextureDescriptor = struct {
 
     pub fn new_2d_with_pixel_format(pixel_fmt: MTLPixelFormat, width: NSUInteger, height: NSUInteger, mipmapped: bool) Self {
         return Self.get_class().msgSend(Self, objc.sel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"), .{ pixel_fmt, width, height, mipmapped });
+    }
+
+    pub fn set_usage(self: Self, usage: NSUInteger) void {
+        self.obj.setProperty("usage", usage);
+    }
+
+    pub fn set_sample_count(self: Self, sample_count: NSUInteger) void {
+        self.obj.setProperty("sampleCount", sample_count);
+    }
+
+    pub fn set_texture_type(self: Self, texture_type: MTLTextureType) void {
+        self.obj.setProperty("textureType", @intFromEnum(texture_type));
+    }
+
+    pub fn set_storage_mode(self: Self, storage_mode: MTLStorageMode) void {
+        self.obj.setProperty("storageMode", @intFromEnum(storage_mode));
     }
 };
 
@@ -746,10 +1025,75 @@ pub const MTLComputePipelineState = struct {
 };
 
 pub const MTLVertexFormat = enum(NSUInteger) {
+    invalid = 0,
+
+    uchar2 = 1,
+    uchar3 = 2,
+    uchar4 = 3,
+
+    char2 = 4,
+    char3 = 5,
+    char4 = 6,
+
+    uchar2_normalized = 7,
+    uchar3_normalized = 8,
+    uchar4_normalized = 9,
+
+    char2_normalized = 10,
+    char3_normalized = 11,
+    char4_normalized = 12,
+
+    ushort2 = 13,
+    ushort3 = 14,
+    ushort4 = 15,
+
+    short2 = 16,
+    short3 = 17,
+    short4 = 18,
+
+    ushort2_normalized = 19,
+    ushort3_normalized = 20,
+    ushort4_normalized = 21,
+
+    short2_normalized = 22,
+    short3_normalized = 23,
+    short4_normalized = 24,
+
+    half2 = 25,
+    half3 = 26,
+    half4 = 27,
+
     float = 28,
     float2 = 29,
     float3 = 30,
     float4 = 31,
+
+    int = 32,
+    int2 = 33,
+    int3 = 34,
+    int4 = 35,
+
+    uint = 36,
+    uint2 = 37,
+    uint3 = 38,
+    uint4 = 39,
+
+    int1010102_normalized = 40,
+    uint1010102_normalized = 41,
+
+    uchar4_normalized_bgra = 42,
+
+    uchar = 45,
+    char = 46,
+    uchar_normalized = 47,
+    char_normalized = 48,
+
+    ushort = 49,
+    short = 50,
+    ushort_normalized = 51,
+    short_normalized = 52,
+
+    half = 53,
 };
 
 pub const MTLVertexStepFunction = enum(NSUInteger) {
@@ -810,6 +1154,18 @@ pub const MTLRenderPipelineDescriptor = struct {
 
     pub fn set_vertex_descriptor(self: @This(), vertex_desc: MTLVertexDescriptor) void {
         self.obj.setProperty("vertexDescriptor", vertex_desc);
+    }
+
+    pub fn get_color_attachments(self: @This()) MTLRenderPipelineColorAttachmentDescriptorArray {
+        return MTLRenderPipelineColorAttachmentDescriptorArray.from_obj(objc.Object.fromId(self.obj.getProperty(?*anyopaque, "colorAttachments")));
+    }
+
+    pub fn set_raster_sample_count(self: @This(), sample_count: NSUInteger) void {
+        self.obj.setProperty("rasterSampleCount", sample_count);
+    }
+
+    pub fn set_label_comptime(self: @This(), comptime label: []const u8) void {
+        self.obj.setProperty("label", NSString.new_with_bytes_no_copy(label, .utf8));
     }
 };
 
@@ -900,20 +1256,48 @@ pub fn classTypeName(comptime T: type) [:0]const u8 {
     return str[last_dot_idx + 1 .. i :0];
 }
 
+// pub fn check_error(err_: ?*anyopaque) !void {
+//     if (err_) |err| {
+//         const nserr = objc.Object.fromId(err);
+//         const str =
+//             nserr.getProperty(NSString, "localizedDescription");
+
+//         var buf: [256]u8 = undefined;
+
+//         const err_str = str.to_c_string(&buf) orelse "unknown error";
+//         std.debug.print("metal error={s}\n", .{err_str});
+
+//         return MetalError.Uhoh;
+//     }
+// }
+
 pub fn check_error(err_: ?*anyopaque) !void {
-    if (err_) |err| {
-        const nserr = objc.Object.fromId(err);
-        const str =
-            nserr.getProperty(NSString, "localizedDescription");
+    const nserr = objc.Object.fromId(err_ orelse return);
+    const str = nserr.getProperty(NSString, "localizedDescription");
+    var buf: [2048]u8 = undefined;
+    const slice = str.to_c_string(buf[0..]) orelse @panic("FUCK");
 
-        var buf: [256]u8 = undefined;
-
-        const err_str = str.to_c_string(&buf) orelse "unknown error";
-        std.debug.print("metal error={s}\n", .{err_str});
-
-        return MetalError.Uhoh;
-    }
+    std.debug.print("metal error={s}", .{slice});
+    return error.MetalFailed;
 }
+
+/// https://developer.apple.com/documentation/corefoundation/cfstringencoding?language=objc
+pub const StringEncoding = enum(u32) {
+    invalid = 0xffffffff,
+    mac_roman = 0,
+    windows_latin1 = 0x0500,
+    iso_latin1 = 0x0201,
+    nextstep_latin = 0x0B01,
+    ascii = 0x0600,
+    unicode = 0x0100,
+    utf8 = 0x08000100,
+    non_lossy_ascii = 0x0BFF,
+    utf16_be = 0x10000100,
+    utf16_le = 0x14000100,
+    utf32 = 0x0c000100,
+    utf32_be = 0x18000100,
+    utf32_le = 0x1c000100,
+};
 
 // test "tagged pointer" {
 //     // const raw: usize = 13251083606895578065;
