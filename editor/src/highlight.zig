@@ -550,9 +550,9 @@ pub const HighlightBuf = struct {
                 if (i < window_start_byte) continue;
                 if (i >= window_end_byte) break;
                 const vertIndex = (i - window_start_byte) * 6 + 6;
-                // const color = self.color;
+                const color = self.color;
                 // Giving the highlight some bloom
-                const color = self.color.mul_f(1.2);
+                // const color = self.color.mul_f(1.5);
                 vertices[vertIndex].color = color;
                 vertices[vertIndex + 1].color = color;
                 vertices[vertIndex + 2].color = color;
@@ -641,14 +641,17 @@ pub const TokyoNightStorm = struct {
     const YELLOW = math.hex4("#e0af68");
     const GREY = math.hex4("#444B6A");
 
+    const bloom_factor = 1.25;
+
     const conf = [_]CaptureConfig{
         .{
             .name = CommonCaptureNames.Function.as_str_comptime(),
-            .color = Self.BLUE,
+            // .color = Self.BLUE.mul_f(bloom_factor),
+            .color = Self.BLUE.mul_f(1.4),
         },
         .{
             .name = CommonCaptureNames.FunctionBuiltin.as_str_comptime(),
-            .color = Self.TURQUOISE,
+            .color = Self.TURQUOISE.mul_f(bloom_factor),
         },
         .{
             .name = CommonCaptureNames.Keyword.as_str_comptime(),
@@ -672,11 +675,11 @@ pub const TokyoNightStorm = struct {
         },
         .{
             .name = CommonCaptureNames.String.as_str_comptime(),
-            .color = Self.GREEN,
+            .color = Self.GREEN.mul_f(bloom_factor),
         },
         .{
             .name = CommonCaptureNames.Operator.as_str_comptime(),
-            .color = Self.CYAN,
+            .color = Self.CYAN.mul_f(1.5),
         },
         .{
             .name = "boolean",
@@ -684,7 +687,15 @@ pub const TokyoNightStorm = struct {
         },
         .{
             .name = "constant",
-            .color = YELLOW,
+            .color = YELLOW.mul_f(1.4),
+        },
+        .{
+            .name = CommonCaptureNames.Type.as_str_comptime(),
+            .color = Self.MAGENTA.mul_f(1.25),
+        },
+        .{
+            .name = "number",
+            .color = Self.ORANGE.mul_f(1.4),
         },
         // .{
         //     .name = CommonCaptureNames.Punctuation.as_str_comptime(),

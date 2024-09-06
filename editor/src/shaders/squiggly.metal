@@ -95,6 +95,6 @@ fragment float4 fragment_main(VertexOut fragmentIn [[stage_in]], constant Unifor
     
     float distance = abs((curve + uv.y) - 0.5);
     float lineAShape = smoothstep(1.0 - clamp(distance * 1.0, 0.0, 1.0), 1.0, 0.98);
-    float4 lineACol = float4(mix(float4(uniforms.colorIn, 1.0), float4(uniforms.colorOut, 0.0), lineAShape));
+    float4 lineACol = float4(mix(float4(uniforms.colorIn, 1.0), float4(uniforms.colorOut, 0.0), lineAShape)) * 1.5;
     return float4(lineACol);
 }

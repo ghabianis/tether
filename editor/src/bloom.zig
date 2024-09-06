@@ -19,13 +19,23 @@ const QUAD_VERTEX_INPUT: [24]f32 = .{
 };
 
 // This is good!
-const NUMBER_OF_MIPS = 2;
-const FILTER_RADIUS: f32 = 10;
-const BRIGHTNESS_THRESHOLD: f32 = 2;
-
-// const NUMBER_OF_MIPS = 2;
-// const FILTER_RADIUS: f32 = 1.0;
+// const NUMBER_OF_MIPS = 3;
+// const FILTER_RADIUS: f32 = 10;
 // const BRIGHTNESS_THRESHOLD: f32 = 2;
+
+// This is thin and good!
+// const NUMBER_OF_MIPS = 2;
+// const FILTER_RADIUS: f32 = 0.1;
+// const BRIGHTNESS_THRESHOLD: f32 = 2;
+
+// THIS IS EVEN BETTER!
+// const NUMBER_OF_MIPS = 3;
+// const FILTER_RADIUS: f32 = 0.5;
+// const BRIGHTNESS_THRESHOLD: f32 = 2;
+
+const NUMBER_OF_MIPS = 2;
+const FILTER_RADIUS: f32 = 1.0;
+const BRIGHTNESS_THRESHOLD: f32 = 2;
 
 const MipLevel = struct {
     texture: metal.MTLTexture,
@@ -46,6 +56,9 @@ pub const Bloom = struct {
     downsample_sampler: metal.MTLSamplerState,
 
     upsample_pipeline: metal.MTLRenderPipelineState,
+
+    width: f32,
+    height: f32,
 
     const Self = @This();
 
@@ -98,8 +111,8 @@ pub const Bloom = struct {
         const extract_texture = extract_texture: {
             const desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
                 Hdr.format,
-                @intFromFloat(width * 2.0),
-                @intFromFloat(height * 2.0),
+                @intFromFloat(width),
+                @intFromFloat(height),
                 false,
             );
             desc.set_usage(@intFromEnum(metal.MTLTextureUsage.shader_read) |
@@ -122,11 +135,13 @@ pub const Bloom = struct {
             break :downsample_sampler device.new_sampler_state(desc.obj);
         };
 
+        std.debug.print("Making MIP-LEVELS! {d}x{d}\n", .{ width, height });
         var mip_levels = std.BoundedArray(MipLevel, 8).init(0) catch @panic("OOM");
         for (0..NUMBER_OF_MIPS) |i| {
             const if32: f32 = @floatFromInt(i);
             const w: usize = @intFromFloat(width / std.math.pow(f32, 2.0, if32 + 1));
             const h: usize = @intFromFloat(height / std.math.pow(f32, 2.0, if32 + 1));
+            std.debug.print("MIP-LEVEL: {d}, {d}x{d}\n", .{ i, w, h });
 
             const desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(Hdr.format, w, h, false);
             desc.set_usage(@intFromEnum(metal.MTLTextureUsage.shader_read) |
@@ -262,8 +277,16 @@ pub const Bloom = struct {
                 desc.set_label_comptime("bloom_upsample");
 
                 const attachment = desc.get_color_attachments().object_at(0).?;
+                attachment.set_blending_enabled(true);
                 attachment.set_pixel_format(metal.MTLPixelFormatRGBA16Float);
                 attachment.set_write_mask(metal.MTLColorWriteMask.All);
+                attachment.set_blending_enabled(true);
+                attachment.set_rgb_blend_operation(.add);
+                attachment.set_alpha_blend_operation(.add);
+                attachment.set_source_rgb_blend_factor(.source_alpha);
+                attachment.set_destination_rgb_blend_factor(.one_minus_source_alpha);
+                attachment.set_source_alpha_blend_factor(.source_alpha);
+                attachment.set_destination_alpha_blend_factor(.one_minus_source_alpha);
                 break :pipeline_desc desc;
             };
 
@@ -289,11 +312,14 @@ pub const Bloom = struct {
             .downsample_sampler = downsample_sampler,
             .upsample_pipeline = upsample_pipeline,
             .mip_levels = mip_levels,
+            .width = width,
+            .height = height,
         };
     }
 
     pub fn render(self: *Bloom, command_buffer: metal.MTLCommandBuffer, hdr_texture: metal.MTLTexture, width: f32, height: f32) void {
-        const dimensions: [2]f32 = .{ width, height };
+        _ = width; // autofix
+        _ = height; // autofix
         // Extract high frequency from the texture
         {
             const render_pass_desc = metal.MTLRenderPassDescriptor.render_pass_descriptor();
@@ -338,6 +364,7 @@ pub const Bloom = struct {
             pass.set_label_comptime("downsample");
 
             const read_texture = self.read_texture_for_mip_level(mip_level);
+            const dimensions: [2]f32 = .{ mip.width, mip.height };
 
             pass.set_render_pipeline_state(self.downsample_pipeline);
             pass.set_fragment_texture(read_texture, 0);
@@ -366,6 +393,14 @@ pub const Bloom = struct {
                 attachment.set_store_action(.store);
                 const pass = command_buffer.new_render_command_encoder(render_pass_desc);
                 break :pass pass;
+            };
+
+            const dimensions: [2]f32 = dimensions: {
+                // const next_mip_level = if (i == 0) {
+                //     break :dimensions .{ self.width, self.height };
+                // } else self.mip_levels.get(i - 1);
+                // break :dimensions .{ next_mip_level.width, next_mip_level.height };
+                break :dimensions .{ mip_level.width, mip_level.height };
             };
 
             pass.set_label_comptime("upsample");

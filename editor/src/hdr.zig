@@ -12,8 +12,8 @@ pub const Hdr = struct {
     pipline: metal.MTLRenderPipelineState,
 
     pub const format: metal.MTLPixelFormat = metal.MTLPixelFormatRGBA16Float;
-    // pub const SURFACE_FORMAT: metal.MTLPixelFormat = metal.MTLPixelFormatBGRA8Unorm;
-    pub const SURFACE_FORMAT: metal.MTLPixelFormat = metal.MTLPixelFormatBGRA8Unorm_sRGB;
+    pub const SURFACE_FORMAT: metal.MTLPixelFormat = metal.MTLPixelFormatBGRA8Unorm; // gotta use this over srgb otherwise it will be too light
+    // pub const SURFACE_FORMAT: metal.MTLPixelFormat = metal.MTLPixelFormatBGRA8Unorm_sRGB;
 
     // pub const SURFACE_FORMAT_SIGNED: metal.MTLPixelFormat = metal.MTLPixelFormatBGRA8Unorm_sRGB;
     pub const SAMPLE_COUNT = 4;
@@ -26,8 +26,9 @@ pub const Hdr = struct {
         const sampler_descriptor = metal.MTLSamplerDescriptor.new();
         sampler_descriptor.set_min_filter(.linear);
         sampler_descriptor.set_mag_filter(.linear);
-        sampler_descriptor.set_s_address_mode(.ClampToZero);
-        sampler_descriptor.set_t_address_mode(.ClampToZero);
+        sampler_descriptor.set_s_address_mode(.ClampToEdge);
+        sampler_descriptor.set_t_address_mode(.ClampToEdge);
+        sampler_descriptor.set_r_address_mode(.ClampToEdge);
         sampler_descriptor.set_mip_filter(.Nearest);
         sampler_descriptor.set_lod_min_clamp(0.0);
         sampler_descriptor.set_lod_max_clamp(100.0);

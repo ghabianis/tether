@@ -83,8 +83,8 @@ const Renderer = struct {
         const view = metal.MTKView.from_id(view_);
         const queue = device.make_command_queue() orelse @panic("SHIT");
         const size = metal.CGSize{
-            .height = height_,
-            .width = width_,
+            .height = height_ * 2,
+            .width = width_ * 2,
         };
 
         const width: f32 = @floatCast(size.width);
@@ -93,8 +93,8 @@ const Renderer = struct {
         const hdr_texture = hdr_texture: {
             const tex_desc = metal.MTLTextureDescriptor.new_2d_with_pixel_format(
                 Hdr.format,
-                @intFromFloat(size.width * 2.0),
-                @intFromFloat(size.height * 2.0),
+                @intFromFloat(size.width),
+                @intFromFloat(size.height),
                 false,
             );
             tex_desc.set_usage(@intFromEnum(metal.MTLTextureUsage.pixel_format_view) |
@@ -348,6 +348,14 @@ const Renderer = struct {
 
             // Blending. This is required so that our text we render on top
             // of our drawable properly blends into the bg.
+            // attachment.setProperty("blendingEnabled", true);
+            // attachment.setProperty("rgbBlendOperation", @intFromEnum(metal.MTLBlendOperation.add));
+            // attachment.setProperty("alphaBlendOperation", @intFromEnum(metal.MTLBlendOperation.add));
+            // attachment.setProperty("sourceRGBBlendFactor", @intFromEnum(metal.MTLBlendFactor.source_alpha));
+            // attachment.setProperty("sourceAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.source_alpha));
+            // attachment.setProperty("destinationRGBBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
+            // attachment.setProperty("destinationAlphaBlendFactor", @intFromEnum(metal.MTLBlendFactor.one_minus_source_alpha));
+
             attachment.setProperty("blendingEnabled", true);
             attachment.setProperty("rgbBlendOperation", @intFromEnum(metal.MTLBlendOperation.add));
             attachment.setProperty("alphaBlendOperation", @intFromEnum(metal.MTLBlendOperation.add));
@@ -898,7 +906,7 @@ const Renderer = struct {
         _ = screenx;
         // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         var bg = math.hex4("#b4f9f8");
-        bg.w = 0.2;
+        bg.w = 0.1;
         // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         const color = bg;
         const selection = self.editor.selection orelse return;
@@ -1014,6 +1022,8 @@ const Renderer = struct {
             color_attachment_desc.set_load_action(metal.MTLLoadAction.clear);
             color_attachment_desc.set_texture(self.hdr.texture);
             const bg = math.hex4("#1a1b26");
+            // const bg = math.float4(20.0 / 255.0, 21.0 / 255.0, 28.0 / 255.0, 1.0);
+            // const bg = math.float4(20.0 / 255.0, 21.0 / 255.0, 28.0 / 255.0, 1.0);
             // color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
             color_attachment_desc.set_clear_color(metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
             // color_attachment_desc.setProperty("clearColor", metal.MTLClearColor{ .r = bg.x, .g = bg.y, .b = bg.z, .a = bg.w });
