@@ -260,7 +260,6 @@ fn enlarge_atlas(self: *Font, new_width: u32, new_height: u32) !void {
     }
 }
 
-/// DON'T CALL THIS if the width or height is 0
 fn rasterize_glyph(self: *Font, glyph: metal.CGGlyph, rect: metal.CGRect, region: Atlas.Region) !void {
     const width: u32 = @intFromFloat(@ceil(rect.size.width));
     const height: u32 = @intFromFloat(@ceil(rect.size.height));
@@ -358,7 +357,7 @@ fn get_glyph(self: *Font, glyph: metal.CGGlyph) !void {
     self.max_adv = @max(self.max_adv, advance);
     try self.glyphs.put(glyph, glyph_info);
 
-    if () {
+    if (!(region.width == 0 and region.height == 0)) {
         try self.rasterize_glyph(glyph, rect, region);
     }
 }

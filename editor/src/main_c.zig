@@ -28,7 +28,7 @@ const TextPoint = rope.TextPoint;
 const Rope = rope.Rope;
 
 const Vertex = math.Vertex;
-const FullThrottle = fullthrottle.FullThrottleMode;
+const FullThrottle = fullthrottle.FullthrottleMode;
 const Hdr = @import("./hdr.zig").Hdr;
 const Bloom = @import("./bloom.zig").Bloom;
 
@@ -39,8 +39,13 @@ const WindowLineRange = struct { start: u32, start_y: f32, end: u32, end_y: f32 
 
 const TEXT_COLOR = math.hex4("#b8c1ea");
 // const TEXT_COLOR = math.hex4("#b8c1ea").mul_f(1.57);
-const CURSOR_COLOR = math.hex4("#b4f9f8");
+// const CURSOR_COLOR = math.hex4("#b4f9f8");
+// const CURSOR_COLOR = TEXT_COLOR.mul_f(1.2);
+const temp = TEXT_COLOR.mul_f(1.2).to_float3();
+const CURSOR_COLOR = math.float4(temp.x, temp.y, temp.z, TEXT_COLOR.w);
 const BORDER_CURSOR_COLOR = math.hex4("#454961");
+
+const TIME_STEP = 1.0 / 120.0;
 
 const Renderer = struct {
     const Self = @This();
@@ -62,6 +67,7 @@ const Renderer = struct {
     scroll_phase: ?metal.NSEvent.Phase = null,
     text_width: f32,
     text_height: f32,
+    selection_start: ?u32 = null,
     some_val: u64,
 
     font: Font,
@@ -73,6 +79,8 @@ const Renderer = struct {
     // surface_texture: metal.MTLTexture,
     resolve_texture: metal.MTLTexture,
     diagnostic_renderer: Diagnostics,
+
+    accumulator: f32 = 0.0,
 
     last_clock: ?c_ulong,
 
@@ -166,7 +174,11 @@ const Renderer = struct {
             // frame arena
             .frame_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
             .editor = Editor{},
-            .fullthrottle = FullThrottle.init(device, view),
+            .fullthrottle = FullThrottle.init(
+                device,
+                @floatCast(size.width),
+                @floatCast(size.height),
+            ),
             .diagnostic_renderer = Diagnostics.init(std.heap.c_allocator, device, view),
             .hdr = hdr,
             .bloom = bloom,
@@ -235,6 +247,13 @@ const Renderer = struct {
         return @as(f32, @floatCast(width));
     }
 
+    /// Return a slice containing the vertices to render all text onto the screen
+    ///
+    /// Note that when
+    fn text_vertices(self: *const Self) []const Vertex {
+        _ = self; // autofix
+    }
+
     fn update_text(self: *Self, alloc: Allocator, edits: []const Editor.Edit) !void {
         const str = try self.editor.rope.as_str(std.heap.c_allocator);
         defer {
@@ -256,8 +275,8 @@ const Renderer = struct {
 
         const window_range = self.find_start_end_lines(screeny);
         try self.build_text_geometry(alloc, &Arena, str, screenx, screeny, text_start_x, window_range);
-        try self.build_selection_geometry(alloc, str, screenx, screeny, text_start_x, window_range);
         try self.build_line_numbers_geometry(alloc, &Arena, screenx, screeny, text_start_x, window_range);
+        try self.build_selection_geometry(alloc, str, screenx, screeny, text_start_x, window_range);
 
         if (self.vertices.items.len == 0) {
             self.editor.cursor_dirty = false;
@@ -909,7 +928,9 @@ const Renderer = struct {
         bg.w = 0.1;
         // const color = math.Float4.new(0.05882353, 0.7490196, 1.0, 0.2);
         const color = bg;
+        self.selection_start = null;
         const selection = self.editor.selection orelse return;
+        self.selection_start = @intCast(self.vertices.items.len);
 
         // var y: f32 = screeny - @as(f32, @floatCast(self.font.ascent + self.font.descent));
         var y: f32 = start_end.start_y;
@@ -988,7 +1009,7 @@ const Renderer = struct {
     }
 
     pub fn draw(self: *Self, view: metal.MTKView, surface_texture: metal.MTLTexture, multisample_texture: metal.MTLTexture) void {
-        const dt: f32 = dt: {
+        const dt_: f32 = dt: {
             if (self.last_clock) |lc| {
                 const now = Time.clock();
                 self.last_clock = now;
@@ -998,8 +1019,14 @@ const Renderer = struct {
                 break :dt 0.0;
             }
         };
+        const dt = dt_ / 2.0;
 
-        self.fullthrottle.compute_shake(dt, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
+        self.accumulator += dt;
+        while (self.accumulator >= TIME_STEP) {
+            self.fullthrottle.update(TIME_STEP);
+            self.fullthrottle.impl.compute_shake(TIME_STEP, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height), 0.5);
+            self.accumulator -= TIME_STEP;
+        }
 
         var pool = objc.AutoreleasePool.init();
         defer pool.deinit();
@@ -1037,7 +1064,8 @@ const Renderer = struct {
 
             var model_matrix = math.Float4x4.scale_by(1.0);
             var view_matrix = math.Float4x4.translation_by(math.Float3{ .x = -self.tx, .y = self.ty, .z = 0.5 });
-            view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
+            // TODO bring this back for scrolling
+            // view_matrix = view_matrix.mul(&self.fullthrottle.screen_shake_matrix);
             const model_view_matrix = view_matrix.mul(&model_matrix);
             const projection_matrix = math.Float4x4.ortho(0.0, @as(f32, @floatCast(drawable_size.width)), 0.0, @as(f32, @floatCast(drawable_size.height)), 0.1, 100.0);
             const uniforms = Uniforms{
@@ -1055,9 +1083,9 @@ const Renderer = struct {
             command_encoder.draw_primitives(.triangle, 0, self.vertices.items.len);
 
             var translate = math.Float3{ .x = -self.tx, .y = self.ty, .z = 0 };
+            // TODO: we need to use this to make this work with scrolling for particles
             var view_matrix_ndc = math.Float4x4.translation_by(translate.screen_to_ndc_vec(math.float2(@floatCast(drawable_size.width), @floatCast(drawable_size.height))));
-            self.fullthrottle.render_particles(dt, command_encoder, render_pass_desc.obj, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
-            self.fullthrottle.render_explosions(command_encoder, render_pass_desc.obj, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
+            self.fullthrottle.render(command_encoder, color_attachment_desc);
             // self.fullthrottle.fire.render(dt, self.queue, command_encoder, render_pass_desc, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
 
             self.diagnostic_renderer.render(dt, command_encoder, render_pass_desc.obj, @floatCast(drawable_size.width), @floatCast(drawable_size.height), color_attachment_desc.obj, &view_matrix_ndc);
@@ -1100,10 +1128,11 @@ const Renderer = struct {
             const right = br.pos.x;
             const center = math.float2((left + right) / 2, (top + bot) / 2);
             if (@as(Event.KeyEnum, key) == Event.KeyEnum.Backspace) {
-                self.fullthrottle.add_explosion(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
+                // self.fullthrottle.add_explosion(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
+                self.fullthrottle.impl.add_cluster(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height), true, 32);
                 return;
             }
-            self.fullthrottle.add_cluster(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height));
+            self.fullthrottle.impl.add_cluster(center, @floatCast(self.screen_size.width), @floatCast(self.screen_size.height), false, 12);
         }
     }
 

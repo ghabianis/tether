@@ -37,6 +37,10 @@ const NUMBER_OF_MIPS = 2;
 const FILTER_RADIUS: f32 = 1.0;
 const BRIGHTNESS_THRESHOLD: f32 = 2;
 
+// const NUMBER_OF_MIPS = 2;
+// const FILTER_RADIUS: f32 = 10.0;
+// const BRIGHTNESS_THRESHOLD: f32 = 2;
+
 const MipLevel = struct {
     texture: metal.MTLTexture,
     sampler: metal.MTLSamplerState,
@@ -337,6 +341,7 @@ pub const Bloom = struct {
                 attachment.set_store_action(metal.MTLStoreAction.store);
             }
             const pass = command_buffer.new_render_command_encoder(render_pass_desc);
+            pass.set_label_comptime("extract_high_freq");
             pass.set_render_pipeline_state(self.extract_pipeline);
             pass.set_vertex_bytes(cast.bytes(&QUAD_VERTEX_INPUT), 0);
             // pass.set_fragment_texture(self.output, 0);

@@ -169,6 +169,10 @@ pub const Float2 = extern struct {
         return float2(self.x + other.x, self.y + other.y);
     }
 
+    pub fn sub(self: Float2, other: Float2) Float2 {
+        return float2(self.x - other.x, self.y - other.y);
+    }
+
     pub fn mul_f(self: Float2, scalar: f32) Float2 {
         return float2(self.x * scalar, self.y * scalar);
     }
@@ -309,6 +313,10 @@ pub const Float4 = extern struct {
 
     pub fn mul_f(self: Float4, scalar: f32) Float4 {
         return float4(self.x * scalar, self.y * scalar, self.z * scalar, self.w * scalar);
+    }
+
+    pub fn to_float3(self: Float4) Float3 {
+        return float3(self.x, self.y, self.z);
     }
 
     pub fn to_hex(self: Float4) [7]u8 {
